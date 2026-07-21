@@ -1,0 +1,59 @@
+# =============================================================================
+# gams_kgqa dependencies
+#
+# Managed with pip-tools. Edit this file, then run `pip-compile` to regenerate
+# the locked `requirements.txt`, and `pip-sync` to install.
+#
+# The dependency set mirrors the `graph_model` (gtlm) project and additionally
+# installs that project itself as an editable local package (see bottom).
+# =============================================================================
+
+# Core ML Frameworks
+# Pinned to match graph_model's working env: the torch-scatter/torch-sparse
+# +pt210cu128 wheels (from the pyg find-links below) are ABI-built against this
+# torch line, so a newer torch would fail to import them.
+torch==2.11.0
+transformers==4.50.3
+accelerate
+huggingface_hub[cli]==0.27.1
+peft
+triton
+scikit-learn
+
+# Datasets
+datasets>=2.19.0
+
+# Tokenizers
+sentencepiece
+protobuf
+
+# Graph Processing
+torch-geometric
+networkx
+scipy
+--find-links https://data.pyg.org/whl/torch-2.10.0+cu128.html
+torch-sparse
+torch-scatter
+
+# Utilities & Visualization
+numpy>=1.21,<2.0.0
+matplotlib
+tqdm
+wandb
+tabulate
+pytest
+
+# Interpretability
+seaborn
+
+# Other
+typing-extensions>=4.8.0
+pydantic
+gdown
+
+# -----------------------------------------------------------------------------
+# The GTLM library (this project's core dependency), installed editable from the
+# sibling `graph_model` checkout so a `git pull` there is picked up immediately.
+# Top-level import package is `gtlm` (e.g. `from gtlm.utils import ...`).
+# -----------------------------------------------------------------------------
+-e ../graph_model

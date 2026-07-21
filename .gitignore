@@ -1,0 +1,29 @@
+.venv
+**/__pycache__
+**/*.pyc
+
+# secrets / login helpers (contain tokens)
+hf_token.txt
+hf_login.sh
+wandb_login.sh
+
+# training / experiment artifacts
+checkpoints
+wandb
+job_logs/
+**/*.pth
+*.gtds/
+*.gtds.lock
+.inductor_cache/
+**/_inductor_cache/
+
+# packaging
+*.egg-info/
+build/
+dist/
+
+# editor / OS
+.DS_Store
+
+# assistant context (private)
+CLAUDE_CONTEXT.md
