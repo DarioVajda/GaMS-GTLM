@@ -7,6 +7,9 @@ hf_token.txt
 hf_login.sh
 wandb_login.sh
 
+# raw data (83 GB: the CJVT KG zip + extracted N-Triples) — never commit
+data/kg_raw/
+
 # training / experiment artifacts
 checkpoints
 wandb
