@@ -1,0 +1,5 @@
+host: axa  cpus: 48  start: Wed Jul 22 15:46:39 UTC 2026
+Traceback (most recent call last):
+  File "/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/build_gtlm_graph.py", line 27, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'

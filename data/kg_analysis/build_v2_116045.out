@@ -1,0 +1,32 @@
+host: aga  cpus: 32  start: Wed Jul 22 15:50:34 UTC 2026
+env OK  numpy 1.26.4 transformers 4.50.3
+KG dir: /shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB  (2594 .nt files)
+[parse] 2594 files x 32 workers
+[parse] 200/2594  3s
+[parse] 400/2594  6s
+[parse] 600/2594  8s
+[parse] 800/2594  10s
+[parse] 1000/2594  12s
+[parse] 1200/2594  15s
+[parse] 1400/2594  23s
+[parse] 1600/2594  30s
+[parse] 1800/2594  33s
+[parse] 2000/2594  35s
+[parse] 2200/2594  37s
+[parse] 2400/2594  45s
+[parse] done 61s  canon=4,418,167 other=8,678,916 sense=8,545,797 usage=14,722,502 constit=10,265,230 corr=10,262,712 wr=12,900,645 dfn=225,618 val=12,119,158 feat_forms=8,920,501
+[collapse] 10,262,712 MWE->word constituent edges
+[edges] 47,561,737 directed labeled edges
+[nodes] 37,035,372 nodes
+[text] anchors_with_text=4,340,597  textless_nodes=3,543,870
+[csr] 95,123,474 half-edges  160s
+[tok] GaMS-2B loaded
+[tok] 24,534,106 unique node texts
+[seeds] 4,340,597 candidate lexical-unit nodes
+[seeds] 400 total  (34 word, 366 MWE)
+[variant] expand_examples done 248s
+[variant] collapse_examples done 171s
+[variant] expand_noexamples done 122s
+[variant] collapse_noexamples done 116s
+[done] wrote /shared/workspace/povejmo/gams_gtlm/data/kg_analysis/results_v2.json
+end: Wed Jul 22 16:11:45 UTC 2026
