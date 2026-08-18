@@ -58,6 +58,9 @@ from collections import defaultdict
 import numpy as np
 from multiprocessing import Pool
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import graph_store
+
 ONTOLEX = "http://www.w3.org/ns/lemon/ontolex#"
 LEXINFO = "http://www.lexinfo.net/ontology/3.0/lexinfo#"
 LEXICOG = "http://www.w3.org/ns/lemon/lexicog#"
@@ -712,15 +715,36 @@ def main():
                     help="skip GaMS-2B; use character/4 as a token proxy (smoke tests)")
     ap.add_argument("--dump-samples", type=int, default=0,
                     help="print N sample node texts per kind and exit after building")
+    ap.add_argument("--save-graph", default="",
+                    help="persist the built graph (CSR + node text + token_len) "
+                         "to this directory, so later runs can skip the ~12min build")
+    ap.add_argument("--load-graph", default="",
+                    help="load the graph from a --save-graph directory instead of "
+                         "parsing the raw KG; --kg-dir and --workers are then unused")
+    ap.add_argument("--no-analysis", action="store_true",
+                    help="stop after building (and optionally saving) the graph; "
+                         "skips the 8 sizing variants")
     args = ap.parse_args()
 
-    files = sorted(glob.glob(os.path.join(args.kg_dir, "*.nt")))
-    if args.files_limit:
-        files = files[:args.files_limit]
-    print(f"KG dir: {args.kg_dir}  ({len(files)} .nt files)", flush=True)
+    if args.load_graph and args.save_graph:
+        ap.error("--load-graph and --save-graph are mutually exclusive")
 
-    stats = {}
-    G = build(files, args.workers, stats)
+    if args.load_graph:
+        files = []
+        G = graph_store.load_graph(args.load_graph)
+        stats = G["stats"]
+        token_len = np.asarray(G["token_len"])
+        _meta = G["manifest"].get("meta", {})
+        tok_name = _meta.get("tokenizer", "unknown (from store)")
+        n_files = int(_meta.get("n_files", 0))
+    else:
+        files = sorted(glob.glob(os.path.join(args.kg_dir, "*.nt")))
+        if args.files_limit:
+            files = files[:args.files_limit]
+        n_files = len(files)
+        print(f"KG dir: {args.kg_dir}  ({n_files} .nt files)", flush=True)
+        stats = {}
+        G = build(files, args.workers, stats)
     n = G["n"]; kind = G["kind"]; texts = G["text"]
 
     if args.dump_samples:
@@ -735,7 +759,9 @@ def main():
                 print(f"    {texts[i][:160]!r}", flush=True)
         return
 
-    if args.no_tokenizer:
+    if args.load_graph:
+        pass                      # token_len + tok_name came from the store
+    elif args.no_tokenizer:
         token_len = np.array([max(1, len(s) // 4) if s else 0 for s in texts], dtype=np.int32)
         tok_name = "char/4 proxy"
     else:
@@ -761,6 +787,19 @@ def main():
                     token_len[idx] = L
         del uniq, keys
         tok_name = "cjvt/GaMS-2B"
+
+    if args.save_graph:
+        graph_store.save_graph(
+            args.save_graph, G, token_len, stats=stats,
+            meta={"tokenizer": tok_name, "kg_dir": args.kg_dir,
+                  "n_files": n_files, "files_limit": args.files_limit,
+                  "builder": os.path.basename(__file__),
+                  "builder_sha256": hashlib.sha256(
+                      open(os.path.abspath(__file__), "rb").read()).hexdigest()})
+
+    if args.no_analysis:
+        print("[done] --no-analysis: stopping after the build", flush=True)
+        return
 
     lu_nodes = np.flatnonzero((kind == K_ANCHOR) & (token_len > 0))
     print(f"[seeds] {lu_nodes.shape[0]:,} candidate anchor nodes", flush=True)
@@ -788,7 +827,7 @@ def main():
                        "n_seeds_mwe": int(len(seeds_mwe)),
                        "max_hops": args.max_hops,
                        "prompt_tokens": args.prompt_tokens,
-                       "tokenizer": tok_name, "n_files": len(files),
+                       "tokenizer": tok_name, "n_files": n_files,
                        "seed": args.seed,
                        "note": "untyped edges; no Levi reification; "
                                "levi_nodes would be nodes+edges"},

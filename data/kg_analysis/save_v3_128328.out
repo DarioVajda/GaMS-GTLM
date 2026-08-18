@@ -1,0 +1,108 @@
+host: apl  cpus: 16  start: Tue Aug 18 12:14:54 UTC 2026
+env OK  /shared/workspace/povejmo/graph_model/.venv/bin/python 3.10.12 numpy 1.26.4 transformers 4.50.3
+KG dir: /shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB  (2594 .nt files)
+[parse] 2594 files x 16 workers
+[parse] 200/2594  6s
+[parse] 400/2594  10s
+[parse] 600/2594  14s
+[parse] 800/2594  19s
+[parse] 1000/2594  24s
+[parse] 1200/2594  29s
+[parse] 1400/2594  39s
+[parse] 1600/2594  51s
+[parse] 1800/2594  56s
+[parse] 2000/2594  61s
+[parse] 2200/2594  65s
+[parse] 2400/2594  75s
+[trans] dropped 155,140 translation-chain edges (collapsed onto translation-form)
+[parse] done 94s  canon=4,340,597 other=8,678,916 sense=8,468,227 usage=14,722,502 constit=10,265,230 corr=10,262,712 tsrc=77,570 member=9,645,845 syn=362,520 ant=6,898 wr=12,900,645 wrf=77,570 dfn=225,618 val=12,119,158 feat=8,920,501 pos=400,180
+[collapse] 10,253,936 MWE->word constituent edges
+[colloc] 4,717,087 collocation IRIs, member-count hist={1: 8875, 2: 4707758, 3: 406, 4: 44, 5: 4}, 4,707,758 binary -> 2,981,731 distinct pairings
+[reify] syn=181,260 ant=3,449 pairings
+[nodes] 33,569,351 IRI-backed nodes, 42,201,151 IRI-backed edges
+[text] 33,569,072 with text, 279 textless (0.00%) by type: {'word-form': 278, 'example': 1}
+[mint] 181,260 sopomenka + 3,449 protipomenka + 2,981,731 kolokacija nodes (6,332,880 edges)
+[nodes] final 36,735,791 nodes / 48,534,031 directed edges  (279 textless, 0.00%)
+[csr] 97,068,062 half-edges  277s
+[tok] GaMS-2B loaded
+[tok] 32,009,992 unique node texts
+[save] text 10,000,000/36,735,791
+[save] text 20,000,000/36,735,791
+[save] text 30,000,000/36,735,791
+[save] text_blob.bin 2.28 GB (279 textless)  16s
+[save] node_codes.npy 256 MB
+[save] ntype.npy 140 MB
+[save] kind.npy 35 MB
+[save] mwe_set.npy 35 MB
+[save] indptr.npy 280 MB
+[save] indices.npy 370 MB
+[save] token_len.npy 140 MB
+[save] 3.78 GB to /shared/workspace/povejmo/gams_gtlm/data/kg_graph_v3  17s
+[done] --no-analysis: stopping after the build
+--- verifying the store ---
+[load] 36,735,791 nodes / 48,534,031 edges from /shared/workspace/povejmo/gams_gtlm/data/kg_graph_v3  0.0s
+{
+  "nodes": 36735791,
+  "edges": 48534031,
+  "half_edges": 97068062,
+  "half_edges_checked": 6817,
+  "sampled_textless": 0,
+  "manifest_textless": 279,
+  "token_len_zero": 279,
+  "token_len_mean": 22.385855989871022,
+  "total_GB": 3.78,
+  "problems": []
+}
+--- store contents ---
+total 3967776
+drwxr-s--- 1 dario.vajda povejmo          0 Aug 18 12:29 .
+drwxr-s--- 1 dario.vajda povejmo          0 Aug 18 12:29 ..
+-rw-r----- 1 dario.vajda povejmo  388272376 Aug 18 12:29 indices.npy
+-rw-r----- 1 dario.vajda povejmo  293886464 Aug 18 12:29 indptr.npy
+-rw-r----- 1 dario.vajda povejmo   36735919 Aug 18 12:29 kind.npy
+-rw-r----- 1 dario.vajda povejmo       2620 Aug 18 12:29 manifest.json
+-rw-r----- 1 dario.vajda povejmo   36735919 Aug 18 12:29 mwe_set.npy
+-rw-r----- 1 dario.vajda povejmo  268554936 Aug 18 12:29 node_codes.npy
+-rw-r----- 1 dario.vajda povejmo  146943292 Aug 18 12:29 ntype.npy
+-rw-r----- 1 dario.vajda povejmo 2451024988 Aug 18 12:29 text_blob.bin
+-rw-r----- 1 dario.vajda povejmo  293886464 Aug 18 12:29 text_off.npy
+-rw-r----- 1 dario.vajda povejmo  146943292 Aug 18 12:29 token_len.npy
+3.8G	/shared/workspace/povejmo/gams_gtlm/data/kg_graph_v3
+--- sample node texts ---
+--- anchor (4,340,597) ---
+    iztočnica: Pierre (samostalnik, imenovalnik, ednina)
+    iztočnica: Shakespeare (samostalnik, imenovalnik, ednina)
+    iztočnica: Shakespearejev (pridevnik, imenovalnik, ednina, moški spol, osnovnik)
+--- form (8,563,521) ---
+    oblika: Pierra (rodilnik, ednina)
+    oblika: Pierreu (dajalnik, ednina)
+    oblika: Pierra (tožilnik, ednina)
+--- sense (8,468,227) ---
+    pomen: Pierre
+    pomen: Shakespeare
+    pomen: Shakespearejev
+--- example (12,119,157) ---
+    zgled: Kislo zelje z brinom pripravimo tako, da oljčno olje zmešamo s strtimi brinovimi jagodami, prelijemo po kislem zelju in premešamo.
+    zgled: Vsak konjenik je dobil simbolno darilo: žganje z brinom ter malico.
+    zgled: Oktobra se je nepričakovano odločil obesiti drsalke na klin.
+--- translation (77,570) ---
+    prevod (madžarsko): boróka
+    prevod (madžarsko): borókabogyó
+    prevod (madžarsko): borókaág
+--- collocation (2,981,731) ---
+    kolokacija: Pierre + baron
+    kolokacija: Pierre + komisar
+    kolokacija: Pierre + medalja
+--- synonym (181,260) ---
+    sopomenka: Shakespeare ~ Pevec
+    sopomenka: otrok ~ dete
+    sopomenka: otrok ~ otroček
+--- antonym (3,449) ---
+    protipomenka: abolirati ~ uveljaviti
+    protipomenka: abolirati ~ vzpostaviti
+    protipomenka: agitirati ~ pomiriti
+--- other (279) ---
+    
+    
+    
+end: Tue Aug 18 12:29:23 UTC 2026
