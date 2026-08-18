@@ -38,20 +38,45 @@ The dataset class used to adapt raw data for GTLM (`TextGraphDataset` and its
 feature-computation methods — shortest-path distances, RRWP, magnetic Laplacian, …)
 comes from `gtlm.utils`. See `graph_model`'s README for the full library surface.
 
-> **Note on the Gemma/GaMS adapter.** GTLM currently ships a Llama modeling
-> implementation. The Gemma-backbone GTLM adapter needed for GaMS is being developed
-> **upstream in `graph_model`**; this repository consumes it once available.
+> **Note on the Gemma/GaMS adapter.** The Gemma adapter **landed upstream on 2026-07-25**
+> (`src/models/modeling_gtlm_gemma3.py` — `GTLMGemma3ForCausalLM` / `GTLMGemma3Config`).
+> It targets **Gemma 3**, and it deliberately does **not** support Gemma 2; see the model
+> scope below.
 
 ## Model scope
 
-| Model | Backbone | Status |
-|-------|----------|--------|
-| **GaMS-2B** | Gemma 2 | Primary development target (smaller/faster to iterate) |
-| **GaMS-9B** | Gemma 2 | Scale-up target — same architecture, so straightforward once 2B works |
-| **GaMS3-12B** | Gemma 3 | Future goal — different architecture, requires a new GTLM adapter |
+**We target Gemma 3 only.** This reverses the original plan, which named the Gemma 2–based
+GaMS-2B as the primary target: the upstream adapter that actually exists is a Gemma 3 one,
+and it refuses Gemma 2 by design.
 
-We focus on **GaMS-2B first**, then **GaMS-9B**. The Gemma 3–based GaMS3-12B is a longer-term
-objective that will need a separate adapter and is out of scope for the initial work.
+| Model | Backbone | `model_type` | Logit softcapping | Status |
+|-------|----------|--------------|-------------------|--------|
+| **gemma-3-1b-pt** | Gemma 3 | `gemma3_text` | none | Plumbing/iteration proxy — loads today; Slovenian quality expected to be poor, to be measured |
+| **gemma-3-4b-pt** | Gemma 3 | `gemma3` (multimodal) | none | Preferred iteration target — needs a small config unwrap, see below |
+| **GaMS3-12B** | Gemma 3 | `gemma3_text` | none | **Primary target** — loads through the adapter as-is |
+| **GaMS-2B** | Gemma 2 | `gemma2` | 50.0 / 30.0 | **Out of scope** — adapter raises |
+| **GaMS-9B** | Gemma 2 | `gemma2` | 50.0 / 30.0 | **Out of scope** — adapter raises |
+
+**Why Gemma 2 is excluded.** The shared GTLM stack applies neither softcapping site: the
+registered `gtlm_*` attention functions ignore the `softcap` kwarg, and the causal-LM mixin
+calls `lm_head` directly. Gemma 3 sets `attn_logit_softcapping` and
+`final_logit_softcapping` to `null`, so both omissions are exact. Gemma 2 ships them at
+`50.0` and `30.0`, so `GTLMGemma3ForCausalLM._sanitize_attn_config` **raises** rather than
+silently train a backbone that no longer matches its pretrained weights. Supporting GaMS-2B
+would mean adding both softcapping sites to the shared stack upstream — real work in a
+repository that deliberately chose not to carry them.
+
+**Iteration ladder.** Develop against a small Gemma 3, then scale to GaMS3-12B — the
+adapter is the same, so scaling is a config change. Prefer **gemma-3-4b-pt** over
+gemma-3-1b-pt: 1b is likely too weak at Slovenian out of the box to tell a broken pipeline
+apart from a weak model. **To be settled experimentally** — run both on a Slovenian sample
+before committing.
+
+> **Gotcha for 4b.** `gemma-3-4b` and larger *multimodal* checkpoints nest their text config
+> under `text_config` and will not load through `GTLMGemma3Config` directly
+> (`modeling_gtlm_gemma3.py:106`). Loading one means pulling `Gemma3TextConfig` out of the
+> nested field and taking weights from the `language_model` submodule. Small, but not free.
+> GaMS3-12B is published as a text-only `gemma3_text` config and is unaffected.
 
 ## Data
 
@@ -106,7 +131,17 @@ to download them.
 
 ## Status
 
-Early scaffolding. Current repo provides the environment, dependency lock, and
-documentation. Next steps: raw KG/QA preprocessing, subgraph extraction, adaptation into
-`TextGraphDataset`, and training the Gemma-adapted GaMS-2B once the upstream GTLM Gemma
-adapter lands.
+Environment, dependency lock, and the KG construction study are in place; no training has
+started. The upstream Gemma 3 adapter has landed, so the backbone is no longer a blocker.
+
+- **Done.** Raw KG downloaded and characterised; GTLM graph construction settled at **v3**
+  (36.7 M nodes / 48.5 M edges, untyped edges with self-describing node text) together with
+  a k-hop input-sizing study — see [`data/README.md`](data/README.md).
+  The graph is now **persisted** to `data/kg_graph_v3/` by
+  `kg_analysis/run_save_v3.sbatch`, so the ~12-minute, ~70 GB rebuild is paid once
+  instead of per run; `kg_analysis/graph_store.py` loads it in seconds.
+- **Next.** Write the subgraph extractor on top of the store, with a cap on the
+  `sestavina` MWE↔word hub, the one structure that explodes; adapt into
+  `TextGraphDataset`; then train on a small Gemma 3 before scaling to GaMS3-12B.
+- **Open.** The lexicographical QA dataset — questions and answers anchored to KG entities —
+  is not yet in this repository.

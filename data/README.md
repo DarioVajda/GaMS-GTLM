@@ -235,20 +235,37 @@ within 3 hops.
 ```bash
 cd /shared/workspace/povejmo/gams_gtlm
 sbatch data/kg_analysis/run_build_v3.sbatch     # -> kg_analysis/results_v3.json
+sbatch data/kg_analysis/run_save_v3.sbatch      # -> data/kg_graph_v3/  (the store)
 ```
 
 - Pipeline: stream-parse → collapse MWE parts → merge lemma → dedup collocations
   → reify syn/ant/colloc → Slovenian self-describing text → undirected CSR BFS →
   GaMS-2B tokenize → 2×2×2 variants × word/MWE split.
 - Flags: `--n-seeds`, `--max-hops`, `--seed`, `--prompt-tokens`, `--workers`,
-  `--variants`, `--files-limit`, and two debugging aids: `--dump-samples N`
-  (print sample node texts per kind and exit) and `--no-tokenizer` (char/4 proxy).
+  `--variants`, `--files-limit`; persistence: `--save-graph DIR`, `--load-graph DIR`,
+  `--no-analysis` (see "Persisted graph store" above); and two debugging aids:
+  `--dump-samples N` (print sample node texts per kind and exit) and
+  `--no-tokenizer` (char/4 proxy).
 - **Run 126763: 23 min 46 s, 68.7 GB peak RSS on 32 CPU.** The sbatch asks for
   200 GB; **100 GB is sufficient** and will schedule faster.
-- Uses `graph_model/.venv` — a self-contained venv on the shared filesystem, so
-  it works on any compute node. **Do not** use the local `.venv` symlink: it
-  points at the per-node `/opt/deepops` venv, which lacks numpy on some `frida`
-  nodes (e.g. `axa`) and fails in seconds.
+- Uses `graph_model/.venv` on the shared filesystem. **Do not** use the local
+  `.venv` symlink: it points at the per-node `/opt/deepops` venv, which lacks
+  numpy on some `frida` nodes and fails in seconds.
+- **The shared venv is not node-independent either.** `.venv/bin/python` is an
+  absolute symlink to `/usr/bin/python3`, so on a node whose system Python is not
+  3.10 the interpreter starts and then cannot see `.venv/lib/python3.10/site-packages`
+  — the same `ModuleNotFoundError: No module named 'numpy'`, from a different cause.
+  Job 128295 died this way on `axa` in 2 seconds.
+- **Only `aga`, `ana` and `apl` can run these jobs** (probed 2026-08-18). They are
+  the Ubuntu 22.04 / Python 3.10.12 nodes; `axa` and every `ix*` node are 24.04 and
+  ship `/usr/bin/python3.12` with **no 3.10 at all**, so no `PYTHONPATH` trick
+  rescues them — the venv's compiled wheels are `cp310`. `run_save_v3.sbatch`
+  therefore pins `--nodelist=aga,ana,apl` and additionally calls
+  `kg_analysis/pick_python.sh`, which prefers the venv launcher, falls back to a
+  real 3.10 interpreter plus the venv's `site-packages` on `PYTHONPATH`, and exits
+  with a diagnostic naming the node rather than a bare `ModuleNotFoundError`.
+  `run_build_v3.sbatch` does neither and will fail in seconds if it lands on a
+  24.04 node — it only ever succeeded because job 126763 happened to get `apl`.
 - Tokenizer loaded offline from `HF_HOME=/shared/workspace/povejmo/huggingface_cache`.
 - Raw output `kg_analysis/results_v3.json`; job log `kg_analysis/build_v3_*.out`.
 
@@ -258,6 +275,111 @@ sbatch data/kg_analysis/run_build_v3.sbatch     # -> kg_analysis/results_v3.json
 > yields **zero** resolvable collocations — which looks exactly like a bug. For a
 > quick end-to-end check, point `--kg-dir` at a directory of symlinks that
 > includes matching `*-multi`, `*-words` and `examples*` files.
+
+---
+
+## Persisted graph store
+
+The builder used to discard the graph after every run, so each piece of downstream
+work paid ~12 minutes and a ~70 GB node to rebuild the identical 36.7 M-node
+object. `--save-graph DIR` writes it once; `kg_analysis/graph_store.py` reads it
+back in seconds under a few GB.
+
+```bash
+sbatch data/kg_analysis/run_save_v3.sbatch          # build once -> data/kg_graph_v3/
+python data/kg_analysis/graph_store.py data/kg_graph_v3 --verify
+python data/kg_analysis/graph_store.py data/kg_graph_v3 --samples 3
+```
+
+```python
+import graph_store
+G = graph_store.load_graph("data/kg_graph_v3")
+G["indptr"], G["indices"]        # undirected CSR
+G["text"][12345]                 # "iztočnica: pes (samostalnik, imenovalnik, ednina)"
+G["token_len"][12345]            # GaMS-2B token count, no tokenizer needed
+G["kind"], G["mwe_set"], G["node_codes"]
+```
+
+### What is in the directory
+
+| File | dtype | Length | Notes |
+|---|---|---|---|
+| `manifest.json` | — | — | shapes, provenance, and the builder's `stats` dict |
+| `node_codes.npy` | int64 | `n_real` | packed `(type<<56)\|payload`, sorted — `searchsorted` maps an IRI code to a node index |
+| `ntype.npy` | int32 | `n` | raw KG type id; `-1` for minted nodes |
+| `kind.npy` | int8 | `n` | `K_ANCHOR … K_OTHER` |
+| `mwe_set.npy` | bool | `n` | anchor is a multi-word expression |
+| `indptr.npy` | int64 | `n+1` | undirected CSR |
+| `indices.npy` | int32 | `2·edges` | int32 is exact: ids < 2^31 |
+| `token_len.npy` | int32 | `n` | the ~8 minutes of GaMS-2B tokenization, banked |
+| `text_blob.bin` | uint8 | — | every node text, UTF-8, concatenated |
+| `text_off.npy` | int64 | `n+1` | byte offsets into the blob |
+
+Three things are deliberately **not** stored. `is_form_leaf`, `is_example` and
+`is_colloc` are each one comparison against `kind`, and are recomputed on load
+rather than costing 105 MB of redundancy. The manifest is written **last**, so a
+directory without one is an interrupted write rather than a subtly incomplete
+store.
+
+### Why node text is a blob
+
+`text` is a Python list of 36.7 M `str`. `np.save` on that pickles element by
+element: slow to write, far slower to read, and impossible to memory-map. One
+concatenated UTF-8 blob plus an offsets array maps instead, and `TextStore`
+decodes a node's text only when asked. It supports `texts[i]` and
+`for i, s in enumerate(texts)`, which is exactly what the builder and analysis
+code already do, so nothing downstream had to change.
+
+### Measured
+
+Built by **job 128328** on `apl`: **14 min 36 s**, **65.3 GiB peak RSS**, 16 CPU.
+The save itself is 17 s of that — 16 s to encode and write the 2.28 GB text blob,
+1 s for the arrays. Sizing note: the 68.7 GB figure recorded for run 126763 is the
+real constraint, and it is a *build*-phase peak — before anything becomes numpy,
+the parsed triples live as Python lists (12.9 M `writtenRep` + 12.1 M `rdf:value`
+strings, 14.7 M usage pairs, ...), each small object carrying ~50-60 bytes of
+CPython overhead. Only the file parse is parallel (94 s of the run at 16 workers,
+60 s at 32), so CPUs past ~16 buy nothing.
+
+| | bytes | |
+|---|---:|---|
+| `text_blob.bin` | 2,451,024,988 | 2.28 GiB, 66 chars/node mean |
+| `indices.npy` | 388,272,376 | int32 halves this |
+| `indptr.npy` | 293,886,464 | |
+| `text_off.npy` | 293,886,464 | |
+| `node_codes.npy` | 268,554,936 | |
+| `ntype.npy`, `token_len.npy` | 146,943,292 each | |
+| `kind.npy`, `mwe_set.npy` | 36,735,919 each | |
+| **total** | **4,062,983,522** | **3.78 GB** |
+
+Node text is ~60 % of the store and did not shrink the way dropping `phoneticRep`
+suggested it would: the Slovenian tag prefixes, the morphology strings and the
+3.2 M minted collocation/synonym texts add back what phonetics removed. Mean node
+text is **22.4 GaMS-2B tokens**.
+
+**What the store buys.** Job 128336 re-ran the full 400-seed, 8-variant study from
+the store alone, on **4 CPU / 16 GB**, and wrote a file with the **same MD5** as the
+published `results_v3.json` — `11f4b10c7fbc1e4195795e896a285820`. It peaked at
+**1.04 GiB RSS** and loaded the graph in **0.0 s**.
+
+| | build from raw | load from store |
+|---|---|---|
+| time to a usable graph | ~12 min | **0.0 s** |
+| peak RSS | 65.3 GiB | **1.04 GiB** |
+| nodes it can run on | `aga`/`ana`/`apl` only | any |
+
+### Reusing a store
+
+`--load-graph DIR` skips parse, build and tokenization entirely and runs the
+sizing analysis straight off the store — reproducing `results_v3.json` byte for
+byte at full scale (see "Measured"). On a 20-file subset every array and all
+203,591 node texts also compare equal to a fresh build, element by element.
+`--no-analysis` stops after the build, which is how the store is produced without
+re-running the 8 variants.
+
+A store is only valid for the inputs that made it, so `manifest.meta` records the
+tokenizer, `--kg-dir`, the file count and a SHA-256 of the builder script. Check
+`builder_sha256` before trusting a store against a modified builder.
 
 ---
 
