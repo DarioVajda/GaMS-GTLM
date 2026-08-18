@@ -1,5 +1,10 @@
 #!/bin/bash
 #SBATCH --partition=frida
+# Only aga/ana/apl still run Ubuntu 22.04 with /usr/bin/python3 = 3.10, which is
+# what graph_model/.venv was built against; axa and every ix* node are 24.04 and
+# ship 3.12 only, where the venv's site-packages are invisible.  Probed
+# 2026-08-18 -- job 126763 succeeded only because it happened to land on apl.
+#SBATCH --nodelist=aga,ana,apl
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
@@ -9,9 +14,14 @@
 #SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/build_v3_%j.out
 
 set -euo pipefail
-# self-contained venv on the shared filesystem (identical on every node),
-# unlike the per-node /opt/deepops venv that .venv symlinks to.
-PY=/shared/workspace/povejmo/graph_model/.venv/bin/python
+# Shared-filesystem venv, unlike the per-node /opt/deepops venv that .venv
+# symlinks to.  It is NOT node-independent -- see pick_python.sh.
+export VENV=/shared/workspace/povejmo/graph_model/.venv
+PY=$(/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/pick_python.sh)
+if [ "$PY" != "$VENV/bin/python" ]; then
+    export PYTHONPATH="$VENV/lib/python3.10/site-packages${PYTHONPATH:+:$PYTHONPATH}"
+    echo "note: venv launcher unusable on $(hostname); using $PY + PYTHONPATH"
+fi
 export HF_HOME=/shared/workspace/povejmo/huggingface_cache
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
