@@ -37,3 +37,8 @@ data/kg_graph_v3/
 # the lexicographical QA dataset -- an internal sample, NOT public (see README
 # "Data").  Committing it would publish it via GitHub.
 data/Lexical-QA-SLO*
+
+# v3.1 graph store (same 3.8 GB artifact class as kg_graph_v3)
+data/kg_graph_v3_1/
+
+CLAUDE.md
