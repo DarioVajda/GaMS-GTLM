@@ -5,6 +5,10 @@
 > section is retained at the bottom purely as history — **do not quote v2
 > figures**. Builder:
 > [`kg_analysis/build_gtlm_graph_v3.py`](kg_analysis/build_gtlm_graph_v3.py).
+>
+> **Companion document:** [`QA_DATASET_DESIGN.md`](QA_DATASET_DESIGN.md) records the design
+> of the question–answer dataset built on top of this graph, including a full-corpus census
+> of which question types the KG can and cannot answer.
 
 This directory holds the raw knowledge graph (`kg_raw/`) and the construction +
 sizing study (`kg_analysis/`) behind one design question:
@@ -211,6 +215,157 @@ within 3 hops.
 
 ---
 
+## Finding 4 — sibling senses were byte-identical, and that is a builder defect
+
+Caveat 2 below records that only 225,618 of 8,468,227 senses (2.7 %) carry a
+`skos:definition`, and that the rest fall back to their entry's lemma. The
+write-up called that "no new information." Measured on the v3 store over a
+200,000-anchor sample, it is worse than that:
+
+| | |
+|---|--:|
+| anchors with ≥2 senses | 91.3 % |
+| …where **some** sibling sense texts are byte-identical | **97.7 %** |
+| …where **all** sibling sense texts are byte-identical | **96.9 %** |
+| mean senses per polysemous anchor | 2.04 |
+
+So for essentially every polysemous entry, `pomen: pes` and `pomen: pes` were
+two separate nodes with the same text. This is specifically bad for GTLM rather
+than merely wasteful: edges are untyped and the architecture is
+**node-permutation equivariant**, so two same-text sense nodes are distinguished
+only by what hangs off them. Once the extractor prunes those subtrees — which
+Finding 3 says it must — the nodes become genuinely interchangeable, and the
+model is asked to attach different answers to inputs that are identical up to
+permutation. That is label noise manufactured by the builder, not a gap in the
+source data.
+
+**v3.1 fixes it** (`build_gtlm_graph_v3.py`, flaw 5). A sense node now gets:
+
+- its **dictionary ordinal** when its entry has more than one sense
+  (`pomen 2: pes`), which makes siblings distinct unconditionally; and
+- a **bounded snippet of its first usage example** when it has no definition
+  (`pomen 1: pes (zgled: Sosedov pes je spet lajal ...)`), which makes them
+  distinct *meaningfully*.
+
+The second only pays because of the disjointness recorded in caveat 2 —
+definition-bearing and example-bearing senses are largely different populations.
+Of the indistinguishable sense nodes, **47.7 %** have at least one `zgled`
+neighbour (collocation neighbours are useless here: 0.1 %), and an
+example-derived signature fully separates the siblings of **92.5 %** of
+polysemous anchors. Where only one sibling has an example the pair becomes
+distinct but only one of them becomes informative; the ordinal covers the rest.
+
+Both are controlled by `--sense-snippet N` (0 disables, default 60 chars) and
+`--no-sense-index`, and both are recorded in `manifest.meta` so a store declares
+which text convention built it.
+
+> **Status: built and verified, 2026-08-19** (job 128706, `apl`, **17 min 28 s**,
+> **52.7 GB peak RSS**, 16 CPU). The store is `data/kg_graph_v3_1`, deliberately
+> **beside** `data/kg_graph_v3` rather than over it, so the verified v3 store —
+> the one whose store-backed rerun reproduces `results_v3.json` at MD5
+> `11f4b10c7fbc1e4195795e896a285820` — stays intact and the two can be diffed node
+> for node. Builder SHA-256 `ad8d4284…`, matching the file on disk.
+
+**Measured, v3 → v3.1.** Structure is untouched — the fixes are text-only:
+
+| | v3 | **v3.1** |
+|---|--:|--:|
+| Nodes / directed edges | 36,735,791 / 48,534,031 | **identical** |
+| Textless nodes | 279 | **279** |
+| Senses numbered | 0 | **8,088,702** (all in polysemous entries) |
+| Senses with an example snippet | 0 | **3,662,840** (43 %) |
+| Polysemous anchors with duplicate sibling texts | 97.7 % | **0.00 %** |
+| Example nodes with an unresolved escape | 3.53 % | **0.00 %** |
+| Mean sense tokens | 8.9 | 20.5 |
+| Corpus tokens | 822,362,127 | 920,680,698 (**+12.0 %**) |
+| Store on disk | 3.78 GB | 4.06 GB |
+
+The +12 % token cost lands almost entirely on `pomen:` nodes, which were 9.1 % of
+the budget and are the nodes a lexicographic QA model must actually read. Both
+acceptance checks run at the end of `run_save_v3_1.sbatch`, so a future rebuild
+re-measures rather than assumes.
+
+> **One bug, caught by that check.** The first attempt (job 128632) reported
+> 97.7 % → 3.68 % rather than → 0 %. `np.unique(sense, axis=0)` sorts rows by
+> *(lexical unit, sense)*, so column 1 is grouped by entry and **not** globally
+> sorted; the `searchsorted` ordinal lookup against it silently missed 819,563
+> senses and could mis-number others. It is a wrong answer, not an error, and the
+> headline 97.7 % → 3.68 % improvement would have hidden it. `ord_se` is now
+> re-sorted (and deduplicated, so a sense reachable from two entries keeps the
+> first ordinal) behind an `assert`.
+
+### Two corrections to the v3 write-up, found while measuring this
+
+**Morphology is not on every anchor.** The example
+`iztočnica: bežnica (samostalnik, imenovalnik, ednina)` reads as typical; it
+describes 9.2 % of anchors. `lexinfo:partOfSpeech` and the form features sit on
+`Word` entries only:
+
+```
+word anchors = 400,180      with a morphology/POS parenthetical: 99.9%
+MWE  anchors = 3,940,417    with a morphology/POS parenthetical:  0.0%
+```
+
+MWEs are **91 % of all anchors** and carry no POS or morphology at all.
+Together with caveat 5 (the `Component` collapse discards each constituent's
+case/number), the graph holds **no grammatical information about multi-word
+expressions anywhere**.
+
+**The token budget is not tag-dominated.** Finding 2 calls tags "the single
+largest avoidable overhead in v3." Corpus-wide, tags are ~19 % and examples are
+the budget:
+
+| kind | nodes | tokens | % | mean |
+|---|--:|--:|--:|--:|
+| example | 12,119,157 | 520,068,130 | **63.2 %** | 42.9 |
+| form | 8,563,521 | 142,886,188 | 17.4 % | 16.7 |
+| sense | 8,468,227 | 75,060,920 | 9.1 % | 8.9 |
+| anchor | 4,340,597 | 51,256,360 | 6.2 % | 11.8 |
+| collocation | 2,981,731 | 29,834,948 | 3.6 % | 10.0 |
+| synonym / antonym | 184,709 | 2,250,096 | 0.3 % | 12.2 |
+| **total** | 36,735,791 | **822,362,127** | | |
+
+The Finding 2 claim is defensible in the narrow case it was measured (word seed,
+hop 1, where examples are absent) but does not hold as stated. Shortening tags
+is a real second-order win; Finding 4 is the one that changes what the model can
+learn.
+
+**Collocation join text is redundant but worth keeping.** For 94.4 % of
+collocation nodes both endpoint lemmas already appear in 1-hop neighbour text —
+but only while both neighbours survive extraction, which Finding 3 says they
+often will not. At 10.0 tokens mean it is cheap insurance. Keep it.
+
+---
+
+## Finding 5 — literals were never unescaped
+
+v3 took each N-Triples literal verbatim, so **3.48 % of `zgled:` nodes carried a
+literal backslash-quote**:
+
+```
+zgled: Tudi če jo predelajo, jih imam pravico tožiti,\" pravi.
+```
+
+Every quoted passage in the corpus — reported speech, scare quotes, titles — was
+affected, and the v3.1 sense snippets inherited it from the example text they
+quote. `parse_file` now runs `writtenRep` / `rdf:value` / `skos:definition`
+through `unescape_nt()`.
+
+The dump triple-quotes every text literal, so the only escapes that actually
+occur are `\"` (1,461 per 400k lines) and `\\` (12) — but `\uXXXX` and the
+C-style set are decoded too, and an **unrecognised escape passes through
+unchanged** rather than being silently eaten. Order is handled by a single
+left-to-right regex pass, so `\\` immediately before `\"` resolves correctly
+instead of the two-`replace()` trap. Verified on the subset: 0 of 190,258 example
+nodes retain an escape, while genuine quote characters survive
+(`... kljub formalnemu "thatcherizmu" odlagala ...`).
+
+Since all text literals are triple-quoted, the single-quote branch of the literal
+parser is dead code for these predicates — its terminator scan would truncate at
+an embedded `\"`, but nothing reaches it.
+
+---
+
 ## Practical implications
 
 - **Collocations can stay in unconditionally.** They cost ~0 % at the median and
@@ -267,7 +422,7 @@ sbatch data/kg_analysis/run_save_v3.sbatch      # -> data/kg_graph_v3/  (the sto
   `run_build_v3.sbatch` does neither and will fail in seconds if it lands on a
   24.04 node — it only ever succeeded because job 126763 happened to get `apl`.
 - Tokenizer loaded offline from `HF_HOME=/shared/workspace/povejmo/huggingface_cache`.
-- Raw output `kg_analysis/results_v3.json`; job log `kg_analysis/build_v3_*.out`.
+- Raw output `kg_analysis/results_v3.json`; job log `kg_analysis/logs/build_v3_*.out`.
 
 > **Gotcha: `--files-limit` invalidates collocation statistics.** Files are
 > globbed alphabetically, and a collocation's member senses routinely live in a
@@ -390,7 +545,9 @@ tokenizer, `--kg-dir`, the file count and a SHA-256 of the builder script. Check
 2. **Definition coverage is thin.** Only 225,618 `skos:definition` literals for
    8.47 M senses, so the vast majority of `pomen:` nodes fall back to their
    entry's lemma and carry no new information. Definition-bearing and
-   example-bearing senses remain largely **disjoint populations**.
+   example-bearing senses remain largely **disjoint populations** — which is
+   what makes the v3.1 example-snippet fallback work; see **Finding 4**. The
+   thinness itself is unfixed and unfixable from this source.
 3. **Morphology mapping is partial.** `case/number/gender/person/tense/mood/degree`
    plus POS are mapped to Slovenian; `aspect`, `vform`, `definiteness`,
    `negative`, `clitic`, `animate` are parsed by the KG but not rendered.
@@ -401,6 +558,8 @@ tokenizer, `--kg-dir`, the file count and a SHA-256 of the builder script. Check
    constituent order; v3 ignores it, so `sestavina` edges are an unordered set.
 6. Token counts use `add_special_tokens=False` per node; GTLM's own separators
    are not modelled, and the prompt allowance is a flat 24 tokens.
+7. ~~Example text is not unescaped from N-Triples.~~ **Fixed in v3.1** — see
+   Finding 5.
 
 ---
 

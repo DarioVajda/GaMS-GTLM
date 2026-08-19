@@ -82,7 +82,11 @@ before committing.
 
 - **Knowledge graph:** the CJVT lexicographical knowledge graph
   ([source](https://nas.cjvt.si/s/aJE6243jd8iRXfc)).
-- **QA dataset:** an initial internal sample of question–answer pairs (not public).
+- **QA dataset:** generated from the graph, not reused from the reference samples. Design
+  decisions, the KG answerability census, and the frequency banding are recorded in
+  [`data/QA_DATASET_DESIGN.md`](data/QA_DATASET_DESIGN.md). Two internal reference files
+  (`data/Lexical-QA-SLO-test.json`, `data/Lexical-QA-SLO(in).csv`, both not public) supply
+  the question-type inventory and phrasing style only.
 - **Pipeline:** the raw data requires **heavy preprocessing** first, then adaptation
   into GTLM-ready examples using the `TextGraphDataset` class from `gtlm.utils`. Each
   training example is a graph (a NetworkX `DiGraph`) with per-node `text` attributes, a
@@ -144,4 +148,6 @@ started. The upstream Gemma 3 adapter has landed, so the backbone is no longer a
   `sestavina` MWE↔word hub, the one structure that explodes; adapt into
   `TextGraphDataset`; then train on a small Gemma 3 before scaling to GaMS3-12B.
 - **Open.** The lexicographical QA dataset — questions and answers anchored to KG entities —
-  is not yet in this repository.
+  is not yet generated. Its design is **locked** as of 2026-08-18; see
+  [`data/QA_DATASET_DESIGN.md`](data/QA_DATASET_DESIGN.md) for the decisions, the open
+  items, and the measurements behind them.
