@@ -1,0 +1,11 @@
+host: apl  cpus: 16  start: Wed Aug 19 09:41:41 UTC 2026
+env OK  /shared/workspace/povejmo/graph_model/.venv/bin/python 3.10.12 numpy 1.26.4 transformers 4.50.3
+KG dir: /shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB  (2594 .nt files)
+[parse] 2594 files x 16 workers
+[parse] 200/2594  6s
+[parse] 400/2594  10s
+[parse] 600/2594  14s
+[parse] 800/2594  19s
+[parse] 1000/2594  23s
+[parse] 1200/2594  29s
+[2026-08-19T09:42:16.570] error: *** JOB 128705 ON apl CANCELLED AT 2026-08-19T09:42:16 DUE to SIGNAL Terminated ***

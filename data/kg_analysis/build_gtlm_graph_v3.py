@@ -47,6 +47,29 @@ Also new: POS is parsed (lexinfo:partOfSpeech on lexical units) and folded into
 the anchor text, and `collocations` joins `form_mode` and `examples` as a toggle
 so the cost of flaw #2 can be measured rather than assumed.
 
+  5. SIBLING SENSES ARE DISTINGUISHABLE.  Only 225,618 of 8,468,227 senses carry
+     a skos:definition (2.7%); the rest fell back to their entry's lemma, so on
+     96.9% of polysemous anchors EVERY sibling sense node had byte-identical
+     text ("pomen: pes", "pomen: pes").  With untyped edges and GTLM's node-
+     permutation equivariance those nodes are genuinely interchangeable whenever
+     the extractor prunes their subtrees -- label noise produced by the builder,
+     not a coverage gap.  A sense now gets:
+        - its dictionary ordinal, when its entry has more than one sense
+          ("pomen 2: pes"), which makes siblings distinct unconditionally; and
+        - a bounded snippet of its first usage example when it has no definition
+          ("pomen 1: pes (zgled: Sosedov pes je spet lajal ...)"), which makes
+          them distinct MEANINGFULLY for the 47.7% of such senses that have one.
+     Definition-bearing and example-bearing senses are largely disjoint
+     populations, which is exactly why the example fallback pays.  Controlled by
+     --sense-snippet (0 disables) and --no-sense-index.
+
+  6. LITERALS ARE UNESCAPED.  v3 passed the N-Triples literal through verbatim,
+     so 3.48% of example nodes carried a literal backslash-quote:
+        zgled: ... jih imam pravico tozniti,\\" pravi.
+     writtenRep / value / definition now go through unescape_nt().  Only \\" and
+     \\\\ occur in this dump; the rest of the escape set is handled anyway and
+     unknown escapes pass through unchanged.
+
 Analysis: 2 (form_mode) x 2 (examples) x 2 (collocations) = 8 variants, reported
 with percentiles, split by seed kind (single word vs MWE).  Tokens = node-text
 tokens + prompt (no relation-label tokens: there are no relation labels).  For
@@ -159,6 +182,9 @@ LANG_SL = {"hun":"madžarsko","en":"angleško","de":"nemško","it":"italijansko"
 TAG_ANCHOR = "iztočnica: "
 TAG_FORM   = "oblika: "
 TAG_SENSE  = "pomen: "
+TAG_SENSE_N = "pomen {}: "        # polysemous entry: dictionary ordinal
+TAG_SENSE_EX = " (zgled: {})"     # disambiguating snippet, no definition
+SENSE_SNIPPET_CHARS = 60          # default budget for that snippet
 TAG_EX     = "zgled: "
 TAG_COLLOC = "kolokacija: "
 TAG_SYN    = "sopomenka: "
@@ -200,6 +226,30 @@ def type_of(codes):
 
 def _localname(s):
     return s.rsplit("#", 1)[-1].rsplit("/", 1)[-1]
+
+
+# N-Triples literal escapes.  The dump triple-quotes every writtenRep / value /
+# definition, so the only escapes that actually occur are \" (1,461 per 400k
+# lines) and \\ (12), but \uXXXX and the C-style set are handled too, and an
+# unrecognised escape passes through untouched rather than being silently eaten.
+_ESC_RE = re.compile(r"\\(u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|.)", re.S)
+_ESC_MAP = {'"': '"', "\\": "\\", "n": "\n", "r": "\r", "t": "\t",
+            "b": "\b", "f": "\f", "/": "/", "'": "'"}
+
+
+def _esc_sub(m):
+    g = m.group(1)
+    if len(g) > 1 and g[0] in "uU":
+        try:
+            return chr(int(g[1:], 16))
+        except ValueError:
+            return m.group(0)
+    return _ESC_MAP.get(g, m.group(0))
+
+
+def unescape_nt(s):
+    """Decode N-Triples escapes in a literal.  Fast path: most have none."""
+    return _ESC_RE.sub(_esc_sub, s) if "\\" in s else s
 
 
 EDGE_KEYS = ("canon", "other", "sense", "syn", "ant", "usage",
@@ -279,6 +329,7 @@ def parse_file(path):
                 sc = code_of(subj)
                 if sc is None:
                     continue
+                txt = unescape_nt(txt)
                 is_sl = "@sl" in tail
                 if kind == "wr":
                     if is_sl:
@@ -319,6 +370,18 @@ def feat_string(props, pos_local=None):
     return " (" + ", ".join(parts) + ")" if parts else ""
 
 
+def sense_snippet(s, limit):
+    """Bounded, word-boundary example snippet for a definition-less sense."""
+    s = " ".join(s.split())
+    if not s or limit <= 0:
+        return ""
+    if len(s) <= limit:
+        return s
+    cut = s.rfind(" ", 0, limit)
+    head = s[:cut] if cut > limit // 2 else s[:limit]
+    return head.rstrip(" ,;:.!?-") + " ..."
+
+
 def _dedup_pairs(a, b):
     """Undirected dedup of a pair list. Returns (m,2) sorted-unique array."""
     if len(a) == 0:
@@ -333,7 +396,8 @@ def _dedup_pairs(a, b):
 
 
 # ---------------------------------------------------------------------------
-def build(files, workers, stats):
+def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
+          sense_index=True):
     t0 = time.time()
     print(f"[parse] {len(files)} files x {workers} workers", flush=True)
     agg = {k: [] for k in EDGE_KEYS}
@@ -536,15 +600,78 @@ def build(files, workers, stats):
         if t:
             text[j] = TAG_FORM + t
             kind[j] = K_FORM
-    # senses: definition, else fall back to the lemma
+    # ---- FLAW 5: make sibling senses distinguishable -----------------------
+    # Two lookup tables, both kept as sorted numpy arrays rather than dicts: at
+    # 8.5M senses a Python dict of either costs ~1 GB, and the build already
+    # peaks at 65 GB.
+    empty64 = np.empty(0, dtype=np.int64)
+    ex_se = ex_code = empty64                    # sense -> first example w/ text
+    if snippet_chars > 0 and len(usage):
+        u = np.unique(usage, axis=0)             # sorted by (sense, example)
+        if len(val):
+            vk = np.fromiter(val.keys(), dtype=np.int64, count=len(val))
+            vk.sort()
+            p = np.searchsorted(vk, u[:, 1])
+            pc = np.clip(p, 0, max(len(vk) - 1, 0))
+            u = u[(p < len(vk)) & (vk[pc] == u[:, 1])]
+        if len(u):
+            head = np.flatnonzero(np.r_[True, u[1:, 0] != u[:-1, 0]])
+            ex_se = u[head, 0].copy(); ex_code = u[head, 1].copy()
+        del u
+    ord_se = empty64; ord_k = np.empty(0, dtype=np.int32)   # sense -> ordinal
+    if sense_index and len(sense):
+        su = np.unique(sense, axis=0)            # sorted by (lexical unit, sense)
+        starts = np.flatnonzero(np.r_[True, su[1:, 0] != su[:-1, 0]])
+        sizes = np.diff(np.r_[starts, len(su)])
+        multi = np.repeat(sizes > 1, sizes)      # senses of polysemous entries
+        ordv = np.arange(len(su), dtype=np.int32) - np.repeat(starts, sizes).astype(np.int32) + 1
+        # su is sorted by (lexical unit, sense), so column 1 is grouped by entry
+        # and NOT globally sorted -- it must be re-sorted before the searchsorted
+        # lookups below, or they silently miss or mis-number.  A sense reachable
+        # from two entries keeps the first ordinal, for determinism.
+        ord_se = su[multi, 1]; ord_k = ordv[multi]
+        o = np.argsort(ord_se, kind="stable")
+        ord_se = ord_se[o]; ord_k = ord_k[o]
+        keep = np.r_[True, ord_se[1:] != ord_se[:-1]] if len(ord_se) else np.empty(0, bool)
+        ord_se = ord_se[keep].copy(); ord_k = ord_k[keep].copy()
+        assert len(ord_se) < 2 or bool((np.diff(ord_se) > 0).all()), "ord_se unsorted"
+        del su, ordv, multi, o, keep
+    print(f"[sense] {len(ex_se):,} senses have a usable first example, "
+          f"{len(ord_se):,} are in a polysemous entry", flush=True)
+
+    # senses: definition, else the lemma; plus the ordinal and, where there is
+    # no definition, a bounded first-example snippet.
+    n_snip = n_ord = 0
     for se, lu in sense_lu.items():
         j = np.searchsorted(node_codes, se)
         if j >= n_real or node_codes[j] != se:
             continue
-        d = dfn.get(se, "") or lemma_of_lu(lu)
-        if d:
-            text[j] = TAG_SENSE + d
-            kind[j] = K_SENSE
+        d = dfn.get(se, "")
+        body = d or lemma_of_lu(lu)
+        if not body:
+            continue
+        if not d and len(ex_se):
+            p = np.searchsorted(ex_se, se)
+            if p < len(ex_se) and ex_se[p] == se:
+                snip = sense_snippet(val.get(int(ex_code[p]), ""), snippet_chars)
+                if snip:
+                    body += TAG_SENSE_EX.format(snip)
+                    n_snip += 1
+        tag = TAG_SENSE
+        if len(ord_se):
+            p = np.searchsorted(ord_se, se)
+            if p < len(ord_se) and ord_se[p] == se:
+                tag = TAG_SENSE_N.format(int(ord_k[p])); n_ord += 1
+        text[j] = tag + body
+        kind[j] = K_SENSE
+    print(f"[sense] {n_ord:,} numbered, {n_snip:,} carry an example snippet",
+          flush=True)
+    stats["sense_text"] = {"snippet_chars": int(snippet_chars),
+                           "index": bool(sense_index),
+                           "with_first_example": int(len(ex_se)),
+                           "in_polysemous_entry": int(len(ord_se)),
+                           "numbered": int(n_ord), "snippeted": int(n_snip)}
+    del ex_se, ex_code, ord_se, ord_k
     # examples, translations, leftovers
     for i in range(n_real):
         if text[i]:
@@ -709,6 +836,11 @@ def main():
     ap.add_argument("--files-limit", type=int, default=0)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--prompt-tokens", type=int, default=24)
+    ap.add_argument("--sense-snippet", type=int, default=SENSE_SNIPPET_CHARS,
+                    help="chars of the first usage example folded into a "
+                         "definition-less sense's text (0 disables)")
+    ap.add_argument("--no-sense-index", action="store_true",
+                    help="do not number the senses of a polysemous entry")
     ap.add_argument("--variants", default="",
                     help="comma-separated subset of variant names (default: all 8)")
     ap.add_argument("--no-tokenizer", action="store_true",
@@ -744,7 +876,9 @@ def main():
         n_files = len(files)
         print(f"KG dir: {args.kg_dir}  ({n_files} .nt files)", flush=True)
         stats = {}
-        G = build(files, args.workers, stats)
+        G = build(files, args.workers, stats,
+                  snippet_chars=args.sense_snippet,
+                  sense_index=not args.no_sense_index)
     n = G["n"]; kind = G["kind"]; texts = G["text"]
 
     if args.dump_samples:
@@ -793,6 +927,8 @@ def main():
             args.save_graph, G, token_len, stats=stats,
             meta={"tokenizer": tok_name, "kg_dir": args.kg_dir,
                   "n_files": n_files, "files_limit": args.files_limit,
+                  "sense_snippet": args.sense_snippet,
+                  "sense_index": not args.no_sense_index,
                   "builder": os.path.basename(__file__),
                   "builder_sha256": hashlib.sha256(
                       open(os.path.abspath(__file__), "rb").read()).hexdigest()})
