@@ -40,10 +40,15 @@ doubles as a test for "is this id in the export at all".
 
 Run `kg_lookup.py store -h` / `kg_lookup.py raw -h`, or `-h` on any of the five,
 for the exact semantics and a worked example.
+
+`bin/lookup` in the repo root wraps this script, so with that directory on PATH
+every command below can be typed as `lookup ...` from any working directory.
 """
 import argparse, os, re, subprocess, sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# realpath, not abspath: `bin/lookup` may be reached through a symlink, and the
+# store and corpus paths below are all derived from this location.
+HERE = os.path.dirname(os.path.realpath(__file__))
 DATA = os.path.dirname(HERE)
 # Override with KG_STORE=/path/to/store to query an older build.
 STORE = os.environ.get("KG_STORE") or os.path.join(DATA, "kg_graph_v3_1")

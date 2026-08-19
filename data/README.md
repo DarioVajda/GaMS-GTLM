@@ -476,6 +476,34 @@ rather than costing 105 MB of redundancy. The manifest is written **last**, so a
 directory without one is an interrupted write rather than a subtly incomplete
 store.
 
+### Looking things up: `lookup`
+
+`kg_analysis/kg_lookup.py` queries either the built store or the raw N-Triples
+from one CLI. `bin/lookup` wraps it so it runs from any directory; put the
+directory on `PATH` once:
+
+```bash
+printf '\nexport PATH="/shared/workspace/povejmo/gams_gtlm/bin:$PATH"\n' >> ~/.bashrc && source ~/.bashrc
+```
+
+The leading `\n` is not cosmetic. A dotfile whose last line has no trailing
+newline turns a plain `echo … >>` into a silent corruption: the export is glued
+onto the previous line, so it never runs *and* it mangles whatever was there.
+
+```bash
+lookup store word jabolke              # spelling -> headwords and forms, ranked
+lookup store word boj --also all       # ...and senses, examples, collocations
+lookup store id 69611 --hops 1         # a unit's text, then its neighbourhood
+lookup raw id 34748                    # every raw triple touching it (~8s)
+lookup raw iri word-form-1567346       # the same for any IRI
+```
+
+Store lookups read `data/kg_graph_v3_1`; `KG_STORE=/path` points them elsewhere.
+The wrapper picks an interpreter that can actually import numpy **on the current
+node**, falling back to `pick_python.sh`, so it does not hit the 3.10-only trap
+that killed job 128295. `KG_PYTHON=/path/to/python` overrides that choice.
+`lookup -h`, and `-h` on any subcommand, carries the details.
+
 ### Why node text is a blob
 
 `text` is a Python list of 36.7 M `str`. `np.save` on that pickles element by

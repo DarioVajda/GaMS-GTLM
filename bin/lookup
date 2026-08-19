@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# `lookup ...` -> data/kg_analysis/kg_lookup.py, from any working directory.
+#
+# Put this directory on PATH once:
+#     echo 'export PATH="/shared/workspace/povejmo/gams_gtlm/bin:$PATH"' >> ~/.bashrc
+# then `lookup store word jabolke` works anywhere.
+#
+# Interpreter choice matters here.  The venv is on the shared filesystem but is
+# NOT node-independent (see data/kg_analysis/pick_python.sh): on a node whose
+# /usr/bin/python3 is not 3.10 the interpreter starts and then cannot import
+# numpy.  So rather than relying on the script's shebang, pick one that actually
+# works on THIS node, and only pay for pick_python.sh when the plain python3
+# cannot do the job.
+set -euo pipefail
+
+here=$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
+repo=$(dirname -- "$here")
+target="$repo/data/kg_analysis/kg_lookup.py"
+
+[ -f "$target" ] || { echo "lookup: missing $target" >&2; exit 127; }
+
+has_numpy() { "$1" -c 'import numpy' >/dev/null 2>&1; }
+
+py=${KG_PYTHON:-}
+if [ -z "$py" ]; then
+    if has_numpy python3; then
+        py=python3
+    else
+        # Slow path: resolve a 3.10 that can see the venv's site-packages.
+        picker="$repo/data/kg_analysis/pick_python.sh"
+        if [ -x "$picker" ] && py=$("$picker" 2>/dev/null) && [ -n "$py" ]; then
+            :
+        else
+            echo "lookup: no python3 with numpy on this node; set KG_PYTHON" >&2
+            exit 127
+        fi
+    fi
+fi
+
+exec "$py" "$target" "$@"
