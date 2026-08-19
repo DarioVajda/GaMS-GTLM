@@ -11,7 +11,7 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:40:00
 #SBATCH --job-name=kg_verify_store
-#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/verify_store_%j.out
+#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/logs/verify_store_%j.out
 
 set -euo pipefail
 ROOT=/shared/workspace/povejmo/gams_gtlm

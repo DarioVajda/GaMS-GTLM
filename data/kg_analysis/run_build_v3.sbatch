@@ -11,7 +11,7 @@
 #SBATCH --mem=200G
 #SBATCH --time=06:00:00
 #SBATCH --job-name=kg_build_v3
-#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/build_v3_%j.out
+#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/logs/build_v3_%j.out
 
 set -euo pipefail
 # Shared-filesystem venv, unlike the per-node /opt/deepops venv that .venv

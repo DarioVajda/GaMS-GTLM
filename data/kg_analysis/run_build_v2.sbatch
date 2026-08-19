@@ -6,7 +6,7 @@
 #SBATCH --mem=150G
 #SBATCH --time=04:00:00
 #SBATCH --job-name=kg_build_v2
-#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/build_v2_%j.out
+#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/logs/build_v2_%j.out
 
 set -euo pipefail
 # self-contained venv on the shared filesystem (identical on every node),

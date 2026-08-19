@@ -6,7 +6,7 @@
 #SBATCH --mem=400G
 #SBATCH --time=04:00:00
 #SBATCH --job-name=kg_neighborhood
-#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/job_%j.out
+#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/logs/job_%j.out
 
 set -euo pipefail
 cd /shared/workspace/povejmo/gams_gtlm

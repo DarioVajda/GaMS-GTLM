@@ -19,7 +19,7 @@
 #SBATCH --mem=90G
 #SBATCH --time=00:45:00
 #SBATCH --job-name=kg_save_v3
-#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/save_v3_%j.out
+#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/logs/save_v3_%j.out
 
 set -euo pipefail
 ROOT=/shared/workspace/povejmo/gams_gtlm
