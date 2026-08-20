@@ -1,0 +1,87 @@
+host: apl  cpus: 16  start: Thu Aug 20 12:00:06 UTC 2026
+env OK  /shared/workspace/povejmo/graph_model/.venv/bin/python 3.10.12 numpy 1.26.4 transformers 4.50.3
+KG dir: /shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB  (2594 .nt files)
+[parse] 2594 files x 16 workers
+[parse] 200/2594  6s
+[parse] 400/2594  11s
+[parse] 600/2594  16s
+[parse] 800/2594  20s
+[parse] 1000/2594  25s
+[parse] 1200/2594  31s
+[parse] 1400/2594  43s
+[parse] 1600/2594  57s
+[parse] 1800/2594  62s
+[parse] 2000/2594  67s
+[parse] 2200/2594  72s
+[parse] 2400/2594  84s
+[trans] dropped 155,140 translation-chain edges (collapsed onto translation-form)
+[parse] done 114s  canon=4,340,597 other=8,678,916 sense=8,468,227 usage=14,722,502 constit=10,265,230 corr=10,262,712 tsrc=77,570 member=9,645,845 syn=362,520 ant=6,898 wr=12,900,645 wrf=77,570 dfn=225,618 val=12,119,158 feat=8,920,501 pos=400,180
+[collapse] 10,253,936 MWE->word constituent edges
+[colloc] 4,717,087 collocation IRIs, member-count hist={1: 8875, 2: 4707758, 3: 406, 4: 44, 5: 4}, 4,707,758 binary -> 2,981,731 distinct pairings
+[reify] syn=181,260 ant=3,449 pairings
+[nodes] 33,569,351 IRI-backed nodes, 42,201,151 IRI-backed edges
+[sense] 3,688,823 senses have a usable first example, 8,088,702 are in a polysemous entry
+[sense] 8,088,702 numbered, 3,662,840 carry an example snippet
+[text] 33,569,072 with text, 279 textless (0.00%) by type: {'word-form': 278, 'example': 1}
+[mint] 181,260 sopomenka + 3,449 protipomenka + 2,981,731 kolokacija nodes (6,332,880 edges)
+[nodes] final 36,735,791 nodes / 48,534,031 directed edges  (279 textless, 0.00%)
+[csr] 97,068,062 half-edges  391s
+[tok] cjvt/GaMS3-12B-Instruct loaded (vocab 262,145)
+[tok] 35,979,029 unique node texts
+[save] text 10,000,000/36,735,791
+[save] text 20,000,000/36,735,791
+[save] text 30,000,000/36,735,791
+[save] text_blob.bin 2.53 GB (279 textless)  15s
+[save] node_codes.npy 256 MB
+[save] ntype.npy 140 MB
+[save] kind.npy 35 MB
+[save] mwe_set.npy 35 MB
+[save] indptr.npy 280 MB
+[save] indices.npy 370 MB
+[save] token_len.npy 140 MB
+[save] 4.03 GB to /shared/workspace/povejmo/gams_gtlm/data/kg_graph_v3_1_gemma3  17s
+[done] --no-analysis: stopping after the build
+--- verifying the store ---
+[load] 36,735,791 nodes / 48,534,031 edges from /shared/workspace/povejmo/gams_gtlm/data/kg_graph_v3_1_gemma3  0.0s
+{
+  "nodes": 36735791,
+  "edges": 48534031,
+  "half_edges": 97068062,
+  "half_edges_checked": 6817,
+  "sampled_textless": 0,
+  "manifest_textless": 279,
+  "token_len_zero": 279,
+  "token_len_mean": 24.861740094285707,
+  "total_GB": 4.03,
+  "problems": []
+}
+--- store contents ---
+total 4228628
+drwxr-s--- 1 dario.vajda povejmo          0 Aug 20 12:18 .
+drwxr-s--- 1 dario.vajda povejmo          0 Aug 20 12:17 ..
+-rw-r----- 1 dario.vajda povejmo  388272376 Aug 20 12:18 indices.npy
+-rw-r----- 1 dario.vajda povejmo  293886464 Aug 20 12:18 indptr.npy
+-rw-r----- 1 dario.vajda povejmo   36735919 Aug 20 12:18 kind.npy
+-rw-r----- 1 dario.vajda povejmo       2885 Aug 20 12:18 manifest.json
+-rw-r----- 1 dario.vajda povejmo   36735919 Aug 20 12:18 mwe_set.npy
+-rw-r----- 1 dario.vajda povejmo  268554936 Aug 20 12:18 node_codes.npy
+-rw-r----- 1 dario.vajda povejmo  146943292 Aug 20 12:18 ntype.npy
+-rw-r----- 1 dario.vajda povejmo 2718135597 Aug 20 12:18 text_blob.bin
+-rw-r----- 1 dario.vajda povejmo  293886464 Aug 20 12:18 text_off.npy
+-rw-r----- 1 dario.vajda povejmo  146943292 Aug 20 12:18 token_len.npy
+4.1G	/shared/workspace/povejmo/gams_gtlm/data/kg_graph_v3_1_gemma3
+--- acceptance: gemma3 store vs gams2b store ---
+    node_codes.npy   identical=True  f50b62aec05ba849506161a7d283283e
+    ntype.npy        identical=True  e9696f7118e14956fde99b37e1c0ab9c
+    kind.npy         identical=True  7ff6592edeb6c9d231cbb2089da70aea
+    mwe_set.npy      identical=True  79a8880e736f843ce87f6f9e00b8c351
+    indptr.npy       identical=True  fef184086c16b1d78c70fd5a62ad384f
+    indices.npy      identical=False  33970b7993c17894fb108f0f7c82a05b
+    text_off.npy     identical=True  a82c75703ea34e1879ae0a2647d0c8e6
+    text_blob.bin    identical=True  7aa3f691dd815ae07f29cec80b9253ef
+    token_len        n=36,735,791  equal_elementwise=45.97%
+    token_len total  gemma3=913,315,688  gams2b=920,680,698  ratio=0.9920
+    token_len mean   gemma3=24.862  gams2b=25.062
+    token_len zero   gemma3=279  gams2b=279
+    manifest tokenizer = 'cjvt/GaMS3-12B-Instruct'
+ACCEPTANCE: FAIL
