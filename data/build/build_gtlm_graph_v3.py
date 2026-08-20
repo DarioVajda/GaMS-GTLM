@@ -26,9 +26,10 @@ Fixes the four defects recorded in data/README.md "Known flaws" for v2:
      different frac:head), so pairings are DEDUPLICATED BY MEMBER SET.  frac:head
      is an indexing head, not a grammatical one, so it is dropped and the
      collocation node is symmetric.  Members are SENSES (not lexical units), so
-     the collocation node attaches to the two senses; its text joins their
-     lemmas ("kolokacija: aplikativen + etnologija").  No grammatical surface
-     generation is attempted -- the inflected phrase is genuinely not stored.
+     the collocation node attaches to the two senses.
+     v3/v4 gave the node the two lemmas joined by a plus ("kolokacija:
+     aplikativen + etnologija") on the belief that the inflected phrase was not
+     stored anywhere.  THAT WAS WRONG -- see flaw 8.
 
   3. NO NODE-ID COLLISIONS.  v2's prefix_id_for hashed unknown IRI prefixes into
      400 buckets, so every `dependent-sense-D-lexical-unit` prefix collided.
@@ -95,6 +96,32 @@ so the cost of flaw #2 can be measured rather than assumed.
      -- MWE components, which flaw #1's collapse discards.  Reachable on word
      entries: vform 452,782, person 253,497, definiteness 164,812, aspect
      18,157, clitic 25.
+
+  8. COLLOCATIONS ARE VERBALISED (v5 text convention).  Flaw 2 concluded that the
+     inflected phrase "is genuinely not stored".  It is stored -- just not on the
+     collocation node, and not behind any edge.  A frac:Collocation node takes
+     only rdfs:member / frac:head / rdf:type in all 42 GB and nothing ever points
+     AT one (0 triples with a collocation in the object position), so no traversal
+     from either side can reach the text.  The link is a NAMING CONVENTION:
+
+         <dependent-sense-D-lexical-unit-H> rdf:type frac:Collocation
+         <sense-D> ontolex:isSenseOf <lexical-unit-M>   (M a MultiWordExpression)
+         <lexical-unit-M> canonicalForm/writtenRep -> "kisova voda"
+
+     D is the sense of the multi-word entry that spells the pairing out.  The
+     trap is that the OTHER id in that name, H, is restated as a real triple
+     (frac:head), so the convention looks like pure redundancy -- and code_of()
+     was already parsing D out to pack the node id, using it as an identifier
+     ingredient and never dereferencing it.
+     Measured over the raw dump: 4,717,090 of 4,717,090 collocation nodes
+     resolve, 3,744,473 distinct phrases, 75.3% of them differing from their
+     constituent lemmas concatenated -- agreement, word order, and the
+     prepositions/copula that the pair form drops outright.  Independently, 91.5%
+     of the 1,307 collocation phrases in data/datasets/reference/ come back
+     verbatim from this path alone, which also settles where that file's
+     phrases came from (this export, not the DDDS API).
+     Controlled by --colloc-text {phrase,pair}; the skip condition stays on the
+     members, so structure is byte-identical to a v4 store of the same tokenizer.
 
 Analysis: 2 (form_mode) x 2 (examples) x 2 (collocations) = 8 variants, reported
 with percentiles, split by seed kind (single word vs MWE).  Tokens = node-text
@@ -491,9 +518,36 @@ def _dedup_pairs(a, b):
     return np.unique(pairs, axis=0)
 
 
+def _dedup_pairs_keyed(a, b, key):
+    """_dedup_pairs, keeping one `key` alongside each surviving pair.
+
+    Returns (pairs, keys) in the SAME row order as _dedup_pairs(a, b), so the
+    minted node ids are unchanged by carrying the key through.
+
+    Used for collocations, where the key is the frac:Collocation IRI code.  The
+    same pairing is reified once per participant -- identical member set,
+    different frac:head -- and the duplicates differ only in the frac:head half
+    of the IRI, so they all carry the same sense id in the other half.  Which
+    representative survives therefore does not affect the verbalisation; the
+    lexsort makes the choice deterministic anyway.
+    """
+    if len(a) == 0:
+        return np.empty((0, 2), dtype=np.int64), np.empty(0, dtype=np.int64)
+    lo = np.minimum(a, b); hi = np.maximum(a, b)
+    keep = lo != hi
+    lo = lo[keep]; hi = hi[keep]; key = np.asarray(key)[keep]
+    if len(lo) == 0:
+        return np.empty((0, 2), dtype=np.int64), np.empty(0, dtype=np.int64)
+    order = np.lexsort((key, hi, lo))       # primary lo, then hi -> np.unique order
+    lo = lo[order]; hi = hi[order]; key = key[order]
+    pairs = np.stack([lo, hi], axis=1)
+    first = np.flatnonzero(np.r_[True, (pairs[1:] != pairs[:-1]).any(axis=1)])
+    return pairs[first], key[first]
+
+
 # ---------------------------------------------------------------------------
 def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
-          sense_index=True):
+          sense_index=True, colloc_text="phrase"):
     t0 = time.time()
     print(f"[parse] {len(files)} files x {workers} workers", flush=True)
     agg = {k: [] for k in EDGE_KEYS}
@@ -613,6 +667,7 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
     # Each pairing is reified once per participant with an identical member set,
     # so group members by collocation IRI and dedup by the member set itself.
     colloc_pairs = np.empty((0, 2), dtype=np.int64)
+    colloc_iri = np.empty(0, dtype=np.int64)        # parallel to colloc_pairs
     member_hist = {}
     if len(member):
         member = np.unique(member, axis=0)          # the dump repeats triples
@@ -625,7 +680,10 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
         two = sizes == 2
         starts = bounds[two]
         a = mo[starts]; b = mo[starts + 1]
-        colloc_pairs = _dedup_pairs(a, b)           # <- the 2:1 dedup
+        # ms[starts] is the frac:Collocation IRI code itself.  v3/v4 discarded it
+        # once the members were read; flaw 8 needs it, because the sense id it
+        # encodes is the only route to the phrase's surface string.
+        colloc_pairs, colloc_iri = _dedup_pairs_keyed(a, b, ms[starts])
         n_colloc_iris = len(bounds)
         print(f"[colloc] {n_colloc_iris:,} collocation IRIs, member-count hist={member_hist}, "
               f"{int(two.sum()):,} binary -> {len(colloc_pairs):,} distinct pairings",
@@ -814,12 +872,55 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
           f"by type: {tl_by_type}", flush=True)
     stats["textless_by_type"] = tl_by_type
 
+    # ---- FLAW 8: the collocation's surface string --------------------------
+    # A frac:Collocation node carries no text of its own -- rdfs:member, frac:head
+    # and rdf:type are the ONLY predicates it ever takes, in all 42 GB, and nothing
+    # in the dump ever points AT one (0 triples with a collocation in the object
+    # position).  But its IRI names the sense of the multi-word entry that spells
+    # the phrase out, and that entry does carry the text:
+    #
+    #     <dependent-sense-D-lexical-unit-H>  rdf:type  frac:Collocation
+    #     <sense-D>          ontolex:isSenseOf     <lexical-unit-M>
+    #     <lexical-unit-M>   rdf:type              ontolex:MultiWordExpression
+    #     <lexical-unit-M>   ontolex:canonicalForm <form-lexical-unit-M>
+    #     <form-lexical-unit-M> ontolex:writtenRep """kisova voda"""@sl
+    #
+    # so the phrase is three ordinary lookups away and sense_lu / canon_of / wr
+    # already hold every one of them.  The link exists only as a naming
+    # convention, never as a triple -- which is why v2/v3/v4 all missed it while
+    # code_of() was parsing D out of that very IRI to pack the node id.
+    #
+    # Measured on the raw dump: 4,717,090 of 4,717,090 collocation nodes resolve,
+    # 3,744,473 distinct phrases, and 75.3% of them differ from their constituent
+    # lemmas concatenated (agreement, word order, and the prepositions/copula the
+    # pair form drops entirely).  See data/README.md Finding 8.
+    COLLOC_ID_MASK = (1 << 28) - 1
+
+    def colloc_phrase(t):
+        """Surface string for row t of colloc_pairs, or '' if it does not resolve."""
+        iri = int(colloc_iri[t])
+        if (iri >> TYPE_SHIFT) != T_COLLOC:
+            return ""
+        # code_of() packs the IRI as (T_COLLOC << 56) | (D << 28) | H whenever both
+        # ids fit in 28 bits, which they do throughout this KG (max sense id ~1.0e7,
+        # max lexical-unit id ~1.2e7, vs 2^28 = 2.7e8).  On the _hash56 fallback the
+        # unpacked D is meaningless, but then it names no sense and we return ''.
+        d = (iri >> 28) & COLLOC_ID_MASK
+        return lemma_of_sense((T_SENSE << TYPE_SHIFT) | d)
+
     # ---- mint the reified nodes (collocation / synonym / antonym) ----------
     mint_src = []; mint_dst = []; mint_text = []; mint_kind = []
     next_id = n_real
+    n_phrase = [0]
 
-    def mint(pairs, tag, joiner, k, namer):
-        """Reify each pairing as one node whose text names both endpoints."""
+    def mint(pairs, tag, joiner, k, namer, phrase_of=None):
+        """Reify each pairing as one node whose text names both endpoints.
+
+        With `phrase_of`, the node instead carries the phrase itself when one
+        resolves, falling back to the pair form when it does not.  The SKIP
+        condition stays on the members either way, so the node count and order
+        are identical with and without it and the store's structure is unchanged.
+        """
         nonlocal next_id
         if not len(pairs):
             return 0
@@ -835,7 +936,12 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
             la = namer(pairs[t, 0]); lb = namer(pairs[t, 1])
             if not la or not lb:
                 continue
-            mint_text.append(f"{tag}{la} {joiner} {lb}")
+            surface = phrase_of(t) if phrase_of is not None else ""
+            if surface:
+                mint_text.append(f"{tag}{surface}")
+                n_phrase[0] += 1
+            else:
+                mint_text.append(f"{tag}{la} {joiner} {lb}")
             mint_kind.append(k)
             mint_src.append(next_id); mint_dst.append(int(ia[t]))
             mint_src.append(next_id); mint_dst.append(int(ib[t]))
@@ -844,10 +950,17 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
 
     n_syn = mint(syn_pairs, TAG_SYN, "~", K_SYN, lemma_of_sense)
     n_ant = mint(ant_pairs, TAG_ANT, "~", K_ANT, lemma_of_sense)
-    n_col = mint(colloc_pairs, TAG_COLLOC, "+", K_COLLOC, lemma_of_sense)
+    n_col = mint(colloc_pairs, TAG_COLLOC, "+", K_COLLOC, lemma_of_sense,
+                 phrase_of=colloc_phrase if colloc_text == "phrase" else None)
     print(f"[mint] {n_syn:,} sopomenka + {n_ant:,} protipomenka + {n_col:,} kolokacija "
           f"nodes ({len(mint_src):,} edges)", flush=True)
-    stats["minted"] = {"synonym": n_syn, "antonym": n_ant, "collocation": n_col}
+    if colloc_text == "phrase":
+        print(f"[colloc] {n_phrase[0]:,} of {n_col:,} collocation nodes verbalised "
+              f"({100.0*n_phrase[0]/max(n_col,1):.2f}%), "
+              f"{n_col - n_phrase[0]:,} fell back to the lemma pair", flush=True)
+    stats["minted"] = {"synonym": n_syn, "antonym": n_ant, "collocation": n_col,
+                       "collocation_text": colloc_text,
+                       "collocation_verbalised": int(n_phrase[0])}
 
     n = next_id
     text = text + mint_text
@@ -953,6 +1066,13 @@ def main():
                          "definition-less sense's text (0 disables)")
     ap.add_argument("--no-sense-index", action="store_true",
                     help="do not number the senses of a polysemous entry")
+    ap.add_argument("--colloc-text", choices=("phrase", "pair"), default="phrase",
+                    help="collocation node text: 'phrase' resolves the inflected "
+                         "surface string through the multi-word entry named in the "
+                         "frac:Collocation IRI (kolokacija: kisova voda); 'pair' is "
+                         "the v3/v4 lemma-pair form (kolokacija: kisov + voda). "
+                         "'phrase' falls back to 'pair' per node when it does not "
+                         "resolve, so the graph structure is identical either way.")
     ap.add_argument("--variants", default="",
                     help="comma-separated subset of variant names (default: all 8)")
     ap.add_argument("--tokenizer", default=DEFAULT_TOKENIZER,
@@ -996,7 +1116,8 @@ def main():
         stats = {}
         G = build(files, args.workers, stats,
                   snippet_chars=args.sense_snippet,
-                  sense_index=not args.no_sense_index)
+                  sense_index=not args.no_sense_index,
+                  colloc_text=args.colloc_text)
     n = G["n"]; kind = G["kind"]; texts = G["text"]
 
     if args.dump_samples:
@@ -1047,10 +1168,12 @@ def main():
                   "n_files": n_files, "files_limit": args.files_limit,
                   "sense_snippet": args.sense_snippet,
                   "sense_index": not args.no_sense_index,
-                  # A store declares which text convention built it.  v4 renders
-                  # vform/person/definiteness on forms and aspect/clitic on
-                  # anchors; v3.1 rendered none of them.
-                  "text_convention": "v4",
+                  "colloc_text": args.colloc_text,
+                  # A store declares which text convention built it.  v3.1
+                  # rendered no morphology and wrote collocations as lemma pairs;
+                  # v4 added vform/person/definiteness on forms and aspect/clitic
+                  # on anchors; v5 verbalises the collocation nodes (flaw 8).
+                  "text_convention": "v5" if args.colloc_text == "phrase" else "v4",
                   "feature_props": list(FEATURE_PROPS),
                   "unit_props": list(UNIT_PROPS),
                   "builder": os.path.basename(__file__),
