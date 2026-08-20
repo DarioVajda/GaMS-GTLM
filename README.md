@@ -142,8 +142,8 @@ started. The upstream Gemma 3 adapter has landed, so the backbone is no longer a
 - **Done.** Raw KG downloaded and characterised; GTLM graph construction settled at **v3**
   (36.7 M nodes / 48.5 M edges, untyped edges with self-describing node text) together with
   a k-hop input-sizing study — see [`data/README.md`](data/README.md).
-  The graph is now **persisted** — current store `data/stores/kg_graph_v4_gemma3/`, built
-  by `data/build/run_save_v4.sbatch` — so the ~35-minute, ~70 GB rebuild is paid
+  The graph is now **persisted** — current store `data/stores/kg_graph_v5_gemma3/`, built
+  by `data/build/run_save_v5.sbatch` — so the ~35-minute, ~70 GB rebuild is paid
   once instead of per run; `data/lib/graph_store.py` loads it in seconds. Its
   `token_len` uses the Gemma 3 tokenizer, which every Gemma 3 size shares with
   GaMS3-12B, so one store serves the whole iteration ladder below.

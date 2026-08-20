@@ -39,7 +39,7 @@ data/
 │                results/*.json
 ├── lookup/      kg_lookup.py — the query CLI (`bin/lookup` wraps it)
 ├── datasets/    reference/ the two reference QA sets; generated/ our output
-├── stores/      kg_graph_v3, kg_graph_v3_1_*, kg_graph_v4_* (gitignored, ~4 GB each)
+├── stores/      kg_graph_v3, kg_graph_v3_1_*, kg_graph_v4_*, kg_graph_v5_* (gitignored, ~4 GB each)
 ├── kg_raw/      the untouched CJVT N-Triples (83 GB, gitignored)
 └── logs/        Slurm job logs
 ```
@@ -57,7 +57,7 @@ under a directory that says what they are, never loose in `data/`.
 | # | v2 defect | v3 |
 |---|---|---|
 | 1 | Blanket **Levi reification** — every relation became its own text node | **Untyped edges** (GTLM's native `TextGraph`). The type lives in each node's *text*. Only the genuinely ambiguous `sense→sense` class (synonym / antonym) and collocations are reified, with self-describing text. |
-| 2 | **Collocations missing** — `rdfs:member` never parsed, so 4.8 M `frac:Collocation` IRIs sat as textless degree-1 leaves | **Parsed and wired in**, deduplicated to 2.98 M distinct pairings, each a node `kolokacija: boj + kriminaliteta` |
+| 2 | **Collocations missing** — `rdfs:member` never parsed, so 4.8 M `frac:Collocation` IRIs sat as textless degree-1 leaves | **Parsed and wired in**, deduplicated to 2.98 M distinct pairings, each a node `kolokacija: boj + kriminaliteta` — *superseded by v5, which writes the real phrase `kolokacija: boj proti kriminaliteti`; see Finding 8* |
 | 3 | **Node-ID collisions** — unknown IRI prefixes hashed into 400 buckets | Codes are `(type << 56) | payload`; collocations pack exactly as `(D << 28) | H`. **No collisions.** |
 | 4 | **9.6 % of nodes textless** | **0.001 %** (279 nodes) |
 
@@ -72,11 +72,13 @@ leaving the proper noun `Beznik` capitalised.
 
 ### Corrections to the v2 write-up
 
-- The v2 note that a multi-word phrase "is not stored anywhere" holds **only for
-  collocations**. MWE *headwords* do store their surface form
-  (`form-lexical-unit-8148598 → "divji brin"@sl`, full coverage), so those
-  anchors carry the real phrase. Collocations remain lemma-joined, because a
-  collocation is a pair of *senses* with no stored surface.
+- ~~The v2 note that a multi-word phrase "is not stored anywhere" holds **only for
+  collocations**.~~ **Wrong — it holds for nothing. Corrected in v5, see
+  Finding 8.** MWE *headwords* do store their surface form
+  (`form-lexical-unit-8148598 → "divji brin"@sl`, full coverage). So do
+  collocations: the collocation node has no text of its own, but its IRI names
+  the sense of the multi-word entry that spells the pairing out, and every one of
+  the 4,717,090 of them resolves.
 - Collocation `rdfs:member` targets are **senses, not lexical units**. The
   collocation node therefore attaches to two senses, and its text joins *their*
   lemmas.
@@ -111,10 +113,13 @@ oblika: Afričanu (dajalnik, ednina)
 pomen: <definition, else the entry's lemma>
 zgled: Vsak konjenik je dobil simbolno darilo: žganje z brinom ter malico.
 prevod (madžarsko): rüh kezelése
-kolokacija: boj + kriminaliteta
+kolokacija: boj proti kriminaliteti
 sopomenka: biblioteka ~ knjižnica
 protipomenka: boj ~ sodelovanje
 ```
+
+The collocation line read `kolokacija: boj + kriminaliteta` through v4. v5 writes
+the phrase the dictionary actually stores — see **Finding 8**.
 
 POS (`lexinfo:partOfSpeech`, 400,180 entries) is new in v3 — v2 dropped it
 entirely.
@@ -513,6 +518,157 @@ entries.
 
 ---
 
+## Finding 8 — collocations *are* verbalised. The link is a naming convention, not a triple.
+
+> **Status: fixed in v5, built and verified 2026-08-20.** Store
+> `data/stores/kg_graph_v5_gemma3` (job 129512, `apl`, **21 min 07 s**),
+> `ACCEPTANCE: PASS`. Builder flaw 8; acceptance `build/check_v5_text.py`; job
+> script `build/run_save_v5.sbatch`.
+> **2,981,731 of 2,981,731 collocation nodes verbalised (100.00 %), 0 fell back
+> to the pair form.** Structure byte-identical to the v4 store; the only nodes
+> whose text changed are the 2,981,731 collocations (8.12 % of the graph).
+> Token cost of the change: **917,184,046 vs 917,858,318, −0.07 %** — the phrase
+> is *cheaper* than the pair form, because it drops the ` + ` joiner and the two
+> words usually tokenize together. Non-collocation tokens are identical.
+
+Every write-up since v2 has recorded some version of "the inflected phrase is
+genuinely not stored" (builder flaw 2, `QA_DATASET_DESIGN.md` §6.2,
+`QA_TASKS.md` Group F, and the v2 correction above). **It is stored.** The
+mistake was not a missed triple — it was assuming the fact had to be reachable by
+traversal.
+
+### What is actually true about the collocation node
+
+A full predicate census over all 2,594 files / 42 GB:
+
+| | |
+|---|--:|
+| predicates ever seen on a `frac:Collocation` subject | `rdfs:member`, `frac:head`, `rdf:type` — **and nothing else** |
+| literals on a collocation node | **0** |
+| triples with a collocation node in the **object** position | **0** |
+
+So the narrow claim was right and the node really is textless — and because
+nothing points *at* one either, no walk from the MWE reaches the collocation and
+no walk from the collocation reaches the MWE. They sit in disjoint directions.
+
+The whole KG has only four literal-bearing predicates: `phoneticRep` (22.2 M),
+`rdf:value` (14.7 M usage examples), `writtenRep` (13.5 M) and `skos:definition`
+(395 K).
+
+### Where the phrase actually lives
+
+On a *separate entry*, linked only by the collocation's own name:
+
+```
+<dependent-sense-10249562-lexical-unit-21062> rdf:type    frac:Collocation
+<dependent-sense-10249562-lexical-unit-21062> rdfs:member <sense-21062>   → kisov
+<dependent-sense-10249562-lexical-unit-21062> rdfs:member <sense-96587>   → voda
+                ^^^^^^^^
+<lexical-unit-9191303>       ontolex:sense          <sense-10249562>
+                                                          ^^^^^^^^
+<lexical-unit-9191303>       rdf:type               ontolex:MultiWordExpression
+<lexical-unit-9191303>       ontolex:canonicalForm  <form-lexical-unit-9191303>
+<form-lexical-unit-9191303>  ontolex:writtenRep     """kisova voda"""@sl
+```
+
+A collocation and a multi-word expression are the same fact filed twice: the MWE
+is the phrase as a *headword* (it has the spelling), the `frac:Collocation` is
+the same phrase as a *relation between two senses* (it has the participants). The
+dictionary keeps both views and never cross-references them.
+
+**Why it stayed hidden.** The *other* id in that name, `H`, **is** restated as a
+real triple (`frac:head <lexical-unit-21062>`), so the convention looks like pure
+redundancy — a name that repeats what the data already says. Having confirmed
+that for `H`, assuming the same of `D` is the natural next step. It is the one
+half that is load-bearing. Worse, `code_of()` was already parsing `D` out of that
+IRI to pack the node id as `(D << 28) | H`: the number was in hand the whole time,
+used as an identifier ingredient and never dereferenced.
+
+### Coverage and quality, measured over the raw dump
+
+| | |
+|---|--:|
+| `ontolex:MultiWordExpression` entries | 3,940,417 |
+| …with a `canonicalForm → writtenRep` | **3,940,417 (100 %)** |
+| collocation nodes | 4,717,090 |
+| …resolving to a surface string | **4,717,090 (100 %), 0 failures** |
+| distinct phrases | 3,744,473 |
+
+The phrases are lexicographer-curated, not generated:
+
+| | |
+|---|--:|
+| phrase differs from **all** its constituent lemmas concatenated | **75.3 %** |
+| …one constituent slot inflected | 60.1 % |
+| …two or more slots inflected | 15.2 % |
+| identical to the lemma concatenation | 23.7 % (legitimately — *enostavno ignorirati*) |
+
+Measured in the built store, against the **two member lemmas the pair form
+actually showed**, the figure is higher: **92.45 %** of collocation nodes now
+carry text that the v4 pair form could not have produced. (The two numbers differ
+because a collocation has exactly two `rdfs:member` senses but its multi-word
+entry may have three or more constituents, so the store-level comparison is the
+one that says what v4 was losing.) 99.94 % of phrases share a stem with at least
+one of the two lemmas they replaced — the check that rules out having resolved
+through the wrong entry.
+
+```
+odnašati na glavah      ←  odnašati + na + glava
+zaslužiti si odmora     ←  zaslužiti + se + odmor
+sobe so enoposteljne    ←  soba + biti + enoposteljen
+juhe in enolončnice     ←  juha + in + enolončnica
+```
+
+Note the last two: prepositions, conjunctions and the copula are constituents in
+their own right, and the copula comes out conjugated. The pair form was dropping
+inflection, function words **and** word order.
+
+### Independent confirmation
+
+Regenerating the 200 collocation rows of
+`data/datasets/reference/Lexical-QA-SLO(in).csv` from this path alone:
+
+| | |
+|---|--:|
+| reference phrases reproduced **verbatim** | 1,196 / 1,307 — **91.5 %** |
+| same collocation, different number/case | 36 — 2.8 % |
+| anchor has no collocations in the KG | 31 — 2.4 % |
+| genuinely absent | 44 — 3.4 % |
+| rows reproduced in full | **155 / 200** |
+
+That file's `id` column is the KG `lexical-unit` id (verified 8/8 on a sample), so
+this also settles its provenance: **the phrases came from this export, not from
+the DDDS API** that `QA_DATASET_DESIGN.md` §6.2 went looking for. The residual is
+concentrated in possessive adjectives from proper names (*Bergerjev, Žalgirisov,
+Charlottin, Nicolin, Mirtov*), which have few or no MWE entries.
+
+The other reference file, `Lexical-QA-SLO-test.json`, is **not** KG-derived: its
+`raba/collocations` items hit the KG at 52.9 %, `mwe_component_search` at 28.5 %
+and `idiom_completion` / `mwe_structure` at ~6.5 %, with several of those hits
+incidental. It is generator output and should not be treated as ground truth.
+
+### What v5 does
+
+`--colloc-text phrase` (the default) dereferences `D` at mint time. The skip
+condition stays on the members, so node count and order are unchanged and the
+store's structure is byte-identical to the v4 store of the same tokenizer;
+`--colloc-text pair` restores the v3/v4 text exactly. Asserted by
+`check_v5_text.py`.
+
+```
+v4                                  v5
+kolokacija: kisov + voda        →   kolokacija: kisova voda
+kolokacija: Pierre + baron      →   kolokacija: baron Pierra
+kolokacija: Shakespeare + citirati → kolokacija: citirati Shakespeara
+kolokacija: Shakespeare + napisati → kolokacija: Shakespeare ne napiše
+```
+
+This is what unparks **Group F** of the QA dataset: the verbalisations need no
+external API, and the phrase is inside the extracted subgraph, so the containment
+invariant holds.
+
+---
+
 ## Practical implications
 
 - **Collocations can stay in unconditionally.** They cost ~0 % at the median and
@@ -538,7 +694,9 @@ entries.
 cd /shared/workspace/povejmo/gams_gtlm
 sbatch data/analysis/run_build_v3.sbatch        # -> data/analysis/results/results_v3.json
 sbatch data/build/run_save_v3.sbatch            # -> data/stores/kg_graph_v3/
-sbatch data/build/run_save_v4.sbatch gemma3     # -> data/stores/kg_graph_v4_gemma3/  (current)
+sbatch data/build/run_save_v5.sbatch gemma3     # -> data/stores/kg_graph_v5_gemma3/  (current)
+sbatch data/build/run_save_v5.sbatch gams2b     # -> data/stores/kg_graph_v5_gams2b/
+sbatch data/build/run_save_v4.sbatch gemma3     # -> data/stores/kg_graph_v4_gemma3/  (v5's acceptance reference)
 sbatch data/build/run_save_v4.sbatch gams2b     # -> data/stores/kg_graph_v4_gams2b/
 ```
 
@@ -633,11 +791,15 @@ directory is named for the tokenizer that filled it:
 
 | directory | tokenizer | text convention | status |
 |---|---|---|---|
-| `data/stores/kg_graph_v4_gemma3` | `cjvt/GaMS3-12B-Instruct` (vocab 262,145) | v4 | **current** — what `lookup` and downstream work read |
-| `data/stores/kg_graph_v4_gams2b` | `cjvt/GaMS-2B` (vocab 256,000) | v4 | current, for tokenizer diffing |
+| `data/stores/kg_graph_v5_gemma3` | `cjvt/GaMS3-12B-Instruct` (vocab 262,145) | v5 | **current** — what `lookup` and downstream work read |
+| `data/stores/kg_graph_v4_gemma3` | `cjvt/GaMS3-12B-Instruct` | v4 | superseded by v5 — collocations as lemma pairs (Finding 8); kept as the acceptance reference |
+| `data/stores/kg_graph_v4_gams2b` | `cjvt/GaMS-2B` (vocab 256,000) | v4 | for tokenizer diffing |
 | `data/stores/kg_graph_v3_1_gemma3` | `cjvt/GaMS3-12B-Instruct` | v3.1 | superseded by v4 — no morphology on verb forms |
 | `data/stores/kg_graph_v3_1_gams2b` | `cjvt/GaMS-2B` | v3.1 | superseded; kept for diffing |
 | `data/stores/kg_graph_v3` | `cjvt/GaMS-2B` | v3 | pre-v3.1 sense conventions |
+
+`manifest.meta.colloc_text` records `phrase` (v5) or `pair` (v3/v4) — the builder
+can still produce either via `--colloc-text`, and the two differ in node text only.
 
 `manifest.meta.text_convention` records which convention built a store, alongside
 `feature_props` and `unit_props`, so a store declares what its node text contains
@@ -703,7 +865,7 @@ lookup raw id 34748                    # every raw triple touching it (~8s)
 lookup raw iri word-form-1567346       # the same for any IRI
 ```
 
-Store lookups read `data/stores/kg_graph_v4_gemma3`; `KG_STORE=/path` points them elsewhere.
+Store lookups read `data/stores/kg_graph_v5_gemma3`; `KG_STORE=/path` points them elsewhere.
 The wrapper picks an interpreter that can actually import numpy **on the current
 node**, falling back to `pick_python.sh`, so it does not hit the 3.10-only trap
 that killed job 128295. `KG_PYTHON=/path/to/python` overrides that choice.
@@ -792,6 +954,8 @@ tokenizer, `--kg-dir`, the file count and a SHA-256 of the builder script. Check
    proper noun that also lists a lowercase variant would be lower-cased.
 5. **Ordered MWE components are available but unused.** `rdf:_1 … rdf:_4` give
    constituent order; v3 ignores it, so `sestavina` edges are an unordered set.
+   Less costly since v5: the collocation node now carries the phrase in its real
+   word order, so ordering is no longer only recoverable from these ordinals.
 6. Token counts use `add_special_tokens=False` per node; GTLM's own separators
    are not modelled, and the prompt allowance is a flat 24 tokens.
 7. ~~Example text is not unescaped from N-Triples.~~ **Fixed in v3.1** — see

@@ -1,12 +1,18 @@
 # QA task types — specification for the generation pipeline
 
-> **Status: drafted 2026-08-20. Scope: the 21 question types locked by D14 of
+> **Status: drafted 2026-08-20; revised 2026-08-20 (T8 schema, T12/T13 merge, §0.8 grading).
+> Scope: the question types locked by D14 of
 > [`QA_DATASET_DESIGN.md`](QA_DATASET_DESIGN.md).** That document decides *what* the dataset
 > is; this one decides *how each individual question type gets generated*. It is written to
 > be read on its own — every fact it relies on (graph predicate, node text convention, answer
 > format, seed pool) is restated here rather than cross-referenced away. Companions:
 > [`QA_DATASET_DESIGN.md`](QA_DATASET_DESIGN.md) for the design decisions and the
 > full-corpus census, [`README.md`](README.md) for how the graph store is built.
+>
+> **D14 drift.** D14 locked **21** types. This document now specifies **20**: T13
+> (`pomen/nastevanje_pomenov`) is retired into T12, which produces the same gold answer
+> against this KG — see T12 for the argument. D14 and D16's per-type arithmetic in
+> `QA_DATASET_DESIGN.md` have **not** yet been updated to match.
 
 For every type this document gives:
 
@@ -87,7 +93,8 @@ index covers `canonicalForm` *and* `otherForm`, so both resolve).
   withheld from training** (~5 % of items) — this is why each section below needs more
   templates than it strictly uses. Tier B = unseen *question type* over seen relations
   (~3 %). Tier C = **antonyms, held out entirely**.
-- **Scale (D16):** ~10 k train (≤1 k dev) + ~2 k test → ~95 test items per type. Report per
+- **Scale (D16):** ~10 k train (≤1 k dev) + ~2 k test → ~100 test items per type at 20 types
+  (D16 says ~95, computed at 21 — see the D14-drift note above). Report per
   band and per type, never as a band × type cross-tab.
 
 ### 0.5 What the model actually reads
@@ -108,7 +115,7 @@ oblika: navrženi (imenovalnik, ednina, moški spol, osnovnik, določna oblika)
 pomen 2: pes                                              ← sense, with dictionary ordinal
 pomen 1: pes (zgled: Sosedov pes je spet lajal ...)       ← sense with no definition
 zgled: Vsak konjenik je dobil simbolno darilo ...         ← usage example
-kolokacija: boj + kriminaliteta                           ← lemma pair, NOT an inflected phrase
+kolokacija: boj proti kriminaliteti                       ← the inflected phrase (v5; was a lemma pair through v4)
 sopomenka: biblioteka ~ knjižnica
 protipomenka: boj ~ sodelovanje
 prevod (madžarsko): rüh kezelése                          ← @hun only; unused in v1
@@ -134,7 +141,7 @@ in any extracted ball.
 |---|---|---|--:|:--:|
 | `lexinfo:case` | word-form | nominative, genitive, dative, accusative, locative, instrumental | — | ✅ |
 | `lexinfo:number` | word-form | singular, dual, plural | — | ✅ |
-| `lexinfo:gender` | word-form | masculine, feminine, neuter | — | ✅ |
+| `lexinfo:gender` | word-form **+ lexical-unit** | masculine, feminine, neuter | 310,362 units | ⚠️ forms only — M4 |
 | `lexinfo:person` | word-form | **first, second, third** | 253,497 | ✅ v4 |
 | `lexinfo:vform` | word-form | **present, participle, imperative, supine, infinitive** | 452,782 | ✅ v4 |
 | `lexinfo:degree` | word-form | positive, comparative, superlative | — | ✅ |
@@ -153,9 +160,10 @@ carried by `vform`, and only the present is stored synthetically — see §0.7.
 
 ### 0.7 The morphology blockers — fixed in v4, and the one that is not fixable
 
-Three faults found while writing this document kept **all** verb morphology out of the node
-text, silently disabling four of the 21 types. Two were builder bugs and are now fixed; the
-third is a property of the source data and constrains the design permanently.
+Four faults found while writing this document kept morphology out of the node text, silently
+disabling six of the types. Two were builder bugs, fixed in v4. The third is a property of
+the source data and constrains the design permanently. The fourth was found on 2026-08-20
+while specifying T8 and is **still open**.
 
 **(M1) `person` never reached the node text — fixed.** `FEATURE_PROPS` listed `person`, but
 `VALUE_SL` mapped `firstPerson`/`secondPerson`/`thirdPerson` while the KG emits
@@ -168,7 +176,8 @@ subjects. They are now collected separately (`UNIT_PROPS`) and rendered into the
 parenthetical after the POS.
 
 Both shipped in the **v4** stores (`kg_graph_v4_gemma3`, `kg_graph_v4_gams2b`, built
-2026-08-20), together with `vform` and `definiteness`. What changed:
+2026-08-20), together with `vform` and `definiteness`, and carry forward unchanged into the
+v5 stores that supersede them (v5 touches collocation text only — see Group F). What changed:
 
 ```
 BEFORE (v3.1)                          AFTER (v4)
@@ -195,12 +204,159 @@ periphrastic and are not stored anywhere** — the reference CSV's past/future t
 (`sem pritrgal`, `bom pritrgal`) are *composed*, not looked up. This is a permanent
 constraint on T5 and T6; see those sections for the decision it forces.
 
-All four types are now generatable: **T5, T6, T7, T10** — subject to M2's scope limit on
-T5/T6.
+**(M4) Noun `gender` sits on the lexical-unit and never reaches the node text — open.**
+`UNIT_PROPS` is `("aspect", "clitic")`; `gender` is missing from it. Noun gender is an
+**entry** property in this KG, not a form property: `lexical-unit-69883` (*miza*) carries
+`lexinfo:gender lexinfo:feminine`, while every one of its forms renders as
+`oblika: miza (imenovalnik, množina)` — no gender anywhere. There are **310,362**
+`lexinfo:gender` triples on `lexical-unit` subjects, *exactly* the noun count, so every noun
+entry has one and none of them is in the store. (The 3,242,639 `word-form` gender triples are
+adjective and participle forms, where gender genuinely is a form feature and does render —
+`oblika: popraskal (deležnik na -l, ednina, moški spol)`.)
+
+Consequence: **T9 is not generatable from the v4 store at all, and T8's gender slot is
+unfillable.** The fix is one line —
+
+```python
+UNIT_PROPS = ("aspect", "gender", "clitic")
+```
+
+— and `VALUE_SL` already maps `masculine/feminine/neuter` → `moški/ženski/srednji spol`, so
+noun anchors become `iztočnica: miza (samostalnik, ženski spol, imenovalnik, ednina)`. It costs
+a ~35-minute rebuild and it changes every noun **anchor** string, so `check_v4_text.py`'s
+"nominal strings are byte-identical to v3.1" assertion has to be narrowed to nominal *form*
+nodes. Nothing else in the inventory depends on it. **Decision pending:** until it lands, T8
+answers POS only and T9 cannot run.
+
+Four types are generatable again after v4 — **T5, T6, T7, T10** — subject to M2's scope limit
+on T5/T6. **T8 (partially) and T9 (entirely) remain blocked on M4.**
+
+### 0.8 Grading — exact match after a fixed normalization
+
+Every gradeable line in this document is scored by **exact string match after a fixed
+normalization**. No embedding model, no LLM judge, no fuzzy similarity. The entire grader is a
+script that runs in microseconds:
+
+```python
+import re, unicodedata
+
+def norm(s):
+    s = unicodedata.normalize("NFC", s)
+    s = re.sub(r"\s+", " ", s).strip().rstrip(".")
+    return s.casefold()
+
+def parse(answer, sep="|"):
+    for line in answer.splitlines():
+        if line.startswith("ODGOVOR:"):
+            return [norm(x) for x in line[len("ODGOVOR:"):].split(sep)]
+    return None                     # unparseable -> scored wrong, no partial credit
+
+def correct(pred, gold, *, ordered):
+    p, g = parse(pred), parse(gold)
+    if p is None:
+        return False
+    return p == g if ordered else sorted(p) == sorted(g)
+```
+
+**`ordered` is a per-type constant**, taken from the type's Output template. It is **not** a
+grader heuristic and never inferred at run time.
+
+Two numbers per item, both deterministic:
+
+- **`exact`** — normalized item lists identical, order included. **The headline metric.**
+- **`f1`** — per-item precision/recall over the multiset. Diagnostic only: it separates "missed
+  a sense" from "invented one" from "right content, wrong order". Never reported alone.
+
+**Why exact match is defensible here, and not merely convenient.** Every gradeable string is
+present **verbatim in the model's input** — these types are retrieval probes over an extracted
+subgraph, not open generation. A model that paraphrases has not done the task.
+
+### 0.8.1 Order: always generated, sometimes graded
+
+Two separate concerns, and they must not be collapsed:
+
+- **Generation is always canonical.** Every gold answer is emitted in one fixed order, with no
+  exceptions and no dependence on graph-walk order. Without this the same fact yields different
+  gold across runs, the training target for an item is unstable, and dataset diffs are noise.
+- **Grading is order-sensitive only where order carries meaning.** In `ODGOVOR: gora, gore,
+  gori, …` position 3 *is* the dative — that is addressing, not ordering, and it must be
+  graded. In `ODGOVOR: pasiven, resigniran, spokojen` the order is an artefact of our own sort;
+  penalising a reordering would score a formatting preference as a retrieval miss.
+
+So set-valued types are compared as **multisets** (`ordered: no`) while slot-valued and
+data-ordered types are compared as **sequences** (`ordered: yes`). Each type's Output template
+states which.
+
+Verified: nothing in the KG orders these sets. `lexinfo:synonym` and `lexinfo:antonym` carry no
+score, rank or frequency anywhere in the dump. The graph's one explicit ordering —
+`rdf:_1 … rdf:_n`, 118,260 triples — runs `lexical-unit → lexical-unit-part`, i.e. **word order
+inside a multiword expression**, and touches none of these types.
+
+### 0.8.2 Canonical order for set-valued types
+
+Alphabetical, by the **Slovene** alphabet. This needs an explicit table: Python's default sort
+is wrong here and the `sl_SI` locale is **not installed on this cluster**, so a
+`locale.strxfrm` implementation would fail or fall back silently.
+
+```
+sorted():          cesta, riba, sok, zima, čas, šola, žito     <- č/š/ž dumped after z
+correct Slovene:   cesta, čas, riba, sok, šola, zima, žito
+```
+
+Use a fixed key, no dependency:
+
+```python
+_SL = "abcčdefghijklmnoprsštuvzž"
+_RANK = {ch: i for i, ch in enumerate(_SL)}
+
+def sl_key(s):
+    """Slovene collation key. Unknown chars sort after the alphabet, by codepoint."""
+    return [_RANK.get(ch, len(_SL) + ord(ch)) for ch in s.casefold()]
+```
+
+Because order is not graded for these types, a collation bug can never cost a point — but the
+training data must still be strictly canonical, so this is generated once and **checked** (C15),
+not assumed.
+
+**Separator.** `|` for any answer whose items are free text. Measured over all 230,606 `@sl`
+definition literals: `|` occurs **0** times and a newline **0** times, while `;` occurs in
+**8.5 %** and `,` in **33.0 %**. Comma and semicolon are therefore unusable wherever an item can
+be definition text. Types whose items are single word forms (T1, T5, T7, T11, T15) keep their
+comma-separated lines — a word form cannot contain a comma — but any new list type defaults
+to `|`.
+
+**The normalization is deliberately shallow.** It folds case, collapses whitespace and drops one
+trailing period. Nothing else: no diacritic stripping (that would merge real Slovene
+distinctions), no stemming, no reordering. Over the definition corpus its targets are real but
+small — 0.1 % have stray leading/trailing whitespace, 0.0 % double spaces, 8.4 % end with a
+period, 6.0 % begin with a capital — so it removes formatting noise the model cannot be
+expected to guess and changes nothing else.
+
+### 0.9 Output templates — the notation used in every section
+
+Each type below carries an **Output template** block. It is the implementation contract: the
+generator emits exactly this shape, and the §0.8 grader parses exactly this shape. Fields:
+
+| field | meaning |
+|---|---|
+| `arity` | how many items. **Fixed** = always this many, positionally graded, gaps marked. **Open** = 1 or more, membership graded. |
+| `sep` | the separator, or `—` for single-item answers |
+| `order` | the canonical order used when generating, and whether the grader enforces it — **graded** (sequence comparison) or **not graded** (multiset comparison). See §0.8.1. Generation is canonical either way. |
+| `gap` | how a missing slot in a fixed-arity answer is written |
+| `regex` | shape check for the generator's own self-test (C9), not the grader |
+
+**Arity is part of the contract, not a detail.** The grader must know it per type, because a
+single-item answer is *never* split on the separator. Measured: 4 of 51,172 usage examples
+contain a `|`, and 65 % contain a comma — so a T19 answer split on either would be shredded.
+Single-item types (`arity: 1`) are compared whole, after `norm()` and nothing else.
+
+**Gaps.** In a fixed-arity answer a missing cell is `/`, never an omitted item — otherwise a
+missing 3rd form silently turns into a wrong 4th form and every later position is misgraded.
+`/` never occurs inside a word form (verified: 0 occurrences across every form surface sampled).
 
 ---
 
-## 1. The 21 types at a glance
+## 1. The 20 types at a glance
 
 | # | type | primary graph source | caveat |
 |---|---|---|:--:|
@@ -211,20 +367,74 @@ T5/T6.
 | T5 | `spreganje/celotno_spreganje` | `vform=present` + person + number | M2 scope |
 | T6 | `spreganje/spreganje_v_casu` | `vform=present` (+ participle) | M2 scope |
 | T7 | `spreganje/neosebne_oblike` | `vform` ∈ {inf, supine, imperative} | |
-| T8 | `besedna_vrsta/osnovne_lastnosti` | `partOfSpeech` on the anchor | |
-| T9 | `besedna_vrsta/spol_samostalnika` | `gender` on forms | |
+| T8 | `besedna_vrsta/osnovne_lastnosti` | `partOfSpeech` on the anchor | M4 (gender slot) |
+| T9 | `besedna_vrsta/spol_samostalnika` | `gender` on the **anchor** | **M4 — blocked** |
 | T10 | `besedna_vrsta/vrsta_in_vid_glagola` | `aspect` on the anchor | |
 | T11 | `stopnjevanje/vse_stopnje` | `degree` on forms | |
-| T12 | `pomen/razlaga_pomena` | `pomen:` nodes with a definition | |
-| T13 | `pomen/nastevanje_pomenov` | all `pomen:` nodes of the anchor | |
+| T12 | `pomen/razlaga_pomena` | `pomen:` nodes with a definition | absorbs T13 |
+| ~~T13~~ | ~~`pomen/nastevanje_pomenov`~~ | — | **retired → T12** |
 | T14 | `pomen/stevilka_pomenov` | count of `pomen:` nodes | |
 | T15 | `sopomenke/navedi_sopomenke` | `sopomenka:` nodes | |
 | T16 | `protipomenke/navedi_protipomenke` | `protipomenka:` nodes | Tier C |
-| T17 | `kolokacije/navedi_kolokacije` | `kolokacija:` nodes | |
-| T18 | `kolokacije/stevilsko_opredeljene_kolokacije` | `kolokacija:` nodes, counted | |
+| T17 | `kolokacije/navedi_kolokacije` | `kolokacija:` nodes (v5: the phrase itself) | **unparked** |
+| T18 | `kolokacije/stevilsko_opredeljene_kolokacije` | `kolokacija:` nodes, counted | **unparked** |
 | T19 | `primeri_uporabe/povedi_z_besedo` | `zgled:` nodes | |
 | T20 | `primeri_uporabe/analiza_oblike_v_povedi` | `zgled:` + unambiguous form | |
 | T21 | `sklanjanje/analiza_oblike` | ambiguous form → disjunction | |
+
+## 1.1 Verifiability audit
+
+Every type was checked against one question: **can a 10-line script decide whether an answer is
+right, with no model in the loop and no judgement call?** Measured against the v4 store on
+2026-08-20 (samples of 4,000–20,000 anchors; scripts under the session scratchpad).
+
+T17/T18 were skipped in that pass because they were parked. They are unparked (Group F) and
+their rows below are filled in from the raw-dump measurement; **re-run the audit for both
+against a v5 store** before generation — the open item is C14, not a known defect.
+
+| type | arity | verdict | defect found |
+|---|---|---|---|
+| T1 | 18 fixed | ✅ | in-cell doublets — 0.2 % of nouns, all `tožilnik, ednina`; **filter them** |
+| T2 | 6 fixed | ✅ | same filter |
+| T3 | 1 | ✅ | same filter |
+| T4 | open | ⚠️→✅ | spec said "`gora` **or** the comma-separated set" — two shapes; **fixed to always-a-set** |
+| T5 | 9 fixed | ✅ | none (0 % of verbs have a doublet slot) |
+| T6 | 9 fixed | ✅ | none |
+| T7 | 3 fixed | ⚠️→✅ | omitting an absent slot made arity variable; **fixed to `/`, slot never dropped** |
+| T8 | 1–2 fixed | ✅ | closed vocabulary, fully enumerable in the regex |
+| T9 | 1 | ✅ | blocked on M4, but trivially gradeable once rendered |
+| T10 | 1 | ✅ | best in the inventory — 3 values, 100 % coverage |
+| T11 | 3 fixed | ⚠️→✅ | no gap marker for "comparative but no superlative"; **fixed to `/`** |
+| T12 | open | ✅ | `\|` safe: 0 of 230,606 definitions contain one |
+| T14 | 1 int | ⚠️ **validity** | gradeable, but **90.1 % of anchors have exactly 2 senses** — see below |
+| T15 | open | ✅ | comma safe: 0 of 523 sampled synonym partners contain one (max 11 words) |
+| T16 | open | ✅ | same; 75 % of anchors have exactly 1 antonym |
+| T17 | open | ✅ | **unparked** — the KG has the verbalisations after all; gold is the inflected phrase, graded case-insensitively (Group F) |
+| T18 | 1 int + open | ✅ | same |
+| T19 | 1 | ⚠️→✅ | examples reach **1,487 words**, and 4 of 51,172 contain `\|`; **fixed by a 60-word seed cap + arity 1 (never split)** |
+| T20 | 2 fixed | ⚠️→✅ | had its own shape; **unified with T21** |
+| T21 | open | ⚠️→✅ | spec had **two** shapes (`tožilnik ali orodnik, ednina` vs `rodilnik ednine ali imenovalnik množine`); **unified to full pairs always** |
+
+**The one type that is verifiable but not informative — T14.** Sense counts are almost constant:
+
+```
+1 sense    8.6%
+2 senses  90.1%     <- a model that always answers "2" scores 90.1%
+3+         1.3%
+```
+
+Exact-match grading works perfectly and measures almost nothing. Three options, in order of
+preference: **(1)** keep T14 but report the majority-class baseline (90.1 %) beside every score,
+so the number is never read as skill — *recommended, cheap, honest*; **(2)** restrict the seed
+pool to anchors with ≠ 2 senses, which makes the type informative but unrepresentative and
+shrinks the pool to ~10 %; **(3)** drop T14 and let T12 carry the sense material. Decision
+required before generation — this is the one place where "easily verifiable" and "worth
+measuring" come apart.
+
+**What made the rest easy.** Two measurements did most of the work. No word-form surface
+anywhere contains `,`, `;`, `|` or `/` — so positional comma-separated paradigm lines are safe
+and `/` is free as a gap marker. And every gradeable string is already present verbatim in the
+model's input (§0.8), so no type needs semantic comparison.
 
 ---
 
@@ -267,6 +477,28 @@ rendered `/`.
 - **UI part:** the markdown table the reference file uses. Prepositions (`pri gorah`,
   `z gorami`) are a **rendering convention added by the generator**, not graph data — keep
   them out of the gradeable line.
+
+### Output template
+
+```
+ODGOVOR: {ed.im}, {ed.rod}, {ed.daj}, {ed.tož}, {ed.mest}, {ed.or}; {dv.×6}; {mn.×6}
+```
+
+| | |
+|---|---|
+| arity | **18, fixed** — six cases × three numbers, positionally graded |
+| sep | `, ` within a number, `; ` between numbers |
+| order | ednina; dvojina; množina — inside each: im, rod, daj, tož, mest, or — **graded** (position is the case) |
+| gap | `/` |
+| regex | `^ODGOVOR: (?:[^,;]+(?:, [^,;]+){5}; ){2}[^,;]+(?:, [^,;]+){5}$` |
+| example | `ODGOVOR: gora, gore, gori, goro, gori, goro; gori, gora, gorama, gori, gorah, gorama; gore, gora, goram, gore, gorah, gorami` |
+- **Seed filter (added by the audit):** skip entries where any (case, number) slot holds more
+  than one surface. Measured at **0.2 % of nouns, 0 % of verbs and adjectives**, and every
+  instance is `tožilnik, ednina` on a masculine noun — the animacy alternation
+  (*vidim Mercator* / *vidim Mercatorja*). `lexinfo:animate` exists in the RDF but is **not
+  rendered** (§0.6), so the model cannot see which reading is meant; asking would be unfair as
+  well as ungradeable. Filtering costs 0.2 % of the pool and keeps every line strictly
+  positional.
 - **Negative:** an entry with no `oblika:` leaves at all (indeclinable, or a thin tail entry
   that slipped the filter).
 
@@ -323,6 +555,21 @@ The same table as T1 but **restricted to one number** — ednina, dvojina or mno
 - **Negative:** a **pluralia tantum** or singular-only entry asked about the missing number
   is the highest-value negative in this group — it is an ordinary lemma, and the answer is
   genuinely absent rather than invented.
+
+### Output template
+
+```
+ODGOVOR: {število}: {im}, {rod}, {daj}, {tož}, {mest}, {or}
+```
+
+| | |
+|---|---|
+| arity | **6, fixed**, after the number label |
+| sep | `, ` |
+| order | im, rod, daj, tož, mest, or — **graded** (position is the case) |
+| gap | `/` |
+| regex | `^ODGOVOR: (ednina\|dvojina\|množina): [^,]+(?:, [^,]+){5}$` |
+| example | `ODGOVOR: ednina: gora, gore, gori, goro, gori, goro` |
 
 ### Existing formulations
 
@@ -383,6 +630,21 @@ surface form.
   form. The reverse direction is T21.
 - **Negative:** ask for a cell the entry does not have (see T2's pluralia tantum).
 
+### Output template
+
+```
+ODGOVOR: {oblika}
+```
+
+| | |
+|---|---|
+| arity | **1** — compared whole, never split |
+| sep | — |
+| order | — (arity 1) |
+| gap | the sentinel (a missing cell is a negative, not a `/`) |
+| regex | `^ODGOVOR: \S.*$` |
+| example | `ODGOVOR: gori` |
+
 ### Existing formulations
 
 Reference CSV, n = 100. Frames, with `<S>` = sklon name, `<Š>` = number, `<N>` = the case's
@@ -441,9 +703,27 @@ to. The gold answer is the lemma, ideally with its POS.
     answer name **all** of them (`ODGOVOR: goli, gol`). This is the cheapest source of the
     D3 discrimination supervision and of the D7 flavour-(d) negative, and it is a direct
     probe of R5 (the natural multi-entity rate). Target ~15–20 % of this type.
-- **Gradeable line:** `ODGOVOR: gora` — or the comma-separated set for the ambiguous slice.
+- **Gradeable line:** **always a set**, comma-separated and alphabetically ordered, even when it
+  has exactly one member. *(The earlier wording — "`ODGOVOR: gora`, or the comma-separated set
+  for the ambiguous slice" — gave the type two shapes and left the grader guessing which was
+  intended for a one-member answer.)*
 - **UI part:** lemma + POS + which cell the given form is, which links this type to T21.
 - **Negative:** a surface string that is not in the index at all.
+
+### Output template
+
+```
+ODGOVOR: {lema}[, {lema}]…
+```
+
+| | |
+|---|---|
+| arity | **open, ≥ 1** — membership graded; one member is not a special case |
+| sep | `, ` (safe: no lemma surface contains a comma) |
+| order | `sl_key` alphabetical — **not graded** (§0.8.1); the candidate lemmas of a form are a set |
+| gap | — |
+| regex | `^ODGOVOR: [^,]+(?:, [^,]+)*$` |
+| example | `ODGOVOR: gora` · `ODGOVOR: gol, gola` |
 
 ### Existing formulations
 
@@ -517,12 +797,32 @@ context forces accusative, **5/5 wrong**.
 - **Seed filter:** *require* |set| ≥ 2. Unambiguous forms belong to T20 (with a sentence);
   keep a minority (~25 %) of unambiguous ones here too so the model does not learn "always
   answer with a disjunction".
-- **Gradeable line:** the readings, canonically ordered (case order, then number order),
-  joined with `ali`: `ODGOVOR: tožilnik ali orodnik, ednina`. When the readings differ in
-  number too, list full pairs: `ODGOVOR: rodilnik ednine ali imenovalnik množine`.
-- **Grading:** exact set match after canonical ordering — the ordering rule must be fixed in
-  the generator, not left to the renderer.
+- **Gradeable line:** **always full case+number pairs**, joined with ` ali `, canonically
+  ordered. *(This replaces the earlier two-shape rule — `tožilnik ali orodnik, ednina` when the
+  number was shared, `rodilnik ednine ali imenovalnik množine` when it was not. Two shapes for
+  one fact meant the grader had to decide which the model "meant"; one shape removes the
+  question. It costs a repeated `ednine` and buys a template that is machine-checkable with a
+  single regex.)*
+- **Grading:** exact match after canonical ordering — the ordering rule lives in the generator,
+  never in the renderer.
+- **Shared with T20.** T20 is this analysis with a sentence around it; both emit this exact
+  template, for the same reason T8/T9/T10 share a normalizer.
 - **Negative:** a form string that does not belong to the named lemma at all.
+
+### Output template
+
+```
+ODGOVOR: {sklon} {števila}[ ali {sklon} {števila}]…
+```
+
+| | |
+|---|---|
+| arity | **open, ≥ 1** — one reading is not a special case |
+| sep | ` ali ` |
+| order | case order (im, rod, daj, tož, mest, or), then number order (ed, dv, mn) — **not graded** (§0.8.1): the readings of an ambiguous form are a set, and the case sequence is our convention, not the data's |
+| gap | — |
+| regex | `^ODGOVOR: \w+ (ednine\|dvojine\|množine)(?: ali \w+ (?:ednine\|dvojine\|množine))*$` |
+| example | `ODGOVOR: tožilnik ednine ali orodnik ednine` · `ODGOVOR: rodilnik ednine ali imenovalnik množine` |
 
 ### Existing formulations
 
@@ -625,6 +925,24 @@ answers show as a stacked set of markdown tables (sedanjik, preteklik, prihodnji
 - **Negative:** a defective verb, or a non-verb seed asked to be conjugated (an excellent
   ordinary-lemma negative — *gora* has no conjugation, and saying so is the correct answer).
 
+### Output template
+
+```
+ODGOVOR: {1ed}, {2ed}, {3ed}, {1dv}, {2dv}, {3dv}, {1mn}, {2mn}, {3mn}
+```
+
+| | |
+|---|---|
+| arity | **9, fixed**, positionally graded |
+| sep | `, ` |
+| order | person-major within number: 1ed, 2ed, 3ed, 1dv, 2dv, 3dv, 1mn, 2mn, 3mn — **graded** (position is the person/number cell) |
+| gap | `/` |
+| regex | `^ODGOVOR: [^,]+(?:, [^,]+){8}$` |
+| example | `ODGOVOR: delam, delaš, dela, delava, delata, delata, delamo, delate, delajo` |
+
+No verb in the sample had a slot with competing surfaces (0 of 188), so unlike T1 this type
+needs no doublet filter.
+
 ### Existing formulations
 
 Reference CSV, n = 100:
@@ -684,6 +1002,24 @@ Conjugation **restricted to one tense**, by person and number. 9 cells.
 - **Negative:** ask for preteklik under option (1) → `ODGOVOR: ni podatka v bazi`, with the
   UI part explaining that the past is formed periphrastically and offering the participle.
   This is a **good** negative: truthful, and it teaches the boundary of the resource.
+
+### Output template
+
+```
+ODGOVOR: {čas}: {1ed}, {2ed}, {3ed}, {1dv}, {2dv}, {3dv}, {1mn}, {2mn}, {3mn}
+```
+
+| | |
+|---|---|
+| arity | **9, fixed**, after the tense label |
+| sep | `, ` |
+| order | as T5 — **graded** |
+| gap | `/` |
+| regex | `^ODGOVOR: sedanjik: [^,]+(?:, [^,]+){8}$` |
+| example | `ODGOVOR: sedanjik: delam, delaš, dela, delava, delata, delata, delamo, delate, delajo` |
+
+Under M2 option (1) the label vocabulary is `sedanjik` only; a request for preteklik or
+prihodnjik takes the sentinel, not a fabricated periphrastic row.
 
 ### Existing formulations
 
@@ -748,9 +1084,27 @@ velelnik (imperative), and — worth adding — the *-l* participle.
   often have no answer — either filter for its presence or let it feed the negative slice
   deliberately. The reference answers show exactly this shape (nedoločnik + namenilnik, two
   bullet points, nothing else).
-- **Gradeable line:** `ODGOVOR: nedoločnik: zaripniti; namenilnik: zaripnit; velelnik: zaripni`
-  — labelled slots, so partial credit is possible and a missing slot is visible.
-- **Negative:** a verb with no supine recorded.
+- **Gradeable line:** three labelled slots, **always all three, in this order**. An absent form
+  is `/`; the slot is never dropped. *(The earlier wording allowed a missing slot to be omitted,
+  which made arity variable — and a variable-arity positional answer cannot be graded
+  positionally at all.)*
+- **Negative:** a verb with no supine recorded → `/` in that slot. Reserve the sentinel for a
+  verb with none of the three.
+
+### Output template
+
+```
+ODGOVOR: nedoločnik: {inf}; namenilnik: {sup}; velelnik: {imp}
+```
+
+| | |
+|---|---|
+| arity | **3, fixed** — labelled and positional |
+| sep | `; ` between slots, `: ` after each label |
+| order | nedoločnik, namenilnik, velelnik — **graded** (slots are labelled *and* positional) |
+| gap | `/` |
+| regex | `^ODGOVOR: nedoločnik: [^;]+; namenilnik: [^;]+; velelnik: [^;]+$` |
+| example | `ODGOVOR: nedoločnik: zaripniti; namenilnik: zaripnit; velelnik: zaripni` |
 
 ### Existing formulations
 
@@ -794,24 +1148,107 @@ Katere so posebne oblike glagola <L>, poleg osebnih?
 
 ### What it is
 
-**Word class plus its basic grammatical properties.** For a noun: POS + gender (+ proper-noun
-flag). For a verb: POS + aspect. For an adjective: POS (+ definiteness where it matters).
+**Word class, plus the one lexeme-level property that word class carries.** A single fixed
+schema, keyed on POS and on nothing else.
+
+The phrasings run from `V katero vrsto besed uvrščamo besedo <L>?` to `Kakšne so slovnične
+lastnosti besede <L>?`, which reads as though the second asks for more than the first. It does
+not. The reference CSV settles this empirically: 100 rows, 11 distinct question frames, and
+only **six** distinct answer shapes — one per POS, with no correlation between frame and
+shape. There is **one answer contract**, and that is what makes the type gradeable: a Tier A
+phrasing withheld from training has to land on a contract the model already knows, which a
+per-phrasing contract could never guarantee.
+
+### The schema
+
+Every slot is lexeme-level. **Case, number, person, vform and degree never appear** — they
+describe the citation *form*, not the word, and are T1–T7's material. The anchor
+`iztočnica: bežnica (samostalnik, imenovalnik, ednina)` says the headword is *rendered* in the
+nominative singular; it does not say that *bežnica* "is nominative singular", and putting that
+in the gold answer would teach a falsehood.
+
+| `partOfSpeech` | entries | `ODGOVOR:` |
+|---|--:|---|
+| `noun` | 310,362 | `samostalnik, <spol>` — gender slot blocked by **M4**, see below |
+| `adjective` | 52,634 | `pridevnik` |
+| `verb` | 18,159 | `glagol, <vid>` |
+| `adverb` | 15,228 | `prislov` |
+| `numeral` | 2,434 | `števnik` |
+| `interjection` | 507 | `medmet` |
+| `pronoun` | 284 | `zaimek` |
+| `residual` | 219 | *excluded* |
+| `abbreviation` | 129 | `okrajšava` |
+| `preposition` | 97 | `predlog` |
+| `particle` | 69 | `členek` |
+| `conjunction` | 58 | `veznik` |
+
+That is the **complete** `partOfSpeech` object vocabulary and it sums to exactly the 400,180
+entries of §0.6 — verified against `kg_raw/OntoLex DSB/` on 2026-08-20.
+`<vid>` ∈ {`dovršni`, `nedovršni`, `dvovidski`}, `<spol>` ∈ {`moški`, `ženski`, `srednji`} `spol`.
+
+Three consequences of that vocabulary, each of which overrides an earlier draft of this
+section:
+
+**There is no `properNoun` and no `commonNoun` in this KG** — zero triples, zero files. The
+reference CSV puts `lastno ime` / `občno ime` in **70 of its 100 answers**; not one of them is
+derivable here. The builder's `POS_SL` still carries a dead `"properNoun": "lastno ime"` key
+that can never fire. Drop the distinction entirely, and do not reconstruct it from
+capitalisation — the CSV appears to have tried something of the sort and labelled
+`physiological` a Slovene proper noun.
+
+**`residual` is excluded from the seed pool.** It is the tag set's garbage class (foreign
+words, symbols, typos) and has no name in the Slovene grammatical tradition. It is also absent
+from `POS_SL`, so `feat_string()` drops it silently: those 219 anchors render with case and
+number but **no POS at all**. From the model's side the word class is simply not there, so
+there is nothing to answer. They would be a legitimate flavour-(b) negative if more were ever
+needed; 219 entries do not justify the special case.
+
+**`abbreviation` is included, rendered `okrajšava`.** It is not a besedna vrsta in the school
+tradition, but it is what the anchor the model reads actually says
+(`POS_SL["abbreviation"] = "okrajšava"`). Gold that contradicts the input is worse than gold
+that is taxonomically loose.
 
 ### How to implement
 
-- **Source:** `lexinfo:partOfSpeech` on the **anchor** (400,180 entries — single-word entries
-  only; MWEs carry no POS at all), plus whatever the anchor's morphology parenthetical
-  already renders. The anchor text is `iztočnica: bežnica (samostalnik, imenovalnik, ednina)`
-  — but note only **9.2 %** of all anchors carry that parenthetical, because 91 % of anchors
-  are MWEs. Restricted to word anchors it is **99.9 %**.
-- **Seed filter:** word anchors only (this is automatic under D8's core-entry pool).
-- **Gradeable line:** `ODGOVOR: samostalnik, moški spol` — POS first, then the properties
-  that exist for that POS, in a fixed per-POS order.
-- **`properNoun` is a separate POS value in this KG**, and the reference answers surface it
-  as a second sentence ("Beseda je lastno ime in je moškega spola"). Decide once whether
-  `lastno ime` is the POS or a flag on `samostalnik`, and apply it uniformly.
-- **Negative:** an MWE seed (no POS recorded anywhere) — again a truthful negative that
-  teaches a real boundary of the resource.
+- **Source:** `lexinfo:partOfSpeech` on the **anchor** — single-word entries only; MWEs carry
+  no POS at all, which is why only **9.2 %** of all anchors show a POS parenthetical (91 % of
+  anchors are MWEs). Restricted to word anchors it is **99.9 %**. Aspect comes from
+  `UNIT_PROPS` on the same node and has been rendered since v4.
+- **Seed filter:** word anchors carrying a POS from the table above, `residual` excluded.
+  Automatic under D8's core-entry pool.
+- **Gradeable line:** POS first, then the property, in that fixed order —
+  `ODGOVOR: samostalnik, ženski spol`, `ODGOVOR: glagol, dovršni`, `ODGOVOR: prislov`.
+- **Shared normalizer with T9 and T10, mandatory.** T8's noun answer *is* T9's answer with the
+  POS prepended, and its verb answer *is* T10's. If the three types spell the same fact
+  differently — `moški spol` in one and `moški` in another — the supervision contradicts
+  itself on the one fact all three assert. One function, called by all three.
+- **Property missing but POS present:** fall back to POS alone. The sentinel is for a missing
+  *word class*, not a missing gender — the word class genuinely is recorded.
+- **Negative:** an MWE seed (no POS recorded anywhere) → `ODGOVOR: ni podatka v bazi`. A
+  truthful negative that teaches a real boundary of the resource.
+- **Blocked slot (M4).** Noun gender lives on the lexical-unit and `UNIT_PROPS` omits it, so it
+  is not in the v4 store at all. Until the one-line builder fix and the rebuild land, the noun
+  row answers `ODGOVOR: samostalnik` and nothing more — never invent the gender. This is the
+  one decision T8 is waiting on; see §0.7 (M4).
+
+### Output template
+
+```
+ODGOVOR: {besedna_vrsta}[, {lastnost}]
+```
+
+| | |
+|---|---|
+| arity | **1 or 2, fixed by POS** — 2 for nouns (after M4) and verbs, 1 for everything else |
+| sep | `, ` |
+| order | word class first, then the property — **graded** (two semantic slots) |
+| gap | — (a missing property drops the slot; it never becomes `/`) |
+| regex | `^ODGOVOR: (samostalnik\|pridevnik\|glagol\|prislov\|števnik\|medmet\|zaimek\|okrajšava\|predlog\|členek\|veznik)(?:, (moški spol\|ženski spol\|srednji spol\|dovršni\|nedovršni\|dvovidski))?$` |
+| example | `ODGOVOR: samostalnik, ženski spol` · `ODGOVOR: glagol, dovršni` · `ODGOVOR: prislov` |
+
+Both vocabularies are **closed and complete** — 11 word classes (the 12th, `residual`, is
+excluded) and 6 property values — so the regex is not a shape heuristic here but an exhaustive
+validator. This is the most tightly checkable type in the inventory after T10.
 
 ### Existing formulations
 
@@ -830,8 +1267,42 @@ Reference CSV, n = 100:
 | 8 | `Kateri besedni vrsti pripada beseda <L>?` |
 | 7 | `Ali je beseda <L> samostalnik ali druga besedna vrsta?` |
 
-Older JSON file, `oblikoslovna/part_of_speech`, n = 104 — includes **sentence-embedded**
-targets, which the newer file dropped entirely and which D3 makes relevant again:
+…and the **six** answer shapes those 11 frames produce across all 100 rows. This is the
+evidence that the type has one contract, not one per phrasing:
+
+| n | shape |
+|--:|---|
+| 59 | `Beseda **<L>** je samostalnik. Beseda je lastno ime in je <spol> spola.` |
+| 22 | `Beseda **<L>** je pridevnik.` |
+| 11 | `Beseda **<L>** je samostalnik. Beseda je občno ime in je <spol> spola.` |
+| 5 | `Beseda **<L>** je prislov.` |
+| 2 | `Beseda **<L>** je glagol. Je nedovršni glagol.` |
+| 1 | `Beseda **<L>** je števnik.` |
+
+Note what those frames were applied *to*: `jacinto, physiological, boniciolli, corbacho,
+bimhuis, sörenstam, macbeth, 6500, mmmmmm, sčg, klu, smoothtouch, practices` — near-uniformly
+foreign surnames and OCR noise, with 59 rows labelled `lastno ime` while only 2 of the 100
+lemmas are even capitalised. Independent confirmation that D8's core-entry pool was the right
+call. Take the frames; take nothing else.
+
+Older JSON file, `oblikoslovna/part_of_speech`, n = 104 — a **different task** wearing the same
+label, and the source of this section's earlier over-breadth:
+
+| n / 104 | property | reusable? |
+|--:|---|:--:|
+| 48 | target embedded in a sentence or phrase | ✅ as phrasing |
+| 25 | answer names a **subtype**: `svojilni zaimek`, `vprašalni zaimek`, `priredni veznik` | ❌ not in the KG |
+| 15 | question carries a format instruction (`Odgovori samo z oznako brez ločil`) | ❌ D6 fixes the format |
+| 14 | yes/no answer (`Da, »ali« je veznik.`) | ✅ as phrasing |
+| 10 | demands JSON output against a supplied schema | ❌ |
+| 7 | role-play preamble (`Si bibliotekarka, ki …`) | ❌ |
+| 2 | hedged (`praviloma prislov; v nekaterih rabah tudi …`) | ❌ |
+
+Its POS distribution is function-word heavy — `zaimek` 26, `samostalnik` 23, `pridevnik` 19,
+`glagol` 18, `prislov` 7, `veznik` 5, `predlog` 5, `medmet` 3 — which our pool could not supply
+even if we wanted it to: the entire KG holds 284 pronoun, 97 preposition, 69 particle and 58
+conjunction *entries*. **Reuse the sentence-embedded frames as phrasing; reuse none of the
+answer styles.**
 
 ```
 Kakšna besedna vrsta je bogat?
@@ -847,9 +1318,9 @@ Kateri vrsti besed pripada jesenski v primerjavi z jesen?
 
 ### Suggested new templates
 
-The sentence-embedded frames are worth reviving here: they exercise the D3 extractor on a
-question that is not a bare template, and R5 says the multi-entity rate has to be measured on
-real strings.
+The sentence-embedded frames are worth reviving: they exercise the D3 extractor on a question
+that is not a bare template, and R5 says the multi-entity rate has to be measured on real
+strings.
 
 ```
 Kaj je <L> po besedni vrsti?
@@ -861,8 +1332,14 @@ V povedi <S> me zanima besedna vrsta besede <L>.
 Kako bi besedo <L> slovnično opredelil?
 Povej mi osnovne slovnične lastnosti besede <L>.
 Je <L> pridevnik ali prislov?
-Kaj vse mi lahko poveš o besedi <L> z vidika slovnice?
+Slovnično opredeli <L>.
 ```
+
+**Dropped from the earlier draft of this list:** `Kaj vse mi lahko poveš o besedi <L> z vidika
+slovnice?` — unbounded, and no fixed schema can make it gradeable; that is summarisation, not
+this type. `Kako bi besedo <L> slovnično opredelil?` is kept but should stay **out of the Tier
+A withheld set**: it is the loosest of the frames, and an unseen phrasing is exactly where a
+loose frame does the most damage.
 
 ---
 
@@ -874,16 +1351,43 @@ Kaj vse mi lahko poveš o besedi <L> z vidika slovnice?
 
 ### How to implement
 
-- **Source:** `lexinfo:gender` on the anchor's forms. Take the gender of the nominative
-  singular form; verify it is constant across the paradigm and skip (or flag) the entry if
-  not.
+- **Source:** `lexinfo:gender` on the **anchor's lexical-unit**, not on its forms — 310,362
+  triples, one per noun entry, so coverage is 100 % of the pool. *(Corrected 2026-08-20: this
+  section previously said "the gender of the nominative singular form" and told the generator
+  to check the paradigm for consistency. Noun word-forms carry no gender at all in this KG;
+  there is one value per entry and nothing to reconcile.)*
+- **Blocked on M4.** That unit-level gender is not rendered into the node text, so it is absent
+  from the v4 store and this type **cannot be generated today**. One-line builder fix plus a
+  ~35-minute rebuild; see §0.7 (M4). Everything below assumes it has landed.
 - **Seed filter:** POS = noun.
 - **Gradeable line:** `ODGOVOR: moški spol`.
-- **Ambiguity:** some nouns are recorded with two genders. Answer with both
-  (`ODGOVOR: moški ali ženski spol`) rather than picking — same principle as T21.
+- **No gender ambiguity exists in this KG.** 310,362 gender triples over 310,362 *distinct*
+  lexical-unit subjects — exactly one value each, and that count matches the noun total
+  exactly. The earlier note here ("some nouns are recorded with two genders, answer with
+  both") described a case the data does not contain; there is nothing to reconcile and no
+  `moški ali ženski spol` answer to generate.
+
 - **Negative:** ask the gender of a verb or adverb. This is the single easiest ordinary-lemma
   negative in the whole inventory and should carry a good share of this type's negative
   quota.
+
+### Output template
+
+```
+ODGOVOR: {spol}
+```
+
+| | |
+|---|---|
+| arity | **1** |
+| sep | — |
+| order | — (arity 1) |
+| gap | — |
+| regex | `^ODGOVOR: (moški\|ženski\|srednji) spol$` |
+| example | `ODGOVOR: moški spol` |
+
+The three-value vocabulary is shared verbatim with T8's second slot — same string, same
+normalizer, no `moški` / `moški spol` drift.
 
 ### Existing formulations
 
@@ -945,6 +1449,24 @@ answers are a single sentence ("Beseda **pregibati** je dvovidski glagol").
   visible in MWE headwords — the first option is cleaner and is what the reference answers do
   in practice anyway.
 - **Negative:** a verb with no aspect recorded; or a non-verb.
+
+### Output template
+
+```
+ODGOVOR: {vid}
+```
+
+| | |
+|---|---|
+| arity | **1** |
+| sep | — |
+| order | — (arity 1) |
+| gap | — |
+| regex | `^ODGOVOR: (dovršni\|nedovršni\|dvovidski)$` |
+| example | `ODGOVOR: dvovidski` |
+
+Three values, 100 % coverage of the verb pool, one closed regex: **the most cleanly verifiable
+type in the inventory.** Use it as the pipeline smoke test alongside T14.
 
 ### Existing formulations
 
@@ -1030,6 +1552,24 @@ nor checked that a comparative existed.
   negative: `ODGOVOR: ni podatka v bazi`, with the UI part saying that no graded forms are
   recorded. The older JSON file asks exactly this ("Ali se glagol odnesti stopnjuje?",
   "Ali beseda noben tvori stopnjevane oblike?") and it should be a substantial slice here.
+- **Partial paradigms need a gap marker.** There are 107,717 comparatives but only 72,856
+  superlatives, so ~32 % of comparative-bearing entries have no superlative. Those emit `/` in
+  the third slot rather than a two-item answer — arity stays fixed at 3.
+
+### Output template
+
+```
+ODGOVOR: {osnovnik}, {primernik}, {presežnik}
+```
+
+| | |
+|---|---|
+| arity | **3, fixed**, positionally graded |
+| sep | `, ` |
+| order | osnovnik, primernik, presežnik — **graded** (position is the degree) |
+| gap | `/` |
+| regex | `^ODGOVOR: [^,]+, [^,]+, [^,]+$` |
+| example | `ODGOVOR: lep, lepši, najlepši` · `ODGOVOR: brunast, brunastejši, /` |
 
 ### Existing formulations
 
@@ -1080,7 +1620,7 @@ Napiši osnovnik, primernik in presežnik za <L>.
 
 # Group D — `pomen` (senses and definitions)
 
-Shared constraint for all three: **definition coverage is thin.** Only **225,618** `@sl`
+Shared constraint for both types in this group: **definition coverage is thin.** Only **225,618** `@sl`
 `skos:definition` literals exist over 8.47 M senses, so most `pomen:` nodes fall back to the
 entry's lemma and carry no new information. v3.1 makes sibling senses distinguishable by
 adding the dictionary ordinal (`pomen 2: pes`) and, for definition-less senses, a bounded
@@ -1095,31 +1635,104 @@ not from this KG. Do not imitate that answer style — it is not reproducible he
 
 ---
 
-## T12 — `pomen/razlaga_pomena`
+## T12 — `pomen/razlaga_pomena` (absorbs the former T13, `nastevanje_pomenov`)
 
 ### What it is
 
-**Define the word.** Give the recorded definition; for a polysemous entry, give the
-definitions of all senses that have one.
+**Give the recorded meaning(s) of the word** — every sense that carries a real definition, in
+dictionary-ordinal order. Monosemous and polysemous entries take the **same** form: a one-item
+answer is not a special case, which is precisely what makes the merge clean.
+
+**Why this was two types and is now one.** The reference dataset separates `razlaga_pomena`
+("what does X mean?") from `nastevanje_pomenov` ("list the senses of X"). Against this KG the
+two produce the *same gold answer* — the sense list **is** the definition list — so the split
+bought nothing but a second inventory slot, a second template pool, and a standing risk of
+contradictory gold for one lemma under two labels. Both template pools are merged below and
+both question styles map to the one contract. **T13 is retired; T14–T21 keep their numbers so
+cross-references elsewhere stay valid.** The inventory is 20 types.
+
+### What the definitions actually look like
+
+Measured over all 230,606 `@sl` `skos:definition` literals, 2026-08-20:
+
+| property | value |
+|---|---|
+| length | median **5 words / 35 chars**; p75 9; p95 17; max 84 |
+| ends with `.` | 8.4 % |
+| starts uppercase | 6.0 % |
+| contains `,` | 33.0 % |
+| contains `;` | 8.5 % |
+| contains `\|` or a newline | **0** |
+| 1–2 words | 21.7 % (49,987) |
+| empty | 26 |
+
+These are **terse glosses, not sentences**: `pomen 1: zgradba za bivanje`, not *"Hiša je
+zgradba, v kateri ljudje bivajo."* The earlier draft of this section illustrated the type with
+a full-sentence example ending in a period — that style came from the reference file's
+WordNet/bridge-dictionary imports and does not exist in this KG. The shortness is what makes
+exact-match grading practical rather than brittle (§0.8).
 
 ### How to implement
 
-- **Source:** `pomen:` nodes carrying a genuine `skos:definition`.
-- **Seed filter:** at least one sense with a real definition (not a lemma fallback). Among
-  core lemmas, **40.6 %** have an `@sl` definition; among tail lemmas only 7.3 % — D8's pool
-  already biases toward the core.
-- **Gradeable line:** the definition text of the first sense, verbatim from the graph:
-  `ODGOVOR: Plesen je mehka bela gobasta tvorba, ki se razvije na vlažnih in toplih krajih.`
-  Grading is then string/embedding similarity against a string that is guaranteed present in
-  the input, which is exactly the property that makes this type a clean retrieval probe.
-- **UI part:** all defined senses as a bulleted list, matching the reference style.
-- **Negative:** **59 % of core lemmas lack a definition** — the single largest natural
-  negative pool in the dataset. The UI part should offer what *is* attached (examples,
-  collocations, synonyms).
+- **Read the gold from the store, not from the RDF.** The builder collapses a sense's
+  definitions to one string (`dfn` is a `sense -> str` map, last write wins; 4,980 senses carry
+  more than one in the RDF), and it is the *store* text the model is shown. Taking gold from the
+  node text guarantees the answer string is present verbatim in the input — the property the
+  whole grading contract rests on.
+- **Distinguish a real definition from a lemma fallback.** `body = d or lemma_of_lu(lu)`: a
+  sense with no definition renders as the entry's own lemma, optionally plus ` (zgled: …)`.
+  Strip that suffix; if what remains equals the anchor's lemma, the sense has **no** definition
+  and is excluded. Without this check the type emits items whose gold answer is the headword
+  repeated.
+- **Seed filter:** at least one sense with a real definition. Among core lemmas **40.6 %**
+  qualify, among tail lemmas 7.3 % — D8's pool already biases toward the core.
+- **Ordering:** dictionary ordinal ascending, as rendered in `pomen N:`. Senses with no ordinal
+  sort last, stable by sense id.
+- **Gradeable line:** the definition texts only, `|`-separated, in ordinal order, **no
+  numbering**:
+  `ODGOVOR: zgradba za bivanje | rodbina, družina`
+  Ordinals are omitted deliberately — the order already carries them, and requiring the model to
+  also emit `1.`/`2.` adds a failure mode that measures counting rather than retrieval. Note the
+  comma inside the second item: this is exactly why `|` and not `,` (§0.8).
+- **UI part:** one sense per line, numbered with the **graph's** ordinal so that a gap (sense 2
+  undefined) is visible. This is where the user-facing "one definition per line" rendering
+  lives; the gradeable line stays single-line so the eval parser is one rule for all 20 types.
+- **Junk items.** Exclude the 26 empty definitions. For the 21.7 % that are 1–2 words, recommend
+  **keeping** them — they are genuine lexicographic data, and dropping a fifth of the pool to
+  make the metric look harder is the wrong trade. Instead report `exact` broken down by gold
+  length, so a score dominated by one-word glosses is visible rather than hidden. *(The former
+  T13's warning about "raba obliki" sense labels was a **reference-file** artefact, not a KG
+  one: exactly 2 of 230,606 definitions begin with `raba`.)*
+- **Negative:** **59 % of core lemmas have no defined sense** — the largest natural negative pool
+  in the dataset. `ODGOVOR: ni podatka v bazi`, with the UI part offering what *is* attached
+  (examples, collocations, synonyms). A monosemous entry is **not** a negative; it takes an
+  ordinary one-item answer.
+- **Relation to T14.** T14 counts *all* senses including lemma fallbacks; T12 lists only
+  *defined* ones. The two therefore legitimately disagree — a word can answer `3` to T14 and
+  list two definitions here. Both UI parts must say which they mean, or the pair reads as a
+  contradiction.
+- **Expected arity is low.** Among anchors that have at least one defined sense, roughly **71 %
+  have exactly one**. The multi-item case is the minority, which is another reason the merged
+  type must not treat one item as a special shape.
+
+### Output template
+
+```
+ODGOVOR: {razlaga}[ | {razlaga}]…
+```
+
+| | |
+|---|---|
+| arity | **open, ≥ 1** — membership graded, order significant |
+| sep | ` \| ` (mandatory: 33.0 % of definitions contain a comma, 8.5 % a semicolon, **0 %** a pipe) |
+| order | dictionary ordinal ascending; ordinal-less senses last, stable by sense id — **graded** (the ordinal is data, not our convention) |
+| gap | — (an undefined sense is omitted, not `/`; the gap is shown in the UI part) |
+| regex | `^ODGOVOR: .+(?: \| .+)*$` |
+| example | `ODGOVOR: zgradba za bivanje \| rodbina, družina` |
 
 ### Existing formulations
 
-Reference CSV, n = 100:
+Both merged pools follow. First, the CSV's `razlaga_pomena`, n = 100:
 
 | n | frame |
 |--:|---|
@@ -1149,52 +1762,7 @@ Kako se razume izraz skrb?
 Kaj označuje glagol misliti?
 ```
 
-### Suggested new templates
-
-```
-Kaj pomeni <L>?
-Kaj je <L>?
-Razloži mi besedo <L>.
-Ne poznam besede <L>. Kaj pomeni?
-Kako bi razložil pomen besede <L>?
-Prosim za definicijo besede <L>.
-Kaj pomeni izraz <L> v slovenščini?
-Zanima me, kaj pomeni <L>.
-Naletel sem na besedo <L> in je ne razumem.
-Pomen besede <L>?
-```
-
-`Kaj je <L>?` and `Ne poznam besede <L>. Kaj pomeni?` are the most realistic public-user
-phrasings in this whole document, and neither appears in either reference file. Both are
-good **Tier A** candidates.
-
----
-
-## T13 — `pomen/nastevanje_pomenov`
-
-### What it is
-
-**Enumerate the senses** of a polysemous word, as a numbered or bulleted list.
-
-### How to implement
-
-- **Source:** every `pomen:` node of the anchor, in dictionary-ordinal order — v3.1 numbers
-  them, so the ordering is graph-derived rather than invented.
-- **Seed filter:** ≥ 2 senses. **91.3 % of anchors have ≥ 2 senses**, so the pool is large,
-  but most sibling senses are lemma fallbacks. Require that ≥ 2 senses are *distinguishable*
-  — either both defined, or both carrying an example snippet. Without that check the type
-  degenerates into "pomen 1: jajčast, pomen 2: jajčast".
-- **Watch for junk sense labels.** The reference file has 12 rows whose senses read
-  "*raba obliki*", "*raba živali*" — artefacts. Filter definitions that begin with `raba`
-  or that are shorter than ~3 tokens.
-- **Gradeable line:** the sense heads, semicolon-separated, in ordinal order:
-  `ODGOVOR: 1. mehka bela gobasta tvorba …; 2. mehka siva snov na stari hrani …`
-- **Negative:** a monosemous entry — answer with the one sense and say so, rather than the
-  sentinel; reserve the sentinel for entries whose senses are all lemma fallbacks.
-
-### Existing formulations
-
-Reference CSV, n = 100:
+And the CSV's `nastevanje_pomenov`, n = 100 — the "list them" half of the merged pool:
 
 | n | frame |
 |--:|---|
@@ -1228,10 +1796,31 @@ discovers the KG has no register, domain or figurative-sense marking.
 
 ### Suggested new templates
 
+One merged pool. The two halves are kept visibly apart because they must stay **balanced** in
+sampling: if the "define it" phrasings dominate, the model learns to answer with one definition
+and silently drop the later senses of polysemous entries — the exact failure the merge is
+supposed to make measurable.
+
+*"Define it" phrasings — natural for a one-item answer, must still produce all items:*
+
+```
+Kaj pomeni <L>?
+Kaj je <L>?
+Razloži mi besedo <L>.
+Ne poznam besede <L>. Kaj pomeni?
+Kako bi razložil pomen besede <L>?
+Prosim za definicijo besede <L>.
+Kaj pomeni izraz <L> v slovenščini?
+Zanima me, kaj pomeni <L>.
+Naletel sem na besedo <L> in je ne razumem.
+Pomen besede <L>?
+```
+
+*"List them" phrasings — natural for many items, must still work when there is only one:*
+
 ```
 Katere pomene ima <L>?
 Naštej pomene besede <L>.
-Koliko različnih stvari lahko pomeni <L>?
 Ali ima <L> več pomenov? Naštej jih.
 Zanimajo me vsi pomeni besede <L>.
 Beseda <L> — kateri pomeni so zabeleženi?
@@ -1240,6 +1829,13 @@ Kaj vse lahko pomeni <L>?
 Prikaži vse registrirane pomene za <L>.
 Rabim seznam pomenov besede <L>.
 ```
+
+`Kaj je <L>?` and `Ne poznam besede <L>. Kaj pomeni?` are the most realistic public-user
+phrasings in this whole document, and neither appears in either reference file — both are good
+**Tier A** candidates.
+
+**Dropped in the merge:** `Koliko različnih stvari lahko pomeni <L>?` — it asks for a count, so
+it belongs to T14, and leaving it here would give one surface two different gold answers.
 
 ---
 
@@ -1259,13 +1855,41 @@ Rabim seznam pomenov besede <L>.
   - 3–4 → `ima 3 pomene`
   - 5+ → `ima 5 pomenov`
   Implement this as a table lookup on `n mod 100`, not a heuristic, and unit-test it.
-- **Gradeable line:** the bare integer — `ODGOVOR: 3`. This is the only type in the inventory
-  whose gold answer is exact-match gradeable with zero ambiguity, which makes it the natural
-  smoke test for the whole pipeline.
+- **Gradeable line:** the bare integer — `ODGOVOR: 3`. Exact-match gradeable with zero
+  ambiguity, which makes it a natural smoke test for the pipeline.
+- **⚠️ The answer distribution is nearly constant — decide before generating.** Measured over
+  15,000 anchors: **1 sense 8.6 %, 2 senses 90.1 %, 3+ 1.3 %.** A model that always answers `2`
+  scores **90.1 %**. The type is perfectly verifiable and almost uninformative. Options, in
+  order of preference:
+  1. **Keep it and always report the 90.1 % majority-class baseline next to the score** —
+     cheap, honest, and it keeps a type whose *format* is a useful smoke test. **Recommended.**
+  2. Restrict the seed pool to anchors with ≠ 2 senses: informative, but unrepresentative of
+     the resource and it shrinks the pool to ~10 %.
+  3. Drop T14 and let T12 carry the sense material.
+  Whichever is chosen must be recorded here, since it changes what the number means.
 - **Counting policy must be fixed and stated:** does a lemma-fallback sense count? Recommend
   **yes** (the count is a structural fact about the entry, independent of definition
   coverage), but state it in the UI part so the answer is not silently surprising.
 - **Negative:** an entry with no senses at all.
+
+### Output template
+
+```
+ODGOVOR: {n}
+```
+
+| | |
+|---|---|
+| arity | **1**, a decimal integer, no words, no agreement |
+| sep | — |
+| order | — (arity 1) |
+| gap | — |
+| regex | `^ODGOVOR: (?:0\|[1-9][0-9]*)$` |
+| example | `ODGOVOR: 3` |
+
+The Slovene agreement table (`1 pomen` / `2 pomena` / `3 pomene` / `5 pomenov`) belongs to the
+**UI part only**. Keeping the number bare in the gradeable line means the agreement bug the
+reference file has in 100/100 rows cannot affect the score.
 
 ### Existing formulations
 
@@ -1325,6 +1949,25 @@ Ima <L> več kot en pomen?
   question type over a seen relation.
 - **Negative:** **65 % of core lemmas lack synonyms** — a large, natural, ordinary-lemma
   negative pool.
+- **Cap the list at 10.** Measured over 523 sampled synonym items: 41 % of anchors have exactly
+  one partner, but **7 % have 11 or more**. An uncapped answer makes both grading and reading
+  meaningless, so take the **first 10 in canonical order** and say in the UI part that the list
+  was truncated. The cap is part of the gold, not a rendering choice.
+
+### Output template
+
+```
+ODGOVOR: {lema}[, {lema}]…
+```
+
+| | |
+|---|---|
+| arity | **open, 1–10** — membership graded |
+| sep | `, ` (safe: 0 of 523 sampled partners contain a comma, though they run up to 11 words) |
+| order | `sl_key` alphabetical — **not graded** (§0.8.1); synonyms carry no rank in the KG |
+| gap | — |
+| regex | `^ODGOVOR: [^,]+(?:, [^,]+){0,9}$` |
+| example | `ODGOVOR: pasiven, resigniran, spokojen, vdan v usodo` |
 
 ### Existing formulations
 
@@ -1397,10 +2040,29 @@ antonyms, though the KG supports them.
   reuse a synonym template with the word swapped; write them independently, and **verify that
   no training item anywhere in the dataset contains the string `protipomenka`, `antonim` or
   `nasprotje`**.
-- **Gradeable line:** `ODGOVOR: sodelovanje` (or the comma-separated set).
+- **Gradeable line:** **always a set**, exactly as T15 — comma-separated, alphabetical, even
+  when it has one member (75 % of anchors do). *(The earlier "`ODGOVOR: sodelovanje` (or the
+  comma-separated set)" left the one-member case with two possible shapes.)*
 - **Negative:** ample — the overwhelming majority of lemmas have no antonym. Keep the
   negative share here at the dataset default; a Tier C type that is mostly sentinels measures
   nothing.
+
+### Output template
+
+Identical to T15 — same shape, same separator, same ordering, same grader path.
+
+```
+ODGOVOR: {lema}[, {lema}]…
+```
+
+| | |
+|---|---|
+| arity | **open, 1–10** (75 % of anchors have exactly 1, 12 % have 2, 12 % have 4) |
+| sep | `, ` |
+| order | `sl_key` alphabetical — **not graded** (§0.8.1) |
+| gap | — |
+| regex | `^ODGOVOR: [^,]+(?:, [^,]+){0,9}$` |
+| example | `ODGOVOR: sodelovanje` |
 
 ### Existing formulations
 
@@ -1438,28 +2100,58 @@ Napiši nasprotje za <L>.
 
 ---
 
-# Group F — `kolokacije` *(reworked — lemma pairs only)*
+# Group F — `kolokacije` — ▶ **UNPARKED, 2026-08-20**
 
-**Shared, and non-negotiable.** A `frac:Collocation` node carries only `rdfs:member` (two
-*senses*) and `frac:head`. **There is no surface string on it anywhere in 42 GB.** The graph
-gives `kolokacija: mineralen + voda`; the inflected *mineralna voda* is not stored. The
-reference file's inflected phrases came from a separate DDDS **API** endpoint
-(`api/retrieve/lexical-unit-collocations/[lexeme_id]`), and its corpus fragments
-("*Potrpežljivost je vrlina*" — 175 of 1,307 collocation items start with a capital) came from
-a corpus extraction outside this KG entirely.
+> **Parked and unparked the same day.** The park notice said: *"Reopen when a source for the
+> actual verbalisations is settled — the DDDS API endpoint is the known candidate."* No
+> external source is needed. **The verbalisations are in the export.** T17/T18 are live
+> again and both keep their original *besedne zveze* wording.
+>
+> **What was wrong.** A `frac:Collocation` node genuinely carries only `rdfs:member`,
+> `frac:head` and `rdf:type` — verified across all 42 GB — and nothing in the dump ever
+> points *at* one (0 object-position triples), so no traversal reaches a surface string from
+> either side. But the node's IRI `dependent-sense-D-lexical-unit-H` embeds `D`, the sense of
+> the **multi-word entry** that spells the pairing out, and that entry carries
+> `canonicalForm → writtenRep`. The link is a naming convention, never a triple. (The trap:
+> the *other* id, `H`, **is** restated as a real triple, so the convention looks redundant.)
+>
+> **Measured over the raw dump:** 4,717,090 / 4,717,090 collocation nodes resolve, 0
+> failures, 3,744,473 distinct phrases, **75.3 % differing from their lemmas concatenated**.
+> The builder writes them as of v5 (`--colloc-text phrase`), so the phrase is a node inside
+> the extracted subgraph and containment holds without qualification.
+>
+> **The D14 lemma-pair rework is withdrawn.** Its objection — "nobody asks about collocations
+> as lemma pairs" — was correct, and is now moot rather than accommodated. Both types are
+> back in the verifiability audit (§1.1) and in the per-type count used for D16.
+>
+> Full write-up: `README.md` **Finding 8**, and §6.2 of `QA_DATASET_DESIGN.md`.
 
-**Therefore both collocation types are rephrased so that the gold answer is a lemma pair,
-never an inflected phrase.** This is the whole content of the D14 rework, and it changes the
-question wording as much as the answer: a question that asks for *besedne zveze* invites an
-inflected phrase, so it must be replaced by one that asks which words combine with the target.
+**Shared, and non-negotiable.** The collocation node's text is the **inflected phrase**:
+`kolokacija: mineralna voda`, not `kolokacija: mineralen + voda`. It falls back to the pair
+form only when the phrase does not resolve, which measured 0 times in 4.7 M.
 
-Verbalised collocations are deferred to v2 (Section 6.2 of `QA_DATASET_DESIGN.md`) — as a
-**build-time bulk fetch** baked into node text, never a runtime dependency, because a fact
-that is not in the extracted subgraph breaks the containment invariant the design rests on.
+The phrases are lexicographer-curated, and the pair form was losing three things at once:
+
+| | |
+|---|---|
+| agreement | *cvileč + guma* → **cvileče gume** |
+| function words | *odnašati + na + glava* → **odnašati na glavah** (the preposition is a constituent) |
+| word order and the copula | *soba + biti + enoposteljen* → **sobe so enoposteljne** |
+
+The uppercase items in the reference file ("*Potrpežljivost je vrlina*" — 175 of 1,307) are
+**not** foreign corpus fragments as previously recorded; they are stored that way in the KG,
+and they come back verbatim.
+
+**Provenance of the reference file, settled.** Its `id` column is the KG `lexical-unit` id,
+and **1,196 of its 1,307 phrases (91.5 %) are reproducible verbatim** from the export alone
+(155/200 rows in full). It was not built from the DDDS API. The 8.5 % residual is 2.8 % the
+same collocation in another number/case, 2.4 % anchors with no collocations at all, and
+3.4 % genuinely absent — concentrated in possessive adjectives of proper names (*Bergerjev*,
+*Žalgirisov*, *Charlottin*).
 
 Coverage: **65.0 % of core lemmas** have collocations (12.2 % of tail lemmas) — 65,480 core
 lemmas in total, the largest sub-pool of any relation type. 2,981,731 distinct pairings,
-99.8 % binary.
+99.8 % binary. Median anchor offers 13 phrases; 101,861 lexical units have at least one.
 
 ---
 
@@ -1467,43 +2159,49 @@ lemmas in total, the largest sub-pool of any relation type. 2,981,731 distinct p
 
 ### What it is
 
-**Which words does this word combine with?** The answer is a list of partner lemmas (or
-lemma pairs), unnumbered and non-exhaustive.
+**Which phrases does this word appear in?** The answer is a list of inflected collocations,
+unnumbered and non-exhaustive.
 
 ### How to implement
 
 - **Source:** `kolokacija:` nodes attached to the anchor's senses. Each has degree exactly 2
   and is a leaf-like connector, not a hub — which is why wiring collocations in costs ~0 % at
-  the median ball size.
+  the median ball size. Since v5 the node text **is** the phrase (`kolokacija: mineralna
+  voda`), so the gold answer is read straight off the node with no post-processing.
 - **Ranking:** the graph carries no frequency on the collocation node. Rank deterministically
   (e.g. by the partner's own proxy value, then alphabetically) and say in the UI part that
   the list is a selection, not a ranking by corpus frequency. **Do not claim "najpogostejše"**
   — the reference file does, and it cannot back the claim either.
-- **Gradeable line:** partner lemmas in canonical order:
-  `ODGOVOR: voda, gnojilo, snov, surovina, olje`
-  — or the full pairs (`mineralen + voda; mineralen + gnojilo; …`) if the pair form is judged
-  clearer for grading. Pick one and keep it fixed across both collocation types.
-- **Cap:** 5–10 partners. High-band lemmas have hundreds; an uncapped list makes grading
-  meaningless and the answer unreadable.
+- **Gradeable line:** the phrases in canonical order:
+  `ODGOVOR: mineralna voda, mineralno gnojilo, mineralna snov, mineralna surovina, mineralno olje`
+- **Grading note:** match case-insensitively. 175 of the reference file's 1,307 items are
+  stored capitalised (*Cvileče gume*, *Potrpežljivost je vrlina*) because that is how the
+  lexicographer entered them, not because a sentence boundary leaked in.
+- **Cap:** 5–10 phrases. High-band lemmas have hundreds (max 5,570); an uncapped list makes
+  grading meaningless and the answer unreadable. Median anchor offers 13.
 - **Negative:** 35 % of core lemmas have no collocations.
 
 ### Existing formulations
 
-Reference CSV, n = 100 — **most of these frames ask for *besedne zveze* and must be reworded**
-under the rework; they are recorded here as the phrasing baseline, marked:
+Reference CSV, n = 100. **All ten frames are reusable as written** — the D14 rework that
+required rewording the *besedne zveze* frames is withdrawn, since the gold answer is once
+again an inflected phrase:
 
 | n | frame | reusable? |
 |--:|---|---|
 | 15 | `Navedi primerne kolokacije za besedo <L>.` | yes |
 | 14 | `Katere so najbolj znane kolokacije besede <L>?` | reword — "znane" implies frequency |
-| 12 | `S katerimi besedami se najpogosteje povezuje beseda <L>?` | **yes — this is the model frame for the rework** |
-| 9 | `Izpiši tipične besedne zveze z besedo <L>.` | no — invites an inflected phrase |
-| 9 | `Katere besedne zveze so pogoste z besedo <L>?` | no |
+| 12 | `S katerimi besedami se najpogosteje povezuje beseda <L>?` | yes |
+| 9 | `Izpiši tipične besedne zveze z besedo <L>.` | **yes — restored** |
+| 9 | `Katere besedne zveze so pogoste z besedo <L>?` | **yes — restored** |
 | 9 | `S katerimi izrazi se kolocira beseda <L>?` | yes |
 | 9 | `Poišči pogoste kolokacije za besedo <L>.` | yes |
 | 8 | `Navedi tipične kolokacije z besedo <L>.` | yes |
 | 8 | `Prikaži seznam pogostih kolokacij z besedo <L>.` | yes |
 | 7 | `Navedi kolokativne zveze za lemo <L>.` | yes |
+
+`Katere so najbolj znane …` is still the one to reword, for the unrelated reason that the KG
+carries no frequency.
 
 Older JSON file, `raba/collocations`, n = 104 — asks by POS of the partner, which the KG
 *can* support (`lexinfo:category` is on every constituent, and POS is on every word anchor):
@@ -1553,8 +2251,8 @@ answer must have exactly that many items.
   make the gold answer give the 3 and say so explicitly. This is the type's most valuable
   supervision — it is the only place in the inventory that trains *refusal to invent* under
   direct numeric pressure.
-- **Gradeable line:** exactly N partner lemmas, canonical order, or the honest short list.
-  The grader checks both the count and the membership.
+- **Gradeable line:** exactly N phrases, canonical order, or the honest short list. The
+  grader checks both the count and the membership, case-insensitively.
 
 ### Existing formulations
 
@@ -1566,7 +2264,7 @@ Reference CSV, n = 100:
 | 13 | `Sestavi seznam <N> kolokacij z besedo <L>.` |
 | 12 | `Prikaži številčni seznam <N> kolokacij besede <L>.` |
 | 12 | `Katere so <N> tipične kolokacije z besedo <L>?` |
-| 11 | `Poišči <N> tipičnih besednih zvez za besedo <L>.` (reword) |
+| 11 | `Poišči <N> tipičnih besednih zvez za besedo <L>.` (**restored** — no longer needs rewording) |
 | 11 | `Prikaži <N> pogostih kolokacij z besedo <L>.` |
 | 9 | `Izpiši točno <N> kolokacij besede <L>.` |
 | 7 | `Navedi <N> najbolj pogostih kolokacij za <L>.` (reword — frequency claim) |
@@ -1576,10 +2274,10 @@ Reference CSV, n = 100:
 ### Suggested new templates
 
 ```
-Naštej <N> besed, ki se povezujejo z <L>.
+Naštej <N> besednih zvez z besedo <L>.
 Daj mi <N> kolokacij besede <L>.
 Rabim <N> primerov sopojavitev za <L>.
-S katerimi <N> besedami se najpogosteje pojavlja <L>?
+V katerih <N> zvezah se najpogosteje pojavlja <L>?
 Izpiši natanko <N> kolokacij za <L>.
 Zanima me <N> besed, ki gredo skupaj z <L>.
 Napiši <N> kolokacij besede <L>, oštevilčeno.
@@ -1626,8 +2324,33 @@ Consequences:
   `ODGOVOR: Je oče petih otrok in dedek štirih vnukov.`
   Verbatim reproduction from the input is the cleanest possible retrieval signal, and it is
   the one type where an exact string match is both fair and meaningful.
-- **UI part:** up to 4 examples, italicised, as the reference does.
+- **UI part:** up to 4 examples, italicised, as the reference does. **98 % of anchors that have
+  examples have exactly 4**, so "up to 4" is in practice "all of them".
 - **Do not ask for a specified number** of sentences beyond 4.
+- **Cap the length in the seed filter.** Examples reach **1,487 words**; median is 16, p95 is
+  39, p99 is 60. A 1,487-word exact-match line is not a retrieval probe, it is a transcription
+  test. **Cap at 60 words, which retains 99.0 %** of examples.
+- **"First" must be deterministic:** the example child with the lowest node id. The graph's
+  edge order is not a ranking and must not be treated as one.
+
+### Output template
+
+```
+ODGOVOR: {poved}
+```
+
+| | |
+|---|---|
+| arity | **1** — compared whole. **Never split**: 65 % of examples contain a comma, 1.2 % a semicolon, and 4 of 51,172 contain a `\|` |
+| sep | — |
+| order | — (arity 1) |
+| gap | — |
+| regex | `^ODGOVOR: \S.*$` |
+| example | `ODGOVOR: Je oče petih otrok in dedek štirih vnukov.` |
+
+This is the one place where §0.9's rule that arity is part of the contract does real work: the
+same string that is a valid single answer here would be shredded into three items by a
+`|`-splitting parser.
 - **Negative:** **90 % of core lemmas have no usage example** — the largest natural negative
   pool of all. Keep this type's negative share at the dataset default anyway; a type that is
   90 % sentinel teaches "say you don't know".
@@ -1715,8 +2438,30 @@ morphologically ambiguous**, and on the cleanest ambiguity class the disambiguat
   than one form leaf of the entry (that is the ambiguity test, done cheaply).
 - **No tagger.** CLASSLA disambiguation is deferred (Section 6.3) precisely so the tagger's
   errors do not enter the gold labels.
-- **Gradeable line:** `ODGOVOR: tožilnik, ednina` — words, never `Sozet`.
+- **Gradeable line:** **T21's template exactly** — full case+number pairs joined by ` ali `,
+  words never MSD tags. T20 is T21 with a sentence around it, and giving the same analysis two
+  shapes across two types would make one of them wrong by construction. *(The earlier
+  `ODGOVOR: tožilnik, ednina` was a third shape, distinct from both of T21's two.)*
 - **Negative:** a sentence in which the named word does not appear at all.
+
+### Output template
+
+```
+ODGOVOR: {sklon} {števila}[ ali {sklon} {števila}]…
+```
+
+| | |
+|---|---|
+| arity | **open, ≥ 1** — in practice 1, since the seed filter selects unambiguous forms (R2) |
+| sep | ` ali ` |
+| order | case order, then number order — identical to T21, and **not graded** (§0.8.1) |
+| gap | — |
+| regex | `^ODGOVOR: \w+ (ednine\|dvojine\|množine)(?: ali \w+ (?:ednine\|dvojine\|množine))*$` |
+| example | `ODGOVOR: tožilnik ednine` |
+
+Shares T21's generator function and grader path outright. If R2's intersection turns out thin
+and the fallback disjunction is adopted, the template does not change — only how often the
+answer has more than one item.
 
 ### Existing formulations
 
@@ -1763,7 +2508,7 @@ Zanima me, kaj je <F> v povedi <S> — sklon in število.
 
 | # | check | why |
 |---|---|---|
-| C1 | ~~Rebuild the store.~~ **Done 2026-08-20** — the v4 stores render `vform`/`person`/`definiteness` on forms and `aspect`/`clitic` on anchors (§0.7). Generate against `kg_graph_v4_gemma3`. | T5, T6, T7 and T10 were ungeneratable before this and are generatable now. |
+| C1 | ~~Rebuild the store.~~ **Done 2026-08-20** — the v4 stores render `vform`/`person`/`definiteness` on forms and `aspect`/`clitic` on anchors (§0.7), and **v5** verbalises the collocation nodes (Group F). Generate against `kg_graph_v5_gemma3`. | T5, T6, T7 and T10 were ungeneratable before v4; T17 and T18 were parked before v5. |
 | C2 | **Compute the band × type availability matrix** (R3) and record it. | T19/T20 have ~11 k eligible lemmas against 72,528 in the pool; low-band cells will be near-empty. |
 | C3 | **Measure the T20 intersection** (R2): direct example × unambiguous form. | If thin, fall back to the disjunction and record the fallback. |
 | C4 | **Measure the natural multi-entity rate** (R5) on real generated question strings, not on the 88.9 % figure. | D3 makes the union share emergent; if it comes out near zero, oversample ambiguous seeds via T4/T21. |
@@ -1771,6 +2516,14 @@ Zanima me, kaj je <F> v povedi <S> — sklon in število.
 | C6 | **Verify Tier C leakage**: no training item anywhere contains `protipomenka` / `antonim` / `nasprotje`. | T16's whole value is that the relation is unseen. |
 | C7 | **Unit-test the Slovene number agreement table** (T14) and the canonical orderings (T1, T5, T15, T17, T21). | Grading is exact-match on these strings; an ordering bug reads as a model failure. |
 | C8 | **Withhold 2–3 templates per type** for Tier A before generation, not after. | Retrofitting a held-out split from generated items risks the same phrasing appearing on both sides. |
+| C9 | **Run the §0.8 grader over the gold answers themselves** — every item must score `exact = 1.0` against its own gold. | Catches separator collisions, stray whitespace and normalization bugs before they are misread as model failures. Free, and it is the one test that validates the grading contract end to end. |
+| C10 | **Assert every gold answer matches its type's `regex`**, and that no *multi-item* gold contains its own separator inside an item. | Measured safe today for definitions (0/230,606 contain `\|`) and word forms (0 contain `,;\|/`), but nothing enforces it. Single-item types are exempt by design — 4 of 51,172 examples contain a `\|` and must not be split (§0.9). |
+| C11 | **Decide M4** (render noun `gender` into the anchor, one line + a ~35 min rebuild). | T9 is ungeneratable and T8's noun row is POS-only until it lands (§0.7). |
+| C12 | **Decide T14** — keep with the 90.1 % majority-class baseline reported, restrict the pool, or drop. | 90.1 % of anchors have exactly 2 senses; the type is verifiable but nearly uninformative as specified (§1.1). |
+| C13 | **Report a majority-class / constant-answer baseline for every type**, not just T14. | T14 is the extreme case, but T9 (3 values), T10 (3 values) and T16 (75 % single-antonym) all admit cheap constant strategies. A score without its baseline is unreadable. |
+| C14 | ~~**Reopen T17/T18** only with a verbalisation source (Group F).~~ **Done 2026-08-20 — the source is the export itself.** Remaining work: regenerate both types against a v5 store and confirm the gold lines come off the node text unmodified. | The verbalisation is now node text, so the check is that nothing downstream still splits on `+`. |
+| C15 | **Assert every generated gold is in its type's canonical order** — including the set-valued types whose order is *not* graded. | Grading tolerance is not a licence for sloppy training data: the model must see exactly one ordering for a given set, or it is being taught noise on a surface it is forced to emit. Cheap to check (re-sort and compare), and it is the only thing standing between "order is not graded" and "order is arbitrary". |
+| C16 | **Unit-test `sl_key`** against a fixture including `č`, `š`, `ž` and a non-Slovene character. | `sl_SI` is not installed on this cluster and Python's default sort is wrong for Slovene (§0.8.2); a silent fallback would make the training data non-canonical without failing anything. |
 
 ---
 
@@ -1783,7 +2536,7 @@ worth doing and consciously postponed.
 |---|---|---|
 | `mwe_structure`, `mwe_component_search`, `idiom_completion` | **deferred to v2** | The single best-supported unused capability: 10,265,230 `decomp:constituent` edges, all carrying `lexinfo:category`, plus `rdf:_1 … _22` for constituent order, plus MWE headwords that *do* store their surface phrase. Deferred purely on implementation risk — it is the only family that depends on the D5 upward cap behaving. Validate the cap empirically first. |
 | clitics and negation | **effectively dead for word entries** | The `clitic` 423,585 and `negative` 121,229 figures count `lexical-unit-part` subjects — MWE components, which the builder collapses away. Only **25** single-word entries carry a `clitic` value in the whole KG, so there is no pool to sample from. Anything here would have to come from the MWE family, not from word entries. Supersedes the earlier "cheapest type to add back". |
-| verbalised collocations | **deferred to v2** | Build-time bulk fetch from the DDDS API, never a runtime dependency. See Section 6.2 of the design doc, and the open questions for Luka. |
+| ~~verbalised collocations~~ | ✅ **shipped in v1** | Was "build-time bulk fetch from the DDDS API". No fetch needed — the phrase is in the export, one dereference from the collocation IRI, and the builder writes it as of v5. See §6.2 of the design doc and `README.md` Finding 8. |
 | reasoning-tier items (aggregation, filtering, multi-hop) | **deferred (D13)** | v1 is retrieval-focused; Tier B/C are the only places reasoning is probed. |
 | hypernyms/hyponyms, meronyms/holonyms | **cannot be supported** | `hypernym`/`hyponym` = 5,415 each (0.12 %); meronym/holonym absent entirely. |
 | translations | **cannot be supported** | `vartrans:*` = 77,570, all `directEquivalent`, all **`@hun`**. |

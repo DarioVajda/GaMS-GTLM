@@ -143,14 +143,16 @@ reuse them. The owner also noted independently that many of the sampled words ar
 and probably should not have been used, which is the same conclusion D8 reaches from the
 numbers.
 
-**Two of its subtypes cannot be backed by this KG:**
+**One of its subtypes cannot be backed by this KG:**
 
-- `kolokacije/*` — 100 % of ids resolve, yet the answers are not reproducible. A
-  `frac:Collocation` node carries only `rdfs:member` (two *senses*) and `frac:head`; there
-  is no surface string on it anywhere in 42 GB. We can produce the lemma pair
-  *mineralen + voda*; the inflected "*mineralna voda*" is not stored. Corpus fragments
-  like "*Potrpežljivost je vrlina*" (175/1,307 collocation items start uppercase) came
-  from a corpus-extraction source outside this KG.
+- ~~`kolokacije/*` — 100 % of ids resolve, yet the answers are not reproducible.~~
+  **Withdrawn 2026-08-20 — they are reproducible; see §6.2 and `README.md` Finding 8.**
+  The `frac:Collocation` node is indeed textless, but the phrase sits on the multi-word
+  entry whose sense id its IRI embeds. **1,196 of the 1,307 phrases (91.5 %) come back
+  verbatim** from the export alone, 155/200 rows in full; the rest is mostly the same
+  collocation in a different number/case, plus possessive adjectives of proper names. The
+  uppercase items ("*Potrpežljivost je vrlina*", 175/1,307) are not foreign corpus
+  fragments either — they are stored that way in the KG.
 - `analiza_oblike_v_povedi` MSD strings — the KG stores `lexinfo` feature triples, not
   MULTEXT-East tags.
 
@@ -391,7 +393,8 @@ is probed in v1.
 | | types |
 |---|---|
 | **Kept as-is (16)** | `sklanjanje/{celotna_sklanjatev, sklanjatev_po_stevilu, posamezen_sklon, osnovna_oblika_leme}` · `spreganje/{celotno_spreganje, spreganje_v_casu, neosebne_oblike}` · `besedna_vrsta/{osnovne_lastnosti, spol_samostalnika, vrsta_in_vid_glagola}` · `pomen/{razlaga_pomena, nastevanje_pomenov, stevilka_pomenov}` · `sopomenke/navedi_sopomenke` · `stopnjevanje/vse_stopnje` · `primeri_uporabe/povedi_z_besedo` |
-| **Reworked (3)** | `sklanjanje/analiza_oblike` and `primeri_uporabe/analiza_oblike_v_povedi` — see D15 · `kolokacije/*` — **lemma pairs only**, questions rephrased so the gold answer is a pair, never an inflected phrase |
+| **Reworked (2)** | `sklanjanje/analiza_oblike` and `primeri_uporabe/analiza_oblike_v_povedi` — see D15 |
+| **Kept, rework withdrawn (1)** | `kolokacije/*` — D14 downgraded these to **lemma pairs only**; withdrawn 2026-08-20 because the inflected phrase turned out to be in the export after all (§6.2, `README.md` Finding 8). The gold answer is a real phrase and the questions keep their original *besedne zveze* wording. |
 | **Added (1)** | **antonyms** — generated, but held out of training entirely as Tier C (D12) |
 
 `stopnjevanje/vse_stopnje` is regenerated from `lexinfo:degree` rather than imitated: the
@@ -592,7 +595,32 @@ K = 15 for a sample of high-band lemmas), then generate. `mwe_component_search` 
 should stay non-exhaustive ("*Primeri so …*"), matching both the reference phrasing and
 what a capped traversal can honestly support.
 
-### 6.2 Verbalised collocations
+### 6.2 Verbalised collocations — ✅ **RESOLVED 2026-08-20, no external source needed**
+
+> **This section is closed.** The premise below — that the phrase is not in the export and
+> must be fetched from the DDDS API — was **wrong**. The phrase is in the export. v5 of the
+> builder writes it, `kolokacija: mineralna voda` is now the node text, and no API, no bulk
+> fetch and no credentials are required. Full write-up: `README.md` **Finding 8**.
+>
+> **The correction in one line:** a `frac:Collocation` node really is textless, but its IRI
+> `dependent-sense-D-lexical-unit-H` embeds `D`, the sense of the multi-word entry that
+> spells the pairing out — and *that* entry carries `canonicalForm → writtenRep`. The link
+> exists only as a naming convention, never as a triple, and nothing in the dump points at a
+> collocation node (0 object-position triples), so no traversal could ever have found it.
+>
+> **Measured:** 4,717,090 / 4,717,090 collocation nodes resolve, 0 failures, 3,744,473
+> distinct phrases, 75.3 % of them differing from their lemmas concatenated. **91.5 % of the
+> reference file's 1,307 collocation phrases come back verbatim**, which also answers the
+> provenance question — that file was derived from this export, not from the API.
+>
+> Containment is satisfied without qualification: the phrase is on a node inside the
+> extracted subgraph, not behind a service.
+>
+> **Consequence:** Group F of `QA_TASKS.md` is unparked, and the D14 lemma-pair rework is
+> withdrawn — T17/T18 can ask for *besedne zveze* and the gold answer is a real phrase.
+
+<details>
+<summary>Superseded reasoning, kept for the record</summary>
 
 v1 emits collocations as **lemma pairs** (`mineralen + voda`) because the inflected phrase
 is not in the RDF export — a `frac:Collocation` node carries only `rdfs:member` and
@@ -611,6 +639,11 @@ scale — 65,480 core lemmas have collocations.
 **To ask Luka (he knows this database):** is the endpoint reachable from our network and
 with what credentials; what exactly does it return per lexeme; is there a bulk export
 rather than 65 k individual calls.
+
+*Why the lead was plausible but wrong: the id space really is shared, and the API really
+does serve these phrases — but it serves them from the same underlying database that
+produced this export, so the export had them all along.*
+</details>
 
 ### 6.3 Other
 
