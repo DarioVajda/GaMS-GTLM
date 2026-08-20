@@ -78,14 +78,15 @@ before committing.
 > nested field and taking weights from the `language_model` submodule. Small, but not free.
 > GaMS3-12B is published as a text-only `gemma3_text` config and is unaffected.
 
-## Data
+## Dat
 
 - **Knowledge graph:** the CJVT lexicographical knowledge graph
   ([source](https://nas.cjvt.si/s/aJE6243jd8iRXfc)).
 - **QA dataset:** generated from the graph, not reused from the reference samples. Design
   decisions, the KG answerability census, and the frequency banding are recorded in
   [`data/QA_DATASET_DESIGN.md`](data/QA_DATASET_DESIGN.md). Two internal reference files
-  (`data/Lexical-QA-SLO-test.json`, `data/Lexical-QA-SLO(in).csv`, both not public) supply
+  (`data/datasets/reference/Lexical-QA-SLO-test.json`,
+  `data/datasets/reference/Lexical-QA-SLO(in).csv`, both not public) supply
   the question-type inventory and phrasing style only.
 - **Pipeline:** the raw data requires **heavy preprocessing** first, then adaptation
   into GTLM-ready examples using the `TextGraphDataset` class from `gtlm.utils`. Each
@@ -141,9 +142,11 @@ started. The upstream Gemma 3 adapter has landed, so the backbone is no longer a
 - **Done.** Raw KG downloaded and characterised; GTLM graph construction settled at **v3**
   (36.7 M nodes / 48.5 M edges, untyped edges with self-describing node text) together with
   a k-hop input-sizing study — see [`data/README.md`](data/README.md).
-  The graph is now **persisted** to `data/kg_graph_v3/` by
-  `kg_analysis/run_save_v3.sbatch`, so the ~12-minute, ~70 GB rebuild is paid once
-  instead of per run; `kg_analysis/graph_store.py` loads it in seconds.
+  The graph is now **persisted** — current store `data/stores/kg_graph_v4_gemma3/`, built
+  by `data/build/run_save_v4.sbatch` — so the ~35-minute, ~70 GB rebuild is paid
+  once instead of per run; `data/lib/graph_store.py` loads it in seconds. Its
+  `token_len` uses the Gemma 3 tokenizer, which every Gemma 3 size shares with
+  GaMS3-12B, so one store serves the whole iteration ladder below.
 - **Next.** Write the subgraph extractor on top of the store, with a cap on the
   `sestavina` MWE↔word hub, the one structure that explodes; adapt into
   `TextGraphDataset`; then train on a small Gemma 3 before scaling to GaMS3-12B.

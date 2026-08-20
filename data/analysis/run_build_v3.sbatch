@@ -11,13 +11,13 @@
 #SBATCH --mem=200G
 #SBATCH --time=06:00:00
 #SBATCH --job-name=kg_build_v3
-#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/logs/build_v3_%j.out
+#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/logs/build_v3_%j.out
 
 set -euo pipefail
 # Shared-filesystem venv, unlike the per-node /opt/deepops venv that .venv
 # symlinks to.  It is NOT node-independent -- see pick_python.sh.
 export VENV=/shared/workspace/povejmo/graph_model/.venv
-PY=$(/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/pick_python.sh)
+PY=$(/shared/workspace/povejmo/gams_gtlm/data/lib/pick_python.sh)
 if [ "$PY" != "$VENV/bin/python" ]; then
     export PYTHONPATH="$VENV/lib/python3.10/site-packages${PYTHONPATH:+:$PYTHONPATH}"
     echo "note: venv launcher unusable on $(hostname); using $PY + PYTHONPATH"
@@ -33,8 +33,8 @@ echo "host: $(hostname)  cpus: ${SLURM_CPUS_PER_TASK}  start: $(date)"
 
 # v3 adds ~2.4M reified collocation nodes on top of v2's graph and runs 8
 # variants instead of 4, hence the bump from 150G/4h to 200G/6h.
-"$PY" /shared/workspace/povejmo/gams_gtlm/data/kg_analysis/build_gtlm_graph_v3.py \
+"$PY" /shared/workspace/povejmo/gams_gtlm/data/build/build_gtlm_graph_v3.py \
   --kg-dir "/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB" \
-  --out    "/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/results_v3.json" \
+  --out    "/shared/workspace/povejmo/gams_gtlm/data/analysis/results/results_v3.json" \
   --n-seeds 400 --max-hops 3 --workers "${SLURM_CPUS_PER_TASK}" --seed 42
 echo "end: $(date)"

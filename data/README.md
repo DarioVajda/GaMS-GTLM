@@ -4,21 +4,51 @@
 > resolves all four defects that were listed as *Known flaws* there. The v2
 > section is retained at the bottom purely as history — **do not quote v2
 > figures**. Builder:
-> [`kg_analysis/build_gtlm_graph_v3.py`](kg_analysis/build_gtlm_graph_v3.py).
+> [`build/build_gtlm_graph_v3.py`](build/build_gtlm_graph_v3.py).
 >
 > **Companion document:** [`QA_DATASET_DESIGN.md`](QA_DATASET_DESIGN.md) records the design
 > of the question–answer dataset built on top of this graph, including a full-corpus census
 > of which question types the KG can and cannot answer.
 
-This directory holds the raw knowledge graph (`kg_raw/`) and the construction +
-sizing study (`kg_analysis/`) behind one design question:
+This directory holds the raw knowledge graph (`kg_raw/`), the built graph stores
+(`stores/`) and the construction + sizing study (`build/`, `analysis/`) behind
+one design question:
 
 > If we build a GTLM-ready graph from the CJVT (DDDS) lexicographical KG and
 > extract **k-hop neighborhoods** around a lemma, how big is the resulting model
 > input — in nodes and in **GaMS-2B tokens**?
 
 Computed on a Slurm compute node (`frida`) over the **full** KG (all 2,594 `.nt`
-files), with the real, offline **`cjvt/GaMS-2B`** tokenizer.
+files), with the real, offline **`cjvt/GaMS-2B`** tokenizer. The current store has
+since moved to the Gemma 3 tokenizer, which is worth **−0.80 %** in aggregate — so
+every token figure below is within ~1 % rather than restated. See
+[Tokenizer](#tokenizer-and-what-the-store-directories-are-named).
+
+---
+
+## Layout
+
+```
+data/
+├── README.md  QA_DATASET_DESIGN.md  QA_TASKS.md
+├── lib/         graph_store.py, pick_python.sh — shared by everything below
+├── build/       produces a graph store: the v3 builder, check_v4_text.py,
+│                run_save_*.sbatch, run_verify_store_v3.sbatch
+├── analysis/    produces a results JSON: the v1 sizing study, the superseded
+│                v2 builder, run_analysis*.sbatch, run_build_v[23].sbatch,
+│                results/*.json
+├── lookup/      kg_lookup.py — the query CLI (`bin/lookup` wraps it)
+├── datasets/    reference/ the two reference QA sets; generated/ our output
+├── stores/      kg_graph_v3, kg_graph_v3_1_*, kg_graph_v4_* (gitignored, ~4 GB each)
+├── kg_raw/      the untouched CJVT N-Triples (83 GB, gitignored)
+└── logs/        Slurm job logs
+```
+
+Three rules keep it that way. A directory names a **purpose, not an import**:
+`run_build_v3.sbatch` sits in `analysis/` although it invokes the builder in
+`build/`, because what it produces is the census, not a store. Anything imported
+by two or more of build/analysis/lookup goes in **`lib/`**. Data products live
+under a directory that says what they are, never loose in `data/`.
 
 ---
 
@@ -260,8 +290,10 @@ Both are controlled by `--sense-snippet N` (0 disables, default 60 chars) and
 which text convention built it.
 
 > **Status: built and verified, 2026-08-19** (job 128706, `apl`, **17 min 28 s**,
-> **52.7 GB peak RSS**, 16 CPU). The store is `data/kg_graph_v3_1`, deliberately
-> **beside** `data/kg_graph_v3` rather than over it, so the verified v3 store —
+> **52.7 GB peak RSS**, 16 CPU). The store is `data/stores/kg_graph_v3_1_gams2b`
+> (renamed 2026-08-20 from `kg_graph_v3_1`, for the tokenizer that filled its
+> `token_len`; see "Tokenizer" below for the current `_gemma3` store), deliberately
+> **beside** `data/stores/kg_graph_v3` rather than over it, so the verified v3 store —
 > the one whose store-backed rerun reproduces `results_v3.json` at MD5
 > `11f4b10c7fbc1e4195795e896a285820` — stays intact and the two can be diffed node
 > for node. Builder SHA-256 `ad8d4284…`, matching the file on disk.
@@ -366,6 +398,121 @@ an embedded `\"`, but nothing reaches it.
 
 ---
 
+## Finding 6 — verb morphology never reached the node text at all
+
+> **Status: fixed in v4, built and verified 2026-08-20.** Stores
+> `data/stores/kg_graph_v4_gemma3` (job 129328, `apl`, **35 min 17 s**, **67.3 GB
+> peak RSS**) and `data/stores/kg_graph_v4_gams2b` (job 129329, `aga`,
+> **21 min 16 s**, **63.4 GB**), both `ACCEPTANCE: PASS`. Builder flaw 7;
+> acceptance `build/check_v4_text.py`; job script `build/run_save_v4.sbatch`.
+> The two v4 stores are byte-identical in every array except `token_len`.
+> Text cost of the change, same tokenizer: **917,858,318 vs 913,315,688 tokens,
+> +0.50 %**; mean node text 24.985 vs 24.862 Gemma 3 tokens.
+
+Caveat 3 below used to say morphology mapping was "partial" — `aspect`, `vform`,
+`definiteness`, `negative`, `clitic` and `animate` parsed but not rendered. That
+understated it. Measured on the v3.1 store, the entire verb paradigm of
+*popraskati* collapsed to a handful of strings:
+
+```
+oblika: popraskam (ednina)        <- 1st person singular PRESENT
+oblika: popraskaj (ednina)        <- 2nd person singular IMPERATIVE
+oblika: popraskata (dvojina)      <- 2nd person dual  \  byte-identical,
+oblika: popraskata (dvojina)      <- 3rd person dual  /  two separate nodes
+oblika: popraskat                 <- supine, no label at all
+```
+
+Three independent faults, none of them a gap in the source data:
+
+1. **`person` was silently dropped.** `VALUE_SL` listed
+   `firstPerson`/`secondPerson`/`thirdPerson`; this KG emits `first`/`second`/
+   `third`. `feat_string()` drops values it cannot map, without a warning, so
+   person vanished from all **253,497** forms that carry it.
+2. **`FEATURE_PROPS` listed `tense` and `mood`.** **Neither predicate exists in
+   this KG.** What carries that distinction is `lexinfo:vform` — `present`,
+   `imperative`, `participle`, `infinitive`, `supine` — on **452,782** forms,
+   and it was not in `FEATURE_PROPS` at all. Preteklik and prihodnjik are
+   periphrastic and are not stored in any form.
+3. **`aspect` and `clitic` hang off the lexical-unit**, but the feature branch
+   only accepted `word-form`/`form-lexical-unit` subjects, so they were dropped
+   even though `aspect` was in scope. They are now collected separately
+   (`UNIT_PROPS`) and rendered into the anchor parenthetical after the POS.
+
+`definiteness` (**160,524** forms) is mapped in the same pass: without it an
+adjective's definite and indefinite forms carry byte-identical labels and differ
+only in surface, so nothing downstream can tell which is the citation form.
+
+**Why this is a GTLM problem specifically, not just missing detail.** Same
+argument as Finding 4: edges are untyped and the architecture is
+node-permutation equivariant, so two same-text sibling forms are genuinely
+interchangeable once the extractor prunes their subtrees. The builder was
+manufacturing label noise.
+
+**Measured, v3.1 → v4.** Structure is untouched; the fixes are text-only:
+
+| | v3.1 | **v4** |
+|---|--:|--:|
+| Nodes / directed edges | 36,735,791 / 48,534,031 | **identical** |
+| Form nodes byte-identical to a sibling | 86,848 | **418** (−99.5 %) |
+| Anchors affected by that | 20,546 | **53** |
+| Nodes whose text changed | — | **614,287** (70,873 anchors · 543,414 forms) |
+| Forms carrying a `vform` label | 0 | **452,782** |
+| Forms carrying a `person` label | 0 | **253,497** |
+| Forms carrying a `definiteness` label | 0 | **160,524** |
+| Anchors carrying `aspect` | 0 | **18,157** |
+| Anchors carrying `clitic` | 0 | **25** |
+
+```
+iztočnica: popraskati (glagol)              ->  iztočnica: popraskati (glagol, dovršni, nedoločnik)
+oblika: popraskat                           ->  oblika: popraskat (namenilnik)
+oblika: popraskal (ednina, moški spol)      ->  oblika: popraskal (deležnik na -l, ednina, moški spol)
+oblika: popraskam (ednina)                  ->  oblika: popraskam (sedanjik, 1. oseba, ednina)
+oblika: popraskata (dvojina)                ->  oblika: popraskata (sedanjik, 2. oseba, dvojina)
+oblika: popraskata (dvojina)                ->  oblika: popraskata (sedanjik, 3. oseba, dvojina)
+oblika: popraskaj (ednina)                  ->  oblika: popraskaj (velelnik, 2. oseba, ednina)
+iztočnica: medse (zaimek, tožilnik)         ->  iztočnica: medse (zaimek, naslonska oblika, tožilnik)
+oblika: navrženi (…, osnovnik)              ->  oblika: navrženi (…, osnovnik, določna oblika)
+```
+
+`FEATURE_PROPS` is ordered `vform, person, case, number, gender, degree,
+definiteness` so that **every pre-existing label keeps its position** — the diff
+is purely additive. `check_v4_text.py` asserts that as a *subsequence* property:
+no node's text may shrink, the surface may never change, and the old
+parenthetical's items must be a subsequence of the new one's. It fails loudly if
+any existing label was reworded, reordered or dropped. Measured on the real
+build: **614,287 nodes changed (1.67 %), all of them anchors or forms, with zero
+violations.**
+
+> **On the numbers.** The pre-build estimate from the raw RDF was 89,405 → 8,651
+> (−90.3 %). The measured store figures are better for two reasons: the store
+> groups siblings by an anchor's actual form *neighbours*, which excludes the
+> canonical form (merged into the anchor, so it is not a separate node), and the
+> estimate was computed before `definiteness` was added — that label alone
+> separates most of the adjective forms that were left colliding.
+
+### Reachability: most of these triples are unreachable, and that matters
+
+The corpus-wide census in `QA_DATASET_DESIGN.md` §3 counts `aspect` 1,735,245,
+`vform` 2,353,283 and `clitic` 423,585. Those totals are dominated by
+**`lexical-unit-part` subjects — MWE components, which the `Component` collapse
+discards** (caveat 5). Reachable on word entries:
+
+| predicate | corpus-wide | **reachable on word entries** |
+|---|--:|--:|
+| `vform` | 2,353,283 | **452,782** |
+| `person` | — | **253,497** |
+| `definiteness` | — | **160,524** |
+| `aspect` | 1,735,245 | **18,157** |
+| `clitic` | 423,585 | **25** |
+
+Two consequences. All 18,157 single-word verbs carry an aspect, so verb-aspect
+questions are fully supported. But **clitics are effectively dead at 25 units** —
+`QA_DATASET_DESIGN.md` §6.3 calls a clitic/negation question type "arguably the
+first thing to add back after the MWE family", and that is wrong for single-word
+entries.
+
+---
+
 ## Practical implications
 
 - **Collocations can stay in unconditionally.** They cost ~0 % at the median and
@@ -389,13 +536,16 @@ an embedded `\"`, but nothing reaches it.
 
 ```bash
 cd /shared/workspace/povejmo/gams_gtlm
-sbatch data/kg_analysis/run_build_v3.sbatch     # -> kg_analysis/results_v3.json
-sbatch data/kg_analysis/run_save_v3.sbatch      # -> data/kg_graph_v3/  (the store)
+sbatch data/analysis/run_build_v3.sbatch        # -> data/analysis/results/results_v3.json
+sbatch data/build/run_save_v3.sbatch            # -> data/stores/kg_graph_v3/
+sbatch data/build/run_save_v4.sbatch gemma3     # -> data/stores/kg_graph_v4_gemma3/  (current)
+sbatch data/build/run_save_v4.sbatch gams2b     # -> data/stores/kg_graph_v4_gams2b/
 ```
 
 - Pipeline: stream-parse → collapse MWE parts → merge lemma → dedup collocations
   → reify syn/ant/colloc → Slovenian self-describing text → undirected CSR BFS →
-  GaMS-2B tokenize → 2×2×2 variants × word/MWE split.
+  tokenize (`--tokenizer`, default `cjvt/GaMS3-12B-Instruct`) → 2×2×2 variants ×
+  word/MWE split.
 - Flags: `--n-seeds`, `--max-hops`, `--seed`, `--prompt-tokens`, `--workers`,
   `--variants`, `--files-limit`; persistence: `--save-graph DIR`, `--load-graph DIR`,
   `--no-analysis` (see "Persisted graph store" above); and two debugging aids:
@@ -416,13 +566,13 @@ sbatch data/kg_analysis/run_save_v3.sbatch      # -> data/kg_graph_v3/  (the sto
   ship `/usr/bin/python3.12` with **no 3.10 at all**, so no `PYTHONPATH` trick
   rescues them — the venv's compiled wheels are `cp310`. `run_save_v3.sbatch`
   therefore pins `--nodelist=aga,ana,apl` and additionally calls
-  `kg_analysis/pick_python.sh`, which prefers the venv launcher, falls back to a
+  `lib/pick_python.sh`, which prefers the venv launcher, falls back to a
   real 3.10 interpreter plus the venv's `site-packages` on `PYTHONPATH`, and exits
   with a diagnostic naming the node rather than a bare `ModuleNotFoundError`.
   `run_build_v3.sbatch` does neither and will fail in seconds if it lands on a
   24.04 node — it only ever succeeded because job 126763 happened to get `apl`.
 - Tokenizer loaded offline from `HF_HOME=/shared/workspace/povejmo/huggingface_cache`.
-- Raw output `kg_analysis/results_v3.json`; job log `kg_analysis/logs/build_v3_*.out`.
+- Raw output `analysis/results/results_v3.json`; job log `logs/build_v3_*.out`.
 
 > **Gotcha: `--files-limit` invalidates collocation statistics.** Files are
 > globbed alphabetically, and a collocation's member senses routinely live in a
@@ -437,18 +587,18 @@ sbatch data/kg_analysis/run_save_v3.sbatch      # -> data/kg_graph_v3/  (the sto
 
 The builder used to discard the graph after every run, so each piece of downstream
 work paid ~12 minutes and a ~70 GB node to rebuild the identical 36.7 M-node
-object. `--save-graph DIR` writes it once; `kg_analysis/graph_store.py` reads it
+object. `--save-graph DIR` writes it once; `lib/graph_store.py` reads it
 back in seconds under a few GB.
 
 ```bash
-sbatch data/kg_analysis/run_save_v3.sbatch          # build once -> data/kg_graph_v3/
-python data/kg_analysis/graph_store.py data/kg_graph_v3 --verify
-python data/kg_analysis/graph_store.py data/kg_graph_v3 --samples 3
+sbatch data/build/run_save_v3.sbatch    # build once -> data/stores/kg_graph_v3/
+python data/lib/graph_store.py data/stores/kg_graph_v3 --verify
+python data/lib/graph_store.py data/stores/kg_graph_v3 --samples 3
 ```
 
 ```python
 import graph_store
-G = graph_store.load_graph("data/kg_graph_v3")
+G = graph_store.load_graph("data/stores/kg_graph_v3")
 G["indptr"], G["indices"]        # undirected CSR
 G["text"][12345]                 # "iztočnica: pes (samostalnik, imenovalnik, ednina)"
 G["token_len"][12345]            # GaMS-2B token count, no tokenizer needed
@@ -476,9 +626,64 @@ rather than costing 105 MB of redundancy. The manifest is written **last**, so a
 directory without one is an interrupted write rather than a subtly incomplete
 store.
 
+### Tokenizer, and what the store directories are named
+
+`token_len` is the one array whose values depend on a model choice, so the store
+directory is named for the tokenizer that filled it:
+
+| directory | tokenizer | text convention | status |
+|---|---|---|---|
+| `data/stores/kg_graph_v4_gemma3` | `cjvt/GaMS3-12B-Instruct` (vocab 262,145) | v4 | **current** — what `lookup` and downstream work read |
+| `data/stores/kg_graph_v4_gams2b` | `cjvt/GaMS-2B` (vocab 256,000) | v4 | current, for tokenizer diffing |
+| `data/stores/kg_graph_v3_1_gemma3` | `cjvt/GaMS3-12B-Instruct` | v3.1 | superseded by v4 — no morphology on verb forms |
+| `data/stores/kg_graph_v3_1_gams2b` | `cjvt/GaMS-2B` | v3.1 | superseded; kept for diffing |
+| `data/stores/kg_graph_v3` | `cjvt/GaMS-2B` | v3 | pre-v3.1 sense conventions |
+
+`manifest.meta.text_convention` records which convention built a store, alongside
+`feature_props` and `unit_props`, so a store declares what its node text contains
+rather than leaving it to be inferred from the directory name.
+
+The two v3.1 stores are **byte-identical in every array except `token_len`** —
+`node_codes`, `ntype`, `kind`, `mwe_set`, `indptr`, `text_off` and the 2.7 GB
+`text_blob` all match md5 for md5, and the rebuild asserts exactly that
+(`run_save_v3_1_gemma3.sbatch`), so a difference anywhere else means the build was
+not reproducible.
+
+**`indices.npy` is the one exception, and it is benign.** The builder merges
+parsed files with `pool.imap_unordered`, so files arrive in completion order and
+the neighbours of a node that several files touch get appended in a run-dependent
+order. Measured across the two stores: **92,945 of 36,735,791 rows (0.25 %)** are
+reordered — 89,957 of them example nodes, 2,972 forms, 16 senses — with an
+identical neighbour **set** in every one, verified by comparing the row-sorted
+edge multiset. Node ids are untouched because codes come from the IRI, not from
+insertion order; that is what keeps two independently built stores comparable node
+for node. If byte-reproducible CSR is ever wanted, sort each row before saving —
+nothing currently depends on neighbour order.
+
+**Every Gemma 3 checkpoint shares one tokenizer, so one store serves all of them.**
+Verified 2026-08-20 across `gemma-3-270m-it`, `-1b-it`, `-4b-it`, `-12b-it`,
+`-27b-it`, `-4b-pt` and `cjvt/GaMS3-12B-Instruct`: `tokenizer.model` is
+byte-identical in all seven, and encoding 5,000 real node texts gives identical
+token **ids**, not merely equal counts. (`tokenizer.json` has two md5s — the
+270m-it/pt variant differs in per-token flags on `added_tokens`, with identical
+vocab, merges and id→content, which changes no output.) The iteration ladder in
+the root README — develop on a small Gemma 3, scale to GaMS3-12B — therefore
+needs no rebuild between rungs.
+
+Switching tokenizers is worth **−0.80 %**, now measured over the whole graph
+rather than a sample: **913,315,688** tokens under Gemma 3 against **920,680,698**
+under GaMS-2B, mean 24.862 vs 25.062 per node. Only **45.97 %** of nodes get the
+same count individually — the differences are real, they just very nearly cancel
+in aggregate. So the GaMS-2B token figures elsewhere in this document are within
+~1 % of the current store and have not been recomputed; treat the label as
+approximate rather than the numbers as wrong.
+
+Use `--tokenizer REPO` to build against something else; it is recorded in
+`manifest.meta.tokenizer`, which is the authority on what a store contains.
+
 ### Looking things up: `lookup`
 
-`kg_analysis/kg_lookup.py` queries either the built store or the raw N-Triples
+`lookup/kg_lookup.py` queries either the built store or the raw N-Triples
 from one CLI. `bin/lookup` wraps it so it runs from any directory; put the
 directory on `PATH` once:
 
@@ -498,7 +703,7 @@ lookup raw id 34748                    # every raw triple touching it (~8s)
 lookup raw iri word-form-1567346       # the same for any IRI
 ```
 
-Store lookups read `data/kg_graph_v3_1`; `KG_STORE=/path` points them elsewhere.
+Store lookups read `data/stores/kg_graph_v4_gemma3`; `KG_STORE=/path` points them elsewhere.
 The wrapper picks an interpreter that can actually import numpy **on the current
 node**, falling back to `pick_python.sh`, so it does not hit the 3.10-only trap
 that killed job 128295. `KG_PYTHON=/path/to/python` overrides that choice.
@@ -576,9 +781,12 @@ tokenizer, `--kg-dir`, the file count and a SHA-256 of the builder script. Check
    example-bearing senses remain largely **disjoint populations** — which is
    what makes the v3.1 example-snippet fallback work; see **Finding 4**. The
    thinness itself is unfixed and unfixable from this source.
-3. **Morphology mapping is partial.** `case/number/gender/person/tense/mood/degree`
-   plus POS are mapped to Slovenian; `aspect`, `vform`, `definiteness`,
-   `negative`, `clitic`, `animate` are parsed by the KG but not rendered.
+3. ~~**Morphology mapping is partial.**~~ **Fixed in v4** — see Finding 6, which
+   also shows the caveat understated the problem: `person` was listed but
+   silently dropped, and `tense`/`mood` were listed but do not exist as
+   predicates in this KG. v4 maps `vform`, `person`, `case`, `number`, `gender`,
+   `degree`, `definiteness` on forms and `aspect`, `clitic` on anchors. Still
+   unrendered: `negative` (121,229, of which only 6,630 are `yes`) and `animate`.
 4. **The writtenRep tie-break is a heuristic.** "Fewest capitals, then
    lexicographic" is right for `BOJ/Boj/boj` and harmless for `Beznik`, but a
    proper noun that also lists a lowercase variant would be lower-cased.
@@ -598,7 +806,7 @@ reported MWE hop-2 medians of 42,226 original / 85,284 Levi nodes / 385,061
 tokens, and word hop-1 of 19 / 37 / 262. Those figures assume blanket Levi
 reification, omit collocations entirely, silently merge ≥1.3 M colliding
 collocation IRIs, and count 9.6 % of nodes as contributing zero tokens. Builder
-`kg_analysis/build_gtlm_graph.py`, results `kg_analysis/results_v2.json`, still
+`analysis/build_gtlm_graph.py`, results `analysis/results/results_v2.json`, still
 in the tree. The v1 raw-projection study (`analyze_neighborhoods.py`,
 `results.json`, `results_semcore.json`) was judged heavily flawed and is not
 documented here.

@@ -6,7 +6,7 @@ There are two graphs on disk, and "look at the graph" means a different thing in
 each.  Pick the layer by the question you are actually asking:
 
   store   "What does OUR GRAPH know about X?"
-          The built store in `data/kg_graph_v3_1`: collapsed, deduplicated,
+          The built store in `data/stores/kg_graph_v4_gemma3`: collapsed, deduplicated,
           every node carrying self-describing text.  This is what the QA
           generator and the model will see, so it is the layer that settles
           coverage questions -- if a fact is not here, the model cannot use it
@@ -48,10 +48,15 @@ import argparse, os, re, subprocess, sys
 
 # realpath, not abspath: `bin/lookup` may be reached through a symlink, and the
 # store and corpus paths below are all derived from this location.
-HERE = os.path.dirname(os.path.realpath(__file__))
-DATA = os.path.dirname(HERE)
-# Override with KG_STORE=/path/to/store to query an older build.
-STORE = os.environ.get("KG_STORE") or os.path.join(DATA, "kg_graph_v3_1")
+HERE = os.path.dirname(os.path.realpath(__file__))   # data/lookup
+DATA = os.path.dirname(HERE)                         # data
+LIB = os.path.join(DATA, "lib")                      # data/lib -- graph_store
+# Override with KG_STORE=/path/to/store to query an older build -- e.g.
+# kg_graph_v4_gams2b (same graph and text, token_len from the Gemma 2
+# tokenizer), kg_graph_v3_1_gemma3 (before verb morphology was rendered) or
+# kg_graph_v3 (before the v3.1 sense-indexing and unescaping).
+STORE = os.environ.get("KG_STORE") or os.path.join(
+    DATA, "stores", "kg_graph_v4_gemma3")
 RAW = os.path.join(DATA, "kg_raw", "OntoLex DSB")
 
 TYPE_SHIFT = 56
@@ -206,7 +211,7 @@ def cmd_raw_word(args):
 # ------------------------------------------------------------------- store
 
 def load_store():
-    sys.path.insert(0, HERE)
+    sys.path.insert(0, LIB)
     import numpy as np
     from graph_store import load_graph
     G = load_graph(STORE, verbose=False)
@@ -523,7 +528,7 @@ it was built from.""")
     st = sub.add_parser(
         "store", formatter_class=RAWD,
         help="the built graph -- fast, resolved node text",
-        description="""Query the built graph in `data/kg_graph_v3_1`.
+        description="""Query the built graph in `data/stores/kg_graph_v4_gemma3`.
 
 Nodes here carry self-describing text -- `iztočnica: milijonar (samostalnik,
 imenovalnik, ednina)`, `pomen 1: …`, `zgled: …`, `kolokacija: boj + kriminaliteta`
@@ -536,8 +541,9 @@ given verbatim.
 Lookup by id is a binary search over `node_codes.npy` and is instant; lookup by
 word scans the 2.7 GB text blob and takes ~10s.
 
-Set KG_STORE=/path/to/store to query a different build (e.g. the older
-`data/kg_graph_v3`).""")
+Set KG_STORE=/path/to/store to query a different build (e.g.
+`data/stores/kg_graph_v4_gams2b`, identical except for token_len, or the older
+`data/stores/kg_graph_v3_1_gemma3`, before verb morphology was rendered).""")
     sst = st.add_subparsers(dest="what", required=True, metavar="{word,id}")
 
     p = sst.add_parser(

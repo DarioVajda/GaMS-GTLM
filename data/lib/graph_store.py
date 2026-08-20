@@ -3,7 +3,7 @@
 On-disk store for the v3 GTLM graph.
 
 `build_gtlm_graph_v3.build()` spends ~12 minutes (parse -> collapse -> reify ->
-CSR -> GaMS-2B tokenisation) reconstructing the same 36.7M-node graph from 42 GB
+CSR -> tokenisation) reconstructing the same 36.7M-node graph from 42 GB
 of N-Triples on every run, then throws it away.  This module persists that
 result so downstream work (subgraph extraction, TextGraphDataset adaptation)
 loads it in seconds and in ~3 GB of RAM instead of the 200 GB the builder needs.
@@ -17,7 +17,8 @@ Layout of a store directory:
     mwe_set.npy        bool   [n]       anchor is a multi-word expression
     indptr.npy         int64  [n+1]     undirected CSR
     indices.npy        int32  [2*edges] undirected CSR (ids < 2^31)
-    token_len.npy      int32  [n]       GaMS-2B token count of each node text
+    token_len.npy      int32  [n]       token count of each node text, under the
+                                        tokenizer named in manifest.meta
     text_blob.bin      uint8  [...]     all node texts, UTF-8, concatenated
     text_off.npy       int64  [n+1]     byte offsets into text_blob.bin
 

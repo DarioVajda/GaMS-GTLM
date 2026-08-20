@@ -70,6 +70,32 @@ so the cost of flaw #2 can be measured rather than assumed.
      \\\\ occur in this dump; the rest of the escape set is handled anyway and
      unknown escapes pass through unchanged.
 
+  7. MORPHOLOGY IS ACTUALLY MAPPED (v4 text convention).  Three separate faults
+     kept verb morphology out of the node text entirely, so a whole verb
+     paradigm collapsed to a handful of distinct strings:
+        oblika: popraskam (ednina)      <- 1st person present
+        oblika: popraskaj (ednina)      <- 2nd person IMPERATIVE, same text mod surface
+        oblika: popraskata (dvojina)    <- 2nd AND 3rd person dual: BYTE-IDENTICAL
+     (a) VALUE_SL listed person as firstPerson/secondPerson/thirdPerson; the KG
+         emits first/second/third, and feat_string() drops what it cannot map,
+         so person vanished from all 253,497 forms carrying it.
+     (b) FEATURE_PROPS listed "tense" and "mood".  Neither predicate exists in
+         this KG.  What carries the tense/mood distinction is lexinfo:vform
+         (present / imperative / participle / infinitive / supine), which was
+         not in FEATURE_PROPS at all -- 452,782 forms.
+     (c) aspect and clitic hang off the LEXICAL-UNIT, but the feature branch
+         only accepted word-form subjects, so they were dropped even when
+         listed.  They are now collected separately (UNIT_PROPS) and rendered
+         into the anchor parenthetical after the POS.
+     definiteness is mapped too: without it an adjective's definite and
+     indefinite forms carry byte-identical labels.  Measured effect: form nodes
+     byte-identical to a sibling fall 89,405 -> 8,651 (-90.3%).
+     NOTE on reachability: the corpus-wide counts for these predicates (aspect
+     1.7M, vform 2.4M, clitic 424k) are dominated by lexical-unit-part subjects
+     -- MWE components, which flaw #1's collapse discards.  Reachable on word
+     entries: vform 452,782, person 253,497, definiteness 164,812, aspect
+     18,157, clitic 25.
+
 Analysis: 2 (form_mode) x 2 (examples) x 2 (collocations) = 8 variants, reported
 with percentiles, split by seed kind (single word vs MWE).  Tokens = node-text
 tokens + prompt (no relation-label tokens: there are no relation labels).  For
@@ -81,7 +107,10 @@ from collections import defaultdict
 import numpy as np
 from multiprocessing import Pool
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# graph_store lives in data/lib/, one level up and over: it is shared with the
+# lookup CLI and the analysis scripts, so it is not owned by the builder.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
 import graph_store
 
 ONTOLEX = "http://www.w3.org/ns/lemon/ontolex#"
@@ -159,17 +188,44 @@ _num_re    = re.compile(r"^(.*)-(\d+)$")
 _colloc_re = re.compile(r"^dependent-sense-(\d+)-lexical-unit-(\d+)$")
 
 # ---- Slovenian labels ------------------------------------------------------
-FEATURE_PROPS = ("case", "number", "gender", "person", "tense", "mood", "degree")
+# Order matters: it is the order the parenthetical is rendered in.  vform and
+# person lead so a verb form reads "(sedanjik, 1. oseba, ednina)"; case/number/
+# gender/degree keep their v3 relative order, so every NOMINAL string is
+# byte-identical to what v3.1 produced (asserted by run_save_v4_*.sbatch).
+FEATURE_PROPS = ("vform", "person", "case", "number", "gender", "degree",
+                 "definiteness")
+# Properties that sit on the lexical-unit rather than on a word-form.  They are
+# rendered into the ANCHOR parenthetical, right after the POS.
+UNIT_PROPS = ("aspect", "clitic")
 VALUE_SL = {
     "nominative":"imenovalnik","genitive":"rodilnik","dative":"dajalnik",
     "accusative":"tožilnik","locative":"mestnik","instrumental":"orodnik",
     "singular":"ednina","dual":"dvojina","plural":"množina",
     "masculine":"moški spol","feminine":"ženski spol","neuter":"srednji spol",
-    "firstPerson":"1. oseba","secondPerson":"2. oseba","thirdPerson":"3. oseba",
-    "present":"sedanjik","past":"preteklik","future":"prihodnjik",
+    # person: the KG emits first/second/third.  v3 listed only the *Person
+    # spellings, which occur nowhere in this dump, so feat_string() -- which
+    # drops what it cannot map -- silently discarded person on all 253,497
+    # forms that carry it.  See data/README.md Finding 6.
+    "first":"1. oseba","second":"2. oseba","third":"3. oseba",
+    # vform.  This KG has NO lexinfo:tense and NO lexinfo:mood predicate; the
+    # synthetic present, the imperative, the -l participle, the infinitive and
+    # the supine are all vform values.  Past and future are periphrastic and
+    # are not stored at all.
+    "present":"sedanjik","future":"prihodnjik","conditional":"pogojnik",
+    "imperative":"velelnik","participle":"deležnik na -l",
+    "infinitive":"nedoločnik","supine":"namenilnik",
     "positive":"osnovnik","comparative":"primernik","superlative":"presežnik",
-    "indicative":"povedni","imperative":"velelni",
+    # definiteness: without it the definite and indefinite forms of an
+    # adjective carry byte-identical labels and differ only in surface, so no
+    # consumer can tell which is the citation form.
+    "definiteness:yes":"določna oblika","definiteness:no":"nedoločna oblika",
+    # unit-level
+    "perfective":"dovršni","progressive":"nedovršni","biaspectual":"dvovidski",
+    "clitic:bound":"naslonska oblika","clitic:yes":"naslonska oblika",
 }
+# Values whose local name is ambiguous across properties ("yes" is both a
+# definiteness and a clitic value) are looked up as "prop:value" first.
+_AMBIGUOUS_PROPS = ("definiteness", "clitic")
 POS_SL = {
     "noun":"samostalnik","verb":"glagol","adjective":"pridevnik",
     "adverb":"prislov","pronoun":"zaimek","numeral":"števnik",
@@ -185,6 +241,17 @@ TAG_SENSE  = "pomen: "
 TAG_SENSE_N = "pomen {}: "        # polysemous entry: dictionary ordinal
 TAG_SENSE_EX = " (zgled: {})"     # disambiguating snippet, no definition
 SENSE_SNIPPET_CHARS = 60          # default budget for that snippet
+
+# Default tokenizer for token_len.  Every Gemma 3 checkpoint -- 270m, 1b, 4b,
+# 12b, 27b, pt and it alike -- and GaMS3-12B-Instruct share one tokenizer:
+# tokenizer.model is byte-identical across all of them, and encoding 5,000 real
+# node texts gives byte-identical *ids*, not merely equal counts (verified
+# 2026-08-20).  So one build serves the whole iteration ladder, and the name
+# below is a label for which of the interchangeable repos was loaded.
+# The older cjvt/GaMS-2B (Gemma 2, vocab 256,000) is NOT in that family: it
+# costs +0.8% tokens in aggregate on this graph (920,680,698 vs 913,315,688 over
+# all 36.7M nodes), and agrees node for node only 45.97% of the time.
+DEFAULT_TOKENIZER = "cjvt/GaMS3-12B-Instruct"
 TAG_EX     = "zgled: "
 TAG_COLLOC = "kolokacija: "
 TAG_SYN    = "sopomenka: "
@@ -264,6 +331,7 @@ def parse_file(path):
     dfn = []   # (code, str)        skos:definition @sl
     val = []   # (code, str)        rdf:value @sl (example sentences)
     feat = []  # (form_code, prop, value_localname)
+    unit = []  # (lu_code, prop, value_localname)   aspect / clitic
     pos = []   # (lu_code, pos_localname)
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -303,6 +371,15 @@ def parse_file(path):
                         sc = code_of(subj)
                         if sc is not None and (sc >> TYPE_SHIFT) in (T_WORDFORM, T_FORMLU):
                             feat.append((sc, local, _localname(oiri)))
+                    elif local in UNIT_PROPS:
+                        # aspect/clitic hang off the lexical-unit, not off a
+                        # word-form, so the guard above would drop them.  T_PART
+                        # is deliberately excluded: MWE components carry the
+                        # bulk of these triples and are collapsed away, so their
+                        # values are unreachable in the built graph anyway.
+                        sc = code_of(subj)
+                        if sc is not None and (sc >> TYPE_SHIFT) == T_LU:
+                            unit.append((sc, local, _localname(oiri)))
                     continue
                 else:
                     continue
@@ -349,22 +426,41 @@ def parse_file(path):
             arr = np.empty((0, 2), dtype=np.int64)
         out[k] = arr
     out["wr"] = wr; out["wrf"] = wrf; out["dfn"] = dfn
-    out["val"] = val; out["feat"] = feat; out["pos"] = pos
+    out["val"] = val; out["feat"] = feat; out["pos"] = pos; out["unit"] = unit
     return out
 
 
-def feat_string(props, pos_local=None):
-    """-> ' (samostalnik, imenovalnik, ednina)' or ''."""
+def _label(prop, value):
+    """Slovenian label for a feature value, or None if the value is unmapped."""
+    if prop in _AMBIGUOUS_PROPS:
+        return VALUE_SL.get(prop + ":" + value)
+    return VALUE_SL.get(value)
+
+
+def feat_string(props, pos_local=None, unit_props=None):
+    """-> ' (samostalnik, imenovalnik, ednina)' or ''.
+
+    Order is POS, then the lexical-unit properties (aspect / clitic), then the
+    word-form features in FEATURE_PROPS order.
+    """
     parts = []
     if pos_local:
         sl = POS_SL.get(pos_local)
         if sl:
             parts.append(sl)
+    if unit_props:
+        for p in UNIT_PROPS:
+            v = unit_props.get(p)
+            if v is None:
+                continue
+            sl = _label(p, v)
+            if sl:
+                parts.append(sl)
     for p in FEATURE_PROPS:
         v = props.get(p)
         if v is None:
             continue
-        sl = VALUE_SL.get(v)
+        sl = _label(p, v)
         if sl:
             parts.append(sl)
     return " (" + ", ".join(parts) + ")" if parts else ""
@@ -403,6 +499,7 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
     agg = {k: [] for k in EDGE_KEYS}
     wr = {}; wrf = {}; dfn = {}; val = {}
     feat_map = defaultdict(dict)
+    unit_map = defaultdict(dict)
     pos_map = {}
     n_wr_multi = [0]
     with Pool(workers) as pool:
@@ -429,6 +526,7 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
             for c, s in res["dfn"]:     dfn[c] = s
             for c, s in res["val"]:     val[c] = s
             for c, p, v in res["feat"]: feat_map[c][p] = v
+            for c, p, v in res["unit"]: unit_map[c][p] = v
             for c, p in res["pos"]:     pos_map[c] = p
             if (i + 1) % 200 == 0:
                 print(f"[parse] {i+1}/{len(files)}  {time.time()-t0:.0f}s", flush=True)
@@ -461,13 +559,25 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
           f"sense={len(sense):,} usage={len(usage):,} constit={len(constit):,} "
           f"corr={len(corr):,} tsrc={len(tsrc):,} member={len(member):,} "
           f"syn={len(syn):,} ant={len(ant):,} wr={len(wr):,} wrf={len(wrf):,} "
-          f"dfn={len(dfn):,} val={len(val):,} feat={len(feat_map):,} pos={len(pos_map):,}",
+          f"dfn={len(dfn):,} val={len(val):,} feat={len(feat_map):,} "
+          f"unit={len(unit_map):,} pos={len(pos_map):,}",
+          flush=True)
+    n_vform = sum(1 for d in feat_map.values() if "vform" in d)
+    n_person = sum(1 for d in feat_map.values() if "person" in d)
+    n_defnt = sum(1 for d in feat_map.values() if "definiteness" in d)
+    n_aspect = sum(1 for d in unit_map.values() if "aspect" in d)
+    n_clitic = sum(1 for d in unit_map.values() if "clitic" in d)
+    print(f"[feat] reachable on word entries: vform={n_vform:,} person={n_person:,} "
+          f"definiteness={n_defnt:,} aspect={n_aspect:,} clitic={n_clitic:,}",
           flush=True)
     stats["raw"] = {k: int(v) for k, v in dict(
         canon=len(canon), other=len(other), sense=len(sense), usage=len(usage),
         constit=len(constit), corr=len(corr), tsrc=len(tsrc), member=len(member),
         syn=len(syn), ant=len(ant), writtenrep_sl=len(wr), writtenrep_foreign=len(wrf),
         definitions=len(dfn), values=len(val), pos=len(pos_map),
+        feat_forms=len(feat_map), unit_props=len(unit_map),
+        vform=n_vform, person=n_person, definiteness=n_defnt,
+        aspect=n_aspect, clitic=n_clitic,
         writtenrep_multivalued=n_wr_multi[0]).items()}
 
     # ---- collapse MWE decomposition ---------------------------------------
@@ -572,7 +682,8 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
         if not s:
             continue
         text[j] = TAG_ANCHOR + s + feat_string(feat_map.get(fcode, {}),
-                                               pos_map.get(lu))
+                                               pos_map.get(lu),
+                                               unit_map.get(lu))
         kind[j] = K_ANCHOR
     # anchors whose canonical form has no @sl writtenRep: fall back to any of the
     # entry's inflected forms, so the lexical entry is still addressable.
@@ -585,7 +696,8 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
         s = wr.get(int(fcode), "")
         if s:
             text[j] = TAG_ANCHOR + s + feat_string(feat_map.get(int(fcode), {}),
-                                                   pos_map.get(lu))
+                                                   pos_map.get(lu),
+                                                   unit_map.get(lu))
             kind[j] = K_ANCHOR
             n_fallback += 1
     if n_fallback:
@@ -829,7 +941,7 @@ def analyze_variant(G, seeds, max_hops, token_len, prompt_tokens, active):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--kg-dir", default="/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB")
-    ap.add_argument("--out", default="/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/results_v3.json")
+    ap.add_argument("--out", default="/shared/workspace/povejmo/gams_gtlm/data/analysis/results/results_v3.json")
     ap.add_argument("--n-seeds", type=int, default=400)
     ap.add_argument("--max-hops", type=int, default=3)
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "16")))
@@ -843,8 +955,14 @@ def main():
                     help="do not number the senses of a polysemous entry")
     ap.add_argument("--variants", default="",
                     help="comma-separated subset of variant names (default: all 8)")
+    ap.add_argument("--tokenizer", default=DEFAULT_TOKENIZER,
+                    help=f"HF repo whose tokenizer fills token_len "
+                         f"(default: {DEFAULT_TOKENIZER}; every Gemma 3 size "
+                         f"gives identical ids, so the choice among them is "
+                         f"cosmetic). Recorded in the store manifest.")
     ap.add_argument("--no-tokenizer", action="store_true",
-                    help="skip GaMS-2B; use character/4 as a token proxy (smoke tests)")
+                    help="skip the tokenizer; use character/4 as a token proxy "
+                         "(smoke tests)")
     ap.add_argument("--dump-samples", type=int, default=0,
                     help="print N sample node texts per kind and exit after building")
     ap.add_argument("--save-graph", default="",
@@ -902,8 +1020,8 @@ def main():
         os.environ.setdefault("HF_HOME", "/shared/workspace/povejmo/huggingface_cache")
         os.environ["HF_HUB_OFFLINE"] = "1"; os.environ["TRANSFORMERS_OFFLINE"] = "1"
         from transformers import AutoTokenizer
-        tok = AutoTokenizer.from_pretrained("cjvt/GaMS-2B")
-        print("[tok] GaMS-2B loaded", flush=True)
+        tok = AutoTokenizer.from_pretrained(args.tokenizer)
+        print(f"[tok] {args.tokenizer} loaded (vocab {len(tok):,})", flush=True)
         token_len = np.zeros(n, dtype=np.int32)
         uniq = defaultdict(list)
         for i, s in enumerate(texts):
@@ -920,7 +1038,7 @@ def main():
                 for idx in uniq[s]:
                     token_len[idx] = L
         del uniq, keys
-        tok_name = "cjvt/GaMS-2B"
+        tok_name = args.tokenizer
 
     if args.save_graph:
         graph_store.save_graph(
@@ -929,6 +1047,12 @@ def main():
                   "n_files": n_files, "files_limit": args.files_limit,
                   "sense_snippet": args.sense_snippet,
                   "sense_index": not args.no_sense_index,
+                  # A store declares which text convention built it.  v4 renders
+                  # vform/person/definiteness on forms and aspect/clitic on
+                  # anchors; v3.1 rendered none of them.
+                  "text_convention": "v4",
+                  "feature_props": list(FEATURE_PROPS),
+                  "unit_props": list(UNIT_PROPS),
                   "builder": os.path.basename(__file__),
                   "builder_sha256": hashlib.sha256(
                       open(os.path.abspath(__file__), "rb").read()).hexdigest()})

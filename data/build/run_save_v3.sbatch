@@ -1,13 +1,4 @@
 #!/bin/bash
-#
-# v3.1: rebuild the store with two text fixes.  FLAW 5 -- sibling senses of a
-# polysemous entry are no longer byte-identical (dictionary ordinal + a bounded
-# first-example snippet where there is no definition).  FLAW 6 -- N-Triples
-# literal escapes are decoded, so example text no longer carries a literal \".  Writes a NEW store, data/kg_graph_v3_1,
-# so the verified data/kg_graph_v3 (whose store-backed rerun reproduces
-# results_v3.json at MD5 11f4b10c7fbc1e4195795e896a285820) stays intact and the
-# two can be compared node for node.
-#
 #SBATCH --partition=frida
 # Only aga/ana/apl still run Ubuntu 22.04 with /usr/bin/python3 = 3.10, which is
 # what graph_model/.venv was built against; axa and every ix* node are 24.04 and
@@ -27,8 +18,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=90G
 #SBATCH --time=00:45:00
-#SBATCH --job-name=kg_save_v3_1
-#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/logs/save_v3_1_%j.out
+#SBATCH --job-name=kg_save_v3
+#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/logs/save_v3_%j.out
 
 set -euo pipefail
 ROOT=/shared/workspace/povejmo/gams_gtlm
@@ -38,7 +29,7 @@ export VENV=/shared/workspace/povejmo/graph_model/.venv
 # .venv/bin/python is an absolute symlink to /usr/bin/python3, which is not 3.10
 # on every node -- job 128295 died on `axa` with ModuleNotFoundError: numpy.
 # pick_python.sh resolves an interpreter that can actually import the venv here.
-PY=$("$ROOT/data/kg_analysis/pick_python.sh")
+PY=$("$ROOT/data/lib/pick_python.sh")
 if [ "$PY" != "$VENV/bin/python" ]; then
     export PYTHONPATH="$VENV/lib/python3.10/site-packages${PYTHONPATH:+:$PYTHONPATH}"
     echo "note: venv launcher unusable on $(hostname); using $PY + PYTHONPATH"
@@ -49,7 +40,7 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export TOKENIZERS_PARALLELISM=true   # no forks after tokenizer load -> safe & faster
 
-STORE=$ROOT/data/kg_graph_v3_1
+STORE=$ROOT/data/stores/kg_graph_v3
 
 echo "host: $(hostname)  cpus: ${SLURM_CPUS_PER_TASK}  start: $(date)"
 "$PY" -c "import sys, numpy, transformers; print('env OK ', sys.executable, sys.version.split()[0], 'numpy', numpy.__version__, 'transformers', transformers.__version__)"
@@ -61,25 +52,25 @@ echo "host: $(hostname)  cpus: ${SLURM_CPUS_PER_TASK}  start: $(date)"
 #
 # --no-analysis skips the 8 sizing variants (~11 min); results_v3.json already
 # holds them and a store-backed rerun reproduces them byte-identically.
-"$PY" $ROOT/data/kg_analysis/build_gtlm_graph_v3.py \
+"$PY" $ROOT/data/build/build_gtlm_graph_v3.py \
   --kg-dir "$ROOT/data/kg_raw/OntoLex DSB" \
   --workers "${SLURM_CPUS_PER_TASK}" \
   --save-graph "$STORE" \
   --no-analysis
 
 echo "--- verifying the store ---"
-"$PY" $ROOT/data/kg_analysis/graph_store.py "$STORE" --verify
+"$PY" $ROOT/data/lib/graph_store.py "$STORE" --verify
 
 echo "--- store contents ---"
 ls -la "$STORE"
 du -sh "$STORE"
 
 echo "--- sample node texts ---"
-"$PY" $ROOT/data/kg_analysis/graph_store.py "$STORE" --samples 3 >/dev/null 2>&1 || true
+"$PY" $ROOT/data/lib/graph_store.py "$STORE" --samples 3 >/dev/null 2>&1 || true
 "$PY" - <<'PYEOF'
-import sys; sys.path.insert(0, "/shared/workspace/povejmo/gams_gtlm/data/kg_analysis")
+import sys; sys.path.insert(0, "/shared/workspace/povejmo/gams_gtlm/data/lib")
 import numpy as np, graph_store
-G = graph_store.load_graph("/shared/workspace/povejmo/gams_gtlm/data/kg_graph_v3_1", verbose=False)
+G = graph_store.load_graph("/shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v3", verbose=False)
 kind = np.asarray(G["kind"])
 for k, nm in {0:"anchor",1:"form",2:"sense",3:"example",4:"translation",
               5:"collocation",6:"synonym",7:"antonym",8:"other"}.items():
@@ -87,39 +78,6 @@ for k, nm in {0:"anchor",1:"form",2:"sense",3:"example",4:"translation",
     print(f"--- {nm} ({int((kind==k).sum()):,}) ---")
     for i in idx:
         print("   ", G["text"][int(i)][:150])
-
-# FLAW 6 acceptance check: no node text may carry an unresolved N-Triples escape.
-esc = 0
-for k_ in (2, 3):                      # sense snippets inherit example text
-    idx = np.flatnonzero(kind == k_)
-    idx = idx[:400000] if len(idx) > 400000 else idx
-    esc += sum(1 for i in idx if '\\"' in G["text"][int(i)])
-print(f"--- FLAW 6 check: {esc} sense/example nodes still contain a literal "
-      f"backslash-quote (v3 had 3.48% of examples) ---")
-
-# FLAW 5 acceptance check: sibling senses of a polysemous anchor must differ.
-ip, ix, text = G["indptr"], G["indices"], G["text"]
-anchors = np.flatnonzero(kind == 0)
-rng = np.random.default_rng(0)
-multi = dup = 0
-for a in rng.choice(anchors, size=min(200000, len(anchors)), replace=False):
-    ss = [v for v in ix[ip[a]:ip[a+1]] if kind[v] == 2]
-    if len(ss) < 2:
-        continue
-    multi += 1
-    ts = [text[v] for v in ss]
-    if len(set(ts)) < len(ts):
-        dup += 1
-print(f"--- FLAW 5 check: {multi:,} polysemous anchors sampled, "
-      f"{dup:,} still have duplicate sibling sense texts "
-      f"({100.0*dup/max(multi,1):.2f}%; v3 was 97.7%) ---")
-for a in rng.choice(anchors, size=len(anchors), replace=False):
-    ss = [v for v in ix[ip[a]:ip[a+1]] if kind[v] == 2]
-    if len(ss) >= 3:
-        print("   ", text[a][:80])
-        for v in ss[:4]:
-            print("      ", text[v][:130])
-        break
 PYEOF
 
 echo "end: $(date)"

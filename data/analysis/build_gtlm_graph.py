@@ -455,7 +455,7 @@ def analyze_variant(G, seeds, max_hops, token_len, label_len, prompt_tokens, act
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--kg-dir", default="/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB")
-    ap.add_argument("--out", default="/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/results_v2.json")
+    ap.add_argument("--out", default="/shared/workspace/povejmo/gams_gtlm/data/analysis/results/results_v2.json")
     ap.add_argument("--n-seeds", type=int, default=400)
     ap.add_argument("--max-hops", type=int, default=3)
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK","16")))

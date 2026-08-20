@@ -20,10 +20,12 @@ job_logs/
 .inductor_cache/
 **/_inductor_cache/
 
-# packaging
+# packaging.  Anchored with a leading slash so they match ONLY at the repo root:
+# unanchored, `build/` also matches data/build/ (the graph-store pipeline) and
+# silently drops the whole directory from the repo.
 *.egg-info/
-build/
-dist/
+/build/
+/dist/
 
 # editor / OS
 .DS_Store
@@ -31,14 +33,14 @@ dist/
 # assistant context (private)
 CLAUDE_CONTEXT.md
 
-# persisted v3 graph store (3.8 GB artifact, rebuildable from kg_raw in ~15 min)
-data/kg_graph_v3/
+# persisted graph stores: ~4 GB each, rebuildable from kg_raw in ~35 min.  One
+# pattern covers every variant, present and future -- v3, v3_1, v4, and whatever
+# comes next.  The suffix is the tokenizer that filled token_len (_gemma3 is
+# what `lookup` and downstream work read; _gams2b differs only in token_len).
+data/stores/kg_graph_*/
 
-# the lexicographical QA dataset -- an internal sample, NOT public (see README
-# "Data").  Committing it would publish it via GitHub.
-data/Lexical-QA-SLO*
-
-# v3.1 graph store (same 3.8 GB artifact class as kg_graph_v3)
-data/kg_graph_v3_1/
+# the reference lexicographical QA datasets -- an internal sample, NOT public
+# (see README "Data").  Committing them would publish them via GitHub.
+data/datasets/reference/Lexical-QA-SLO*
 
 CLAUDE.md

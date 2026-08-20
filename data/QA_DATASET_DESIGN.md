@@ -1,10 +1,11 @@
 # Lexicographical QA dataset — design decisions
 
-> **Status: design fully locked 2026-08-18; generation not yet started.** This document records the design of the
-> question–answer dataset that pairs with the v3 GTLM input graph. It supersedes any
-> assumption that the two reference QA files in `data/` will be used as training data
-> directly. Companion documents: [`README.md`](README.md) for how the graph is built,
-> and the root [`../README.md`](../README.md) for the model target.
+> **Status: locked 2026-08-18; re-locked 2026-08-20 after the owner meeting of 2026-08-19,
+> which superseded D3 and added D19–D21. Generation not yet started.** This document records
+> the design of the question–answer dataset that pairs with the v3 GTLM input graph. It
+> supersedes any assumption that the two reference QA files in `data/` will be used as
+> training data directly. Companion documents: [`README.md`](README.md) for how the graph is
+> built, and the root [`../README.md`](../README.md) for the model target.
 
 All figures below were measured over the **full** raw KG (all 2,594 `.nt` files in
 `kg_raw/OntoLex DSB/`) unless stated otherwise. Where a number contradicts an earlier
@@ -14,17 +15,40 @@ belief, the earlier belief is called out explicitly.
 
 | | |
 |---|---|
+| **Target** | a public lexicographical Q&A service on the lab website, general-public users, single-turn |
 | **Size** | ~10 k train (≤1 k dev) + ~2 k test |
 | **Types** | 20 — the reference inventory reworked, plus antonyms |
 | **Seeds** | 72,528 core lemmas passing a content filter, sampled across 7 fixed frequency bands |
-| **Extraction** | uniform hop 2; `sestavina` downward always, upward capped at K = 15 |
+| **Entity linking** | no delimiters — external extractor, plain-text lookup, **union ball** when several units match |
+| **Extraction** | uniform hop 2 from every matched unit; `sestavina` downward always, upward capped at K = 15 |
 | **Answers** | gradeable line first (`ODGOVOR: …`), then UI prose; no MSD tags |
 | **Split** | lemma-disjoint; three held-out generalisation tiers, antonyms entirely unseen |
-| **Deferred** | the MWE question family, verbalised collocations, the no-delimiter path — **Section 6** |
+| **Baselines** | no-retrieval, and serialised-graph — the two gaps isolate retrieval and structure |
+| **Deferred** | the MWE question family, verbalised collocations, reasoning-tier items — **Section 6** |
 
 ---
 
-## 1. Why we generate our own items
+## 1. What we are building, and why we generate our own items
+
+### 1.1 Target, users, and how success is judged
+
+Confirmed with the project owner, 2026-08-19.
+
+- **The deliverable is a service** hosted on the lab website, where users query the model
+  about lexicographical properties of Slovene words. Not a paper artefact, not an internal
+  demo.
+- **The users are the general public** — no lexicographic training assumed, no controlled
+  input, arbitrary phrasing. This is the fact behind D3: we cannot impose input conventions
+  on them.
+- **Serving a 12 B model is acceptable.** No latency or concurrency target was set, so there
+  is no throughput constraint to design around in v1.
+- **There is no external number to beat.** A parallel method by colleagues will be compared
+  against this one, but it is a comparison point, not a threshold — so we define our own
+  baselines (D19).
+- **Interaction is single-turn** (D20), and **retaining the base model's general abilities is
+  phase two, not phase one** (D21).
+
+### 1.2 Why we generate our own items
 
 The original plan was to label the existing synthetic questions in
 `Lexical-QA-SLO-test.json` against the knowledge graph. We are instead **extracting the
@@ -231,8 +255,10 @@ owner, 3,148,457 distinct surface strings.**
 | ≤ 3 | 99.1 % |
 | worst case in the KG | 18 (*goli*, *meti*, *ti*, *peti*) |
 
-Resolving a known token to a node is therefore a dict lookup, not a model. The hard part
-is deciding *which* token is the target.
+Resolving a known token to a node is therefore a dict lookup, not a model. The hard part is
+deciding *which* token is the target — which D3 hands to an external extraction model, and
+the residual 11.1 % of strings that resolve to more than one unit are handed to the GTLM
+model as a union of balls.
 
 ---
 
@@ -246,30 +272,52 @@ are reused.
 reference file (verified 1,140/1,140). The persisted store keeps `(type << 56) | id` in
 `node_codes.npy`, so graph node ↔ lexical unit is recoverable in both directions.
 
-**D3 — Entity linking: delimiters required in v1.** Production marks the target word (UI
-tap-to-select, or typed `»…«`); this converts a ranking problem into a lookup. Note that
-**entity resolution is a pipeline heuristic, not something the model can learn** —
-extraction happens before the model runs, so the model cannot help choose its own input.
+**D3 — No delimiters. Entity linking is an external extractor plus a plain-text lookup, and
+the union it returns is part of the model's input.** *(Locked 2026-08-19; supersedes the
+earlier "delimiters required in v1, ~60/40 delimited/plain".)* We cannot require general-
+public users to mark the word they are asking about, and the UI question is moot. The
+production pipeline is:
 
-The dataset carries **both delimited and plain phrasings, ~60/40**. This is free — the
-graph and the answer are identical, only the question string differs — and it buys
-robustness to how users actually type.
+1. an **external model extracts the relevant word(s)** from the user's question — a separate
+   model, not the GTLM one;
+2. each extracted string is **looked up verbatim** in the surface-form reverse index
+   (Section 3.2);
+3. the **hop-2 ball of every exact match is extracted**, and where there is more than one
+   match — several extracted words, or one surface string owning several lexical units — the
+   GTLM model receives their **union**.
 
-The no-delimiter production path is **deferred** (see Section 6). Its design, for the
-record: tokenize → drop metalanguage stopwords (a closed list, since we author the
-templates) → look up survivors in the reverse index, where 88.9 % of strings resolve to
-exactly one lexical unit → if 2–3 candidates survive, extract the **union** of their balls
-(p50 = 19 / p99 = 740 nodes, so this is affordable) and let the model select. That last
-step is the only learned part, and it needs a training slice of multi-entity balls — which
-is why it is deferred together with the path that would consume it. Union extraction is
-also the only thing that handles cross-POS homonymy delimiters cannot resolve
-(`»kot«` = angle / as).
+Four consequences, all binding on generation:
+
+- **Discriminating the intended neighbourhood from the accidental ones is a learned skill,
+  and it is in v1 by construction.** This supersedes the earlier claim that entity
+  resolution is a pipeline heuristic the model cannot help with: *resolution* is upstream,
+  but *selection among what resolution returned* is the model's job and is supervised
+  throughout the dataset. It is also the only mechanism that handles cross-POS homonymy
+  (`kot` = angle / as), which delimiters could never have resolved anyway.
+- **Dataset extraction runs the identical pipeline.** Neighbourhoods for training items are
+  built by the same extract-look-up-union procedure, never by privileged knowledge of which
+  lexical unit the generator started from. Multi-entity balls are therefore **not a quota'd
+  slice** — their share is whatever the pipeline naturally yields on real question strings,
+  which is what makes the training distribution representative of inference.
+- **All question phrasings are plain prose.** No `»…«` or `"…"` variants are generated. A
+  user who does type delimiters costs nothing: the extractor consumes them as ordinary
+  text.
+- **Cost stays affordable.** 88.9 % of surface strings resolve to exactly one lexical unit,
+  97.2 % to ≤ 2, 99.1 % to ≤ 3 (worst case 18 — *goli, meti, ti, peti*). Two or three balls
+  against single-seed sizes of p50 = 19 / p99 = 740 nodes stays well inside the budget in
+  D4.
+
+Whether users will paste a whole sentence and ask about one word in it is **unknown** (asked
+2026-08-19, no answer). The extractor makes it a non-issue for linking either way, and
+`primeri_uporabe/analiza_oblike_v_povedi` supplies sentence-bearing items regardless.
 
 **D4 — One extraction policy for all questions: hop 2, uniform.** Production accepts
 arbitrary questions, so extraction must not branch on question type. Hop 2 is the floor
 (synonyms, antonyms and collocations are reified nodes one hop past the sense) and also
 the ceiling (those nodes carry both lemmas in their own text). Measured cost on word
-seeds: p50 = 19, p90 = 76, p99 = 740, max = 1,039 nodes.
+seeds: p50 = 19, p90 = 76, p99 = 740, max = 1,039 nodes. The policy applies **per matched
+lexical unit**; when D3's lookup returns several, the union multiplies the node count but
+not the policy.
 
 **D5 — `sestavina` traversal is directional and capped.** Downward (MWE → word) always,
 being bounded at 22. Upward (word → MWE) capped at **K = 15**, deterministically ranked —
@@ -284,9 +332,12 @@ elaborating and a truncated generation is still gradeable. Eval parses part 1 on
 validation script checks part 2 does not contradict it. **No MSD tags** — morphology is
 answered in words.
 
-**D7 — A "not recorded" slice is included by construction.** Three flavours: the entity
-does not exist; it exists but lacks the relation; it has the relation but not for the sense
-asked about. The gradeable line gets a fixed sentinel (working form
+**D7 — A "not recorded" slice is included by construction.** Four flavours: the entity does
+not exist; it exists but lacks the relation; it has the relation but not for the sense asked
+about; and — following from D3 — **the relation is present in the extracted ball but only on
+a co-extracted distractor unit**, where answering from it would be wrong. That last flavour
+is the negative counterpart of the discrimination skill D3 makes the model's job, and it is
+the only thing that stops "the answer is somewhere in the input" from being a safe bet. The gradeable line gets a fixed sentinel (working form
 `ODGOVOR: ni podatka v bazi`) so identification can be scored exactly. The UI part states
 that no explicit information is recorded and then offers whatever *is* attached to the
 entity — e.g. no definition, but here are its collocations. **The negatives must mostly be
@@ -328,6 +379,9 @@ ball may overlap a training lemma's ball.
   model that learned to read `sopomenka: …` nodes can read `protipomenka: …` nodes it was
   never supervised on. The strongest available probe of whether graph attention generalises.
 
+The owner asked specifically for good out-of-distribution behaviour (2026-08-19), so these
+three tiers are a **headline result** in v1, not a side experiment.
+
 **D13 — v1 is retrieval-focused**, matching the reference set. Reasoning-heavier items
 (aggregation, filtering, multi-hop) are deferred; Tier B/C will be the only place reasoning
 is probed in v1.
@@ -343,6 +397,10 @@ is probed in v1.
 `stopnjevanje/vse_stopnje` is regenerated from `lexinfo:degree` rather than imitated: the
 reference version is degenerate in 99/100 rows. `pomen/stevilka_pomenov` fixes the
 Slovene number agreement that is wrong in 100/100 reference rows.
+
+Asked which types matter most in practice and which are generator filler, the owner said
+**all of them matter** (2026-08-19). No type is dropped as filler, and the inventory is not
+trimmed further for v1.
 
 **D15 — Morphological ambiguity is split across the two form-analysis types.** The graph
 lists every reading a surface form can carry but cannot pick between them; only the
@@ -371,13 +429,72 @@ lemmas genuinely missing the relation and ~30 % nonexistent entities. Held-out t
 Tier A ~5 %, Tier B ~3 %, Tier C = 100 % of antonym items. Sentinel wording:
 **`ODGOVOR: ni podatka v bazi`**.
 
-**D18 — The builder renders `aspect`, `vform` and `clitic` into node text.**
-`FEATURE_PROPS` in `build_gtlm_graph_v3.py` currently covers only
-case/number/gender/person/tense/mood/degree, so `besedna_vrsta/vrsta_in_vid_glagola` and
-`spreganje/neosebne_oblike` would be ungeneratable — the facts are in the RDF
-(`aspect` 1,735,245 · `vform` 2,353,283 · `clitic` 423,585) but not in what the model reads.
-~12 min rebuild plus a re-save of the 3.8 GB store, combined with the tokenizer
-re-measurement in R1 so it is one run, not two.
+**D18 — The builder renders `aspect`, `vform`, `clitic`, `person` and
+`definiteness` into node text.** *(Done 2026-08-20 — the **v4** stores
+`data/stores/kg_graph_v4_gemma3` and `data/stores/kg_graph_v4_gams2b`; see `README.md`
+**Finding 6**.)*
+
+Scoping this decision turned up that it was worse than "some features are not
+rendered". Three separate faults kept **all** verb morphology out of the text:
+
+- `FEATURE_PROPS` listed `person`, but `VALUE_SL` mapped
+  `firstPerson`/`secondPerson`/`thirdPerson` while the KG emits
+  `first`/`second`/`third` — and `feat_string()` drops unmapped values silently.
+  Person vanished from **253,497** forms.
+- `FEATURE_PROPS` listed `tense` and `mood`. **Neither predicate exists in this
+  KG.** The distinction lives in `lexinfo:vform` (`present`, `imperative`,
+  `participle`, `infinitive`, `supine`) on **452,782** forms — and `vform` was
+  not listed at all. **Preteklik and prihodnjik are periphrastic and are not
+  stored**, which is a hard constraint on `spreganje/*` (see `QA_TASKS.md` T5/T6).
+- `aspect` and `clitic` hang off the **lexical-unit**, but the feature branch
+  only accepted word-form subjects, so they were dropped even when listed.
+
+So `spreganje/celotno_spreganje`, `spreganje/spreganje_v_casu`,
+`spreganje/neosebne_oblike` and `besedna_vrsta/vrsta_in_vid_glagola` were all
+ungeneratable, not merely impoverished. Measured effect of the fix: form nodes
+byte-identical to a sibling fall **86,848 → 418 (−99.5 %)**. `definiteness` was
+added in the same pass because without it an adjective's definite and indefinite
+forms carry byte-identical labels, which blocks citation-form selection for
+`stopnjevanje/vse_stopnje` and `sklanjanje/*`.
+
+**Correction to the Section 3 census, and it supersedes part of Section 6.3.**
+The corpus-wide counts (`aspect` 1,735,245 · `vform` 2,353,283 · `clitic`
+423,585) are dominated by `lexical-unit-part` subjects — MWE components, which
+the builder's `Component` collapse discards. Reachable on word entries: `vform`
+**452,782**, `person` **253,497**, `definiteness` **160,524**, `aspect`
+**18,157**, `clitic` **25**. All 18,157 single-word verbs carry an aspect, so
+verb-aspect questions are fully supported — but **a clitic/negation question type
+is dead at 25 units**, which supersedes Section 6.3's claim that it is "arguably
+the first thing to add back after the MWE family".
+
+**D19 — Two baselines, isolating two different things.** There is no external target
+(Section 1.1), so every result is reported against both:
+
+1. **No-retrieval** — the same model, the same questions, nothing retrieved. Measures how
+   much of this is already in the weights.
+2. **Serialised graph** — the same model given the *same* extracted subgraph flattened to
+   plain text instead of presented as graph structure. Measures what the structure buys over
+   merely having the facts in context.
+
+The gap from (1) to (2) is the value of retrieval; the gap from (2) to GTLM is the value of
+structure. Both run on the identical item set, so neither costs extra generation. The
+colleagues' parallel method is a comparison point, not a threshold.
+
+**D20 — Single-turn, no personas, no JSON.** Every item is one self-contained question and
+one answer. Assistant-style multi-turn behaviour was called "not necessary" (2026-08-19);
+follow-up handling ("*in v množini?*") and off-topic refusal were both left unspecified, so
+neither is trained for or evaluated in v1. The older reference file's `has_role` (286 items)
+and `is_json_format` (353 items) behaviours are **not reproduced** — nobody knows who added
+them or why (asked 2026-08-19), and neither is part of the service. Output shape is fixed by
+D6 for every item.
+
+**D21 — Capability retention is phase two, deliberately.** Preserving the base model's
+general abilities is "highly preferable", but it comes *after* establishing that the model
+can answer these questions from a subgraph at all. v1 therefore carries **no
+general-instruction replay slice**: the dataset is pure task data. Mitigating forgetting —
+replay mixing, LoRA, adapters — is taken up once the task itself is demonstrated in
+isolation. Recorded so that the absence of replay data reads as a decision rather than an
+oversight.
 
 ---
 
@@ -465,6 +582,8 @@ their real surface phrase (`form-lexical-unit-8148598 → "divji brin"`) unlike 
 
 Deferred purely on implementation risk: this is the only family that depends on the D5
 upward cap behaving, and it was not worth carrying that risk into a first 12 k-item set.
+The owner confirmed the deferral independently (2026-08-19): idiom and multiword questions
+are **not urgent, "probably nice to have"**.
 Nothing else about it is problematic — the downward traversal it needs is bounded at 22
 across the entire graph.
 
@@ -493,19 +612,19 @@ scale — 65,480 core lemmas have collocations.
 with what credentials; what exactly does it return per lexeme; is there a bulk export
 rather than 65 k individual calls.
 
-### 6.3 The no-delimiter production path
+### 6.3 Other
 
-The lexicon-match fallback plus union extraction described in D3, together with the
-training slice of **multi-entity balls** that its final step would need. Deferred as a
-unit — building the training slice before the path that consumes it is work with no
-consumer.
-
-### 6.4 Other
-
-- **Clitics and negation as a question type.** Dropped by the newer reference file, though
-  the KG supports it (`clitic yes` 423,503 · `negative yes` 6,630). D18 renders `clitic`
-  into node text anyway, so this becomes cheap once v1 ships — arguably the first thing to
-  add back after the MWE family.
+- **A no-LLM extraction fallback.** If the external extractor of D3 is ever unavailable at
+  serving time: tokenize → drop metalanguage stopwords (a closed list, since we author the
+  templates) → look up the survivors in the reverse index and union whatever resolves. Same
+  downstream path as D3, so nothing else changes. A backstop, not a plan.
+- ~~**Clitics and negation as a question type.**~~ **Effectively dead — see the
+  reachability correction in D18.** The `clitic yes` 423,503 figure counts
+  `lexical-unit-part` subjects, i.e. MWE components, which the builder collapses
+  away. Only **25** single-word entries carry a `clitic` value in the whole KG,
+  so there is no pool to sample from. Negation is thinner still on the `yes`
+  side (6,630) and is not rendered at all. Anything here would have to come from
+  the MWE family (Section 6.1), not from word entries.
 - **Reasoning-tier items** (aggregation, filtering, multi-hop) — D13.
 - **CLASSLA-disambiguated form analysis** — would let `analiza_oblike_v_povedi` use
   ambiguous forms with a single correct reading, at the cost of a tagger dependency and
@@ -520,9 +639,11 @@ consumer.
 
 | # | item |
 |---|---|
-| **R1** | **Token budgets need a re-run.** The store's `token_len` used the `cjvt/GaMS-2B` tokenizer, while the model target moved to Gemma 3 / GaMS3-12B, *and* the D-locked builder change adds `aspect`/`vform`/`clitic` text to form nodes. Both shift the numbers; one rebuild settles both. All token figures in [`README.md`](README.md) are stale until then. |
+| **R1** | ~~Token budgets need a re-run.~~ **Closed 2026-08-20.** Both halves shipped. *Tokenizer:* rebuilt on Gemma 3 (job 129258), worth **−0.80 %** over the whole graph (913,315,688 vs 920,680,698 tokens; 45.97 % of nodes agree node for node), so pre-existing token figures are within ~1 % and were not restated. Every Gemma 3 size shares this tokenizer with GaMS3-12B — identical ids, not just identical counts — so one store serves the whole iteration ladder. *Text:* D18's morphology rendering shipped as the **v4** stores (`kg_graph_v4_gemma3`, `kg_graph_v4_gams2b`); it adds labels to 452,782 form nodes and 18,182 anchors. Token effect is recorded in `README.md` Finding 6. |
 | **R2** | **Verify the D15 intersection** — lemmas with a direct usage example whose form in that example is unambiguous. If too thin, fall back to the disjunction for `analiza_oblike_v_povedi` and record it. |
 | **R3** | **Compute the band × type availability matrix** before generating, and shrink or borrow for thin cells (Section 5). |
+| **R4** | **The extraction model of D3 is unspecified** — which model, where it runs, what it costs. Its misses are end-to-end service errors: if it does not return the target word, the right ball is never extracted and no amount of GTLM training recovers it. Pick the model, then measure its recall against our own templates (we author them, so the gold target word is known for free) before generating at scale. |
+| **R5** | **Measure the natural multi-entity rate.** D3 makes the union share whatever the pipeline produces rather than a quota, so it has to be measured on real question strings, not assumed from the 88.9 % single-match figure — that figure is over *all* surface strings, and our templates sample lemmas, not forms. If the rate comes out near zero, the discrimination skill is untrained in practice and we oversample ambiguous seeds to compensate. |
 
 ---
 

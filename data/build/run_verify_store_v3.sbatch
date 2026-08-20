@@ -11,12 +11,12 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:40:00
 #SBATCH --job-name=kg_verify_store
-#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/logs/verify_store_%j.out
+#SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/logs/verify_store_%j.out
 
 set -euo pipefail
 ROOT=/shared/workspace/povejmo/gams_gtlm
 export VENV=/shared/workspace/povejmo/graph_model/.venv
-PY=$("$ROOT/data/kg_analysis/pick_python.sh")
+PY=$("$ROOT/data/lib/pick_python.sh")
 if [ "$PY" != "$VENV/bin/python" ]; then
     export PYTHONPATH="$VENV/lib/python3.10/site-packages${PYTHONPATH:+:$PYTHONPATH}"
 fi
@@ -24,15 +24,15 @@ fi
 echo "host: $(hostname)  cpus: ${SLURM_CPUS_PER_TASK}  start: $(date)"
 
 # Same seed and settings as run 126763, but sourced entirely from the store.
-"$PY" $ROOT/data/kg_analysis/build_gtlm_graph_v3.py \
-  --load-graph "$ROOT/data/kg_graph_v3" \
-  --out        "$ROOT/data/kg_analysis/results_v3_from_store.json" \
+"$PY" $ROOT/data/build/build_gtlm_graph_v3.py \
+  --load-graph "$ROOT/data/stores/kg_graph_v3" \
+  --out        "$ROOT/data/analysis/results/results_v3_from_store.json" \
   --n-seeds 400 --max-hops 3 --seed 42
 
 echo "--- diff against the published results_v3.json ---"
 "$PY" - <<'PYEOF'
 import json
-R = "/shared/workspace/povejmo/gams_gtlm/data/kg_analysis/"
+R = "/shared/workspace/povejmo/gams_gtlm/data/analysis/results/"
 a = json.load(open(R + "results_v3.json"))
 b = json.load(open(R + "results_v3_from_store.json"))
 print("variants identical:", a["variants"] == b["variants"])
