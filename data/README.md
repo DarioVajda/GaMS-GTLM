@@ -669,6 +669,180 @@ invariant holds.
 
 ---
 
+## Finding 10 — noun gender was never in the store, and the recorded one-line fix could not have put it there
+
+> **Status: fixed in v6, built and verified 2026-08-21.** Store
+> `data/stores/kg_graph_v6_gemma3` (job 129977, `apl`, **17 min 35 s**),
+> `ACCEPTANCE: PASS`. Builder flaw 9, recorded as **M4** in `QA_TASKS.md` §0.7;
+> acceptance `build/check_v6_text.py`; job script `build/run_save_v6.sbatch`.
+> Text-only change: `node_codes` / `ntype` / `kind` / `mwe_set` / `indptr` are
+> **md5-identical** to v5, `indices` identical as a per-row multiset (0.46 % of
+> rows reordered by `imap_unordered`). **310,362 of 36,735,791 nodes changed
+> text (0.84 %), every one of them an anchor**; noun-anchor gender coverage
+> **100.000 %**; sampled noun form leaves carrying a gender: **0**.
+>
+> *Provenance note:* `manifest.meta.builder_sha256` is `f790dbf4…`, the builder as
+> it stood at save time. Two edits landed after the job exited — the narrowed
+> `FEATURE_PROPS` ordering comment, and `gender(form)=` / `gender(entry)=` in the
+> `[feat]` diagnostic — so the file now hashes differently. Both are a comment and
+> a `print`; neither touches node text, and a rebuild would produce a
+> byte-identical store. The store was **not** rebuilt to resynchronise the hash.
+
+Every noun in this KG has a gender, and no store through v5 contained a single one
+of them. `iztočnica: miza (samostalnik, imenovalnik, ednina)` never said that *miza*
+is feminine.
+
+### Why it hid for three versions
+
+The predicate looked rendered, because it *was* rendered — for the wrong half of the
+data. This KG carries `lexinfo:gender` at **two levels, on disjoint parts of speech**:
+
+| subject | what the gender means | triples | rendered |
+|---|---|--:|---|
+| `word-form` | agreement feature of an adjective or *-l* participle | 3,242,639 | since v3 |
+| `lexical-unit` | **inherent gender of a noun** | **310,362** | **only since v6** |
+
+So `oblika: popraskal (deležnik na -l, ednina, moški spol)` was in the store and
+looked like proof the feature worked. Caveat 3 of this document said in so many
+words that v4 "maps … `gender` … on forms", which is true and was exactly the
+sentence that made the gap invisible. Finding 6's flaw 7c had already fixed this
+*class* of bug for `aspect` and `clitic` — entry-level properties dropped by a
+form-level subject guard — and left `gender` behind, because `gender` was the one
+member of the class that also legitimately existed at the form level.
+
+### The recorded fix does not work, and the reason generalises
+
+`QA_TASKS.md` §0.7 proposed, and this README implied, a one-line change:
+
+```python
+UNIT_PROPS = ("aspect", "gender", "clitic")
+```
+
+**That changes nothing.** `gender` was already in `FEATURE_PROPS`, and the parse
+branch tested the two sets in order:
+
+```python
+if local in FEATURE_PROPS:                              # gender matches HERE
+    if (sc >> TYPE_SHIFT) in (T_WORDFORM, T_FORMLU):    # a lexical-unit fails this
+        feat.append(...)                                # ... so it is dropped
+elif local in UNIT_PROPS:                               # unreachable for gender, forever
+    ...
+```
+
+Every noun-entry gender was routed into the **form** branch, discarded by the
+subject-type guard, and the `elif` could never run — adding the name to the second
+set leaves that path untouched. The lesson is not about gender: **an `if set-A /
+elif set-B` dispatch silently assumes a property belongs to exactly one set**, and
+breaks the moment one legitimately belongs to both. v6 dispatches on the **subject
+type** and consults both sets.
+
+### The gender goes on the anchor, and the forms inherit it
+
+Rendered on the **anchor only** —
+
+```
+iztočnica: miza (samostalnik, imenovalnik, ednina)
+iztočnica: miza (samostalnik, ženski spol, imenovalnik, ednina)
+```
+
+— with the entry's form leaves left untouched. Two reasons, both measured:
+
+1. **It is an entry property, not a form property.** The source models it that way;
+   a noun's word-forms carry only `case` and `number`. Repeating it down the
+   paradigm would assert something the export does not.
+2. **Every form leaf is adjacent to its anchor**, so no extracted ball can contain a
+   noun form without the node carrying its gender. Measured on the v5 store
+   (`analysis/check_gender_reachability.py`): **200,000 of 200,000** sampled form
+   leaves have an anchor at hop 1. Repeating the label would have written it onto
+   **5,176,265** noun form leaves instead of **310,362** anchors — **×16.7**, on the
+   same argument as Finding 2: node text is what the LM reads, and the cheapest
+   correct encoding wins.
+
+`check_v6_text.py` asserts the inheritance rather than trusting it: noun form leaves
+must contain **no** gender label, and **only anchors** may differ from v5. This is
+the narrowing M4 called for — v4's "nominal strings are byte-identical to v3.1"
+assertion moves onto nominal *form* nodes, which is where it still holds.
+
+### Verified against the raw dump, not the store
+
+`analysis/scan_gender.py` over all 401 `*-words.nt`:
+
+| | |
+|---|--:|
+| noun lexical units | 310,362 |
+| carrying a gender | **310,362 (100.00 %)** |
+| carrying **more than one** | **0** |
+| any other POS carrying an entry gender | **0** |
+| distribution | masculine 223,357 · feminine 75,460 · neuter 11,545 |
+
+Every noun has exactly one, nothing else has any — so the property's two roles never
+collide on one node and both can be rendered unambiguously. The build confirms it at
+scale: `unit=328,544` parsed entry-level properties is exactly
+310,362 gender + 18,157 aspect + 25 clitic.
+
+### The text blob delta is exact, which settles the blast radius without sampling
+
+`text_blob.bin` grew **2,729,398,242 → 2,733,519,953 bytes, +4,121,711**. That figure
+is not approximately the expected cost — it *is* the expected cost, to the byte,
+computed from the raw-dump gender counts and the UTF-8 length of each inserted label
+(including its `, ` separator):
+
+| label | anchors | bytes each | total |
+|---|--:|--:|--:|
+| `moški spol, ` | 223,357 | 13 | 2,903,641 |
+| `ženski spol, ` | 75,460 | 14 | 1,056,440 |
+| `srednji spol, ` | 11,545 | 14 | 161,630 |
+| | | | **4,121,711** |
+
+Exact agreement over a 2.7 GB blob is a stronger statement than any sampled check:
+**exactly** 310,362 nodes changed, each gained **exactly one** gender label, the
+store's gender distribution matches the export's, and nothing else in the entire
+text blob moved by a single byte. A stray label on a form leaf, a double-rendered
+anchor, or a re-ordered parenthetical would all have shown up here as a mismatch.
+
+`token_len` says the same thing independently. Over all 36,735,791 nodes:
+
+| | v5 | **v6** |
+|---|--:|--:|
+| Total Gemma 3 tokens | 917,184,046 | **918,425,494** (**+0.135 %**) |
+| Mean tokens per node | 24.967 | **25.001** |
+| Nodes whose token count changed | — | **310,362** |
+| Token delta on those nodes | — | **+4, on every one of them** |
+
+The delta histogram is the single entry `{+4: 310,362}` — all three genders cost
+four tokens, so the change is 4 tokens × the noun-anchor count and nothing else.
+Compare Finding 6's v4 morphology pass at +0.50 %: this is a third of that, for a
+feature that unblocks a whole question type.
+
+### The acceptance check's own trap: 68 nouns that are not nouns
+
+The first run of `check_v6_text.py` reported **310,430** noun anchors and
+**99.978 %** coverage — 68 anchors apparently tagged `samostalnik` with no gender.
+The store was complete; the *check* was wrong. It selected noun anchors with
+`"samostalnik" in text`, which matches the **lemma**, and the export contains 68
+multi-word grammatical-terminology entries whose lemma is literally about nouns:
+
+```
+iztočnica: abstraktni samostalnik
+iztočnica: spol samostalnika
+iztočnica: moški samostalniki
+iztočnica: opis z dvema samostalnikoma namesto s pridevnikom in samostalnikom
+```
+
+These are MWEs. No multi file carries `partOfSpeech` at all, so they have no
+parenthetical, no POS tag, and nothing to hold a gender. The fix is to test
+membership in the parsed parenthetical rather than the whole string, after which
+coverage is **310,362 / 310,362 = 100.000 %** and `COVERAGE_MIN` is set to 1.0 —
+the honest threshold, since anything looser lets a future regression hide in the
+slack. Worth remembering for any check keyed on a Slovenian POS tag: **the tag
+vocabulary and the lemma vocabulary overlap**, and a dictionary of Slovenian
+contains the words for its own parts of speech.
+
+**What it unblocks.** T9 (`spol_samostalnika`) was ungeneratable from any store and
+T8's noun row was POS-only; both run against a v6 store.
+
+---
+
 ## Practical implications
 
 - **Collocations can stay in unconditionally.** They cost ~0 % at the median and
@@ -694,11 +868,17 @@ invariant holds.
 cd /shared/workspace/povejmo/gams_gtlm
 sbatch data/analysis/run_build_v3.sbatch        # -> data/analysis/results/results_v3.json
 sbatch data/build/run_save_v3.sbatch            # -> data/stores/kg_graph_v3/
-sbatch data/build/run_save_v5.sbatch gemma3     # -> data/stores/kg_graph_v5_gemma3/  (current)
+sbatch data/build/run_save_v6.sbatch gemma3     # -> data/stores/kg_graph_v6_gemma3/  (current)
+sbatch data/build/run_save_v6.sbatch gams2b     # -> data/stores/kg_graph_v6_gams2b/
+sbatch data/build/run_save_v5.sbatch gemma3     # -> data/stores/kg_graph_v5_gemma3/  (v6's acceptance reference)
 sbatch data/build/run_save_v5.sbatch gams2b     # -> data/stores/kg_graph_v5_gams2b/
 sbatch data/build/run_save_v4.sbatch gemma3     # -> data/stores/kg_graph_v4_gemma3/  (v5's acceptance reference)
 sbatch data/build/run_save_v4.sbatch gams2b     # -> data/stores/kg_graph_v4_gams2b/
 ```
+
+Each `run_save_vN` acceptance-checks the store it builds against the **same
+tokenizer's** v(N−1) store, so build the reference first or the job stops before
+the rebuild.
 
 - Pipeline: stream-parse → collapse MWE parts → merge lemma → dedup collocations
   → reify syn/ant/colloc → Slovenian self-describing text → undirected CSR BFS →
@@ -791,15 +971,20 @@ directory is named for the tokenizer that filled it:
 
 | directory | tokenizer | text convention | status |
 |---|---|---|---|
-| `data/stores/kg_graph_v5_gemma3` | `cjvt/GaMS3-12B-Instruct` (vocab 262,145) | v5 | **current** — what `lookup` and downstream work read |
-| `data/stores/kg_graph_v4_gemma3` | `cjvt/GaMS3-12B-Instruct` | v4 | superseded by v5 — collocations as lemma pairs (Finding 8); kept as the acceptance reference |
+| `data/stores/kg_graph_v6_gemma3` | `cjvt/GaMS3-12B-Instruct` (vocab 262,145) | v6 | **current** — what `lookup` and downstream work read |
+| `data/stores/kg_graph_v5_gemma3` | `cjvt/GaMS3-12B-Instruct` | v5 | superseded by v6 — no noun gender on anchors (Finding 10); kept as the acceptance reference |
+| `data/stores/kg_graph_v4_gemma3` | `cjvt/GaMS3-12B-Instruct` | v4 | superseded by v5 — collocations as lemma pairs (Finding 8); kept as v5's acceptance reference |
 | `data/stores/kg_graph_v4_gams2b` | `cjvt/GaMS-2B` (vocab 256,000) | v4 | for tokenizer diffing |
 | `data/stores/kg_graph_v3_1_gemma3` | `cjvt/GaMS3-12B-Instruct` | v3.1 | superseded by v4 — no morphology on verb forms |
 | `data/stores/kg_graph_v3_1_gams2b` | `cjvt/GaMS-2B` | v3.1 | superseded; kept for diffing |
 | `data/stores/kg_graph_v3` | `cjvt/GaMS-2B` | v3 | pre-v3.1 sense conventions |
 
-`manifest.meta.colloc_text` records `phrase` (v5) or `pair` (v3/v4) — the builder
+`manifest.meta.colloc_text` records `phrase` (v5/v6) or `pair` (v3/v4) — the builder
 can still produce either via `--colloc-text`, and the two differ in node text only.
+`manifest.meta.text_convention` is derived rather than hard-coded: a store claims
+**v6** only when `gender` is in `UNIT_PROPS` *and* collocations are verbalised, so a
+store built with either switched back off cannot misreport itself as current.
+`manifest.meta.unit_props` records the entry-level properties in full.
 
 `manifest.meta.text_convention` records which convention built a store, alongside
 `feature_props` and `unit_props`, so a store declares what its node text contains
@@ -865,7 +1050,7 @@ lookup raw id 34748                    # every raw triple touching it (~8s)
 lookup raw iri word-form-1567346       # the same for any IRI
 ```
 
-Store lookups read `data/stores/kg_graph_v5_gemma3`; `KG_STORE=/path` points them elsewhere.
+Store lookups read `data/stores/kg_graph_v6_gemma3`; `KG_STORE=/path` points them elsewhere.
 The wrapper picks an interpreter that can actually import numpy **on the current
 node**, falling back to `pick_python.sh`, so it does not hit the 3.10-only trap
 that killed job 128295. `KG_PYTHON=/path/to/python` overrides that choice.
@@ -943,12 +1128,16 @@ tokenizer, `--kg-dir`, the file count and a SHA-256 of the builder script. Check
    example-bearing senses remain largely **disjoint populations** — which is
    what makes the v3.1 example-snippet fallback work; see **Finding 4**. The
    thinness itself is unfixed and unfixable from this source.
-3. ~~**Morphology mapping is partial.**~~ **Fixed in v4** — see Finding 6, which
-   also shows the caveat understated the problem: `person` was listed but
-   silently dropped, and `tense`/`mood` were listed but do not exist as
-   predicates in this KG. v4 maps `vform`, `person`, `case`, `number`, `gender`,
-   `degree`, `definiteness` on forms and `aspect`, `clitic` on anchors. Still
-   unrendered: `negative` (121,229, of which only 6,630 are `yes`) and `animate`.
+3. ~~**Morphology mapping is partial.**~~ **Fixed in v4, completed in v6** — see
+   Finding 6, which also shows the caveat understated the problem: `person` was
+   listed but silently dropped, and `tense`/`mood` were listed but do not exist
+   as predicates in this KG. v4 maps `vform`, `person`, `case`, `number`,
+   `gender`, `degree`, `definiteness` on forms and `aspect`, `clitic` on
+   anchors. **That "`gender` on forms" hid the last gap for two versions**: this
+   KG stores `gender` at *both* levels, and the entry-level half — every noun —
+   reached no store until **v6** (Finding 10). v6 maps `gender` on anchors too.
+   Still unrendered: `negative` (121,229, of which only 6,630 are `yes`) and
+   `animate`.
 4. **The writtenRep tie-break is a heuristic.** "Fewest capitals, then
    lexicographic" is right for `BOJ/Boj/boj` and harmless for `Beznik`, but a
    proper noun that also lists a lowercase variant would be lower-cased.

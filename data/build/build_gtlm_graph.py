@@ -128,6 +128,35 @@ so the cost of flaw #2 can be measured rather than assumed.
      Controlled by --colloc-text {phrase,pair}; the skip condition stays on the
      members, so structure is byte-identical to a v4 store of the same tokenizer.
 
+  9. NOUN GENDER REACHES THE TEXT (v6 text convention).  Flaw 7c fixed the
+     subject-type guard for aspect and clitic but left `gender` behind, and the
+     reason is worth stating because the obvious patch does not work.  This KG
+     carries lexinfo:gender at BOTH levels, on disjoint parts of speech: on a
+     word-form it is the agreement feature of an adjective or an -l participle
+     (3,242,639 triples, rendered since v3), and on a lexical-unit it is the
+     inherent gender of a noun (310,362 triples, rendered by nothing until v6).
+     Because `gender` was already in FEATURE_PROPS, the parse branch's
+        if local in FEATURE_PROPS: ... elif local in UNIT_PROPS: ...
+     routed every noun-entry gender into the FORM branch, where the
+     T_WORDFORM/T_FORMLU guard dropped it -- and the elif could never run.  So
+     adding "gender" to UNIT_PROPS, which is what data/QA_TASKS.md proposed as a
+     one-line fix, changes NOTHING on its own.  The branch now dispatches on the
+     SUBJECT TYPE and consults both sets, which is what makes a property that
+     legitimately lives at two levels work.
+     Placement: the gender is rendered on the ANCHOR only --
+        iztocnica: miza (samostalnik, zenski spol, imenovalnik, ednina)
+     -- and the entry's form leaves inherit it rather than repeat it.  That is
+     sound because gender is a property of the ENTRY here, not of the form (the
+     source models it that way), and because every form leaf is adjacent to its
+     anchor: measured on the v5 store, 200,000 of 200,000 sampled form leaves
+     have an anchor at hop 1, so no ball can contain a noun form without the
+     node that carries its gender.  Repeating it instead would have written the
+     label onto 5,176,265 form leaves rather than 310,362 anchors (x16.7).
+     Verified over all 401 words files (data/analysis/scan_gender.py): every one
+     of the 310,362 nouns has exactly one entry gender, no noun has two, and no
+     other POS has any -- so the two roles of the property never collide on one
+     node.  Text-only change: structure stays byte-identical to v5.
+
 Analysis: 2 (form_mode) x 2 (examples) x 2 (collocations) = 8 variants, reported
 with percentiles, split by seed kind (single word vs MWE).  Tokens = node-text
 tokens + prompt (no relation-label tokens: there are no relation labels).  For
@@ -222,13 +251,28 @@ _colloc_re = re.compile(r"^dependent-sense-(\d+)-lexical-unit-(\d+)$")
 # ---- Slovenian labels ------------------------------------------------------
 # Order matters: it is the order the parenthetical is rendered in.  vform and
 # person lead so a verb form reads "(sedanjik, 1. oseba, ednina)"; case/number/
-# gender/degree keep their v3 relative order, so every NOMINAL string is
+# gender/degree keep their v3 relative order, so every nominal FORM string is
 # byte-identical to what v3.1 produced (asserted by run_save_v4_*.sbatch).
+# NARROWED IN v6: the claim used to say "every NOMINAL string" and covered
+# anchors too.  It no longer can -- a noun anchor now carries its entry-level
+# gender (flaw 9), so noun anchors differ from v3.1 by exactly that label while
+# noun FORMS remain byte-identical.  check_v6_text.py asserts the surviving half
+# directly: only anchors may differ from v5, never a form.
 FEATURE_PROPS = ("vform", "person", "case", "number", "gender", "degree",
                  "definiteness")
 # Properties that sit on the lexical-unit rather than on a word-form.  They are
 # rendered into the ANCHOR parenthetical, right after the POS.
-UNIT_PROPS = ("aspect", "clitic")
+#
+# `gender` appears here AND in FEATURE_PROPS because this KG carries it in both
+# places, on disjoint parts of speech: on a word-form it is the agreement
+# feature of an adjective or an -l participle, on a lexical-unit it is the
+# inherent gender of a noun.  Measured over all 401 *-words.nt files
+# (data/analysis/scan_gender.py, 2026-08-21): 310,362 of 310,362 nouns carry
+# exactly one entry-level gender, and NO other part of speech carries one at
+# all -- so the two roles never collide on one node, and rendering both is
+# unambiguous.  Noun gender therefore lands on the ANCHOR only; the entry's
+# form leaves inherit it from there, one hop away.  See flaw M4 (v6).
+UNIT_PROPS = ("aspect", "gender", "clitic")
 VALUE_SL = {
     "nominative":"imenovalnik","genitive":"rodilnik","dative":"dajalnik",
     "accusative":"tožilnik","locative":"mestnik","instrumental":"orodnik",
@@ -399,19 +443,26 @@ def parse_file(path):
                     continue
                 elif pred.startswith(LEXINFO):
                     local = pred[len(LEXINFO):]
-                    if local in FEATURE_PROPS:
+                    # Dispatch on the SUBJECT TYPE, not on which set the property
+                    # name falls in first.  `gender` is in both sets -- it is a
+                    # form feature on adjectives and participles and an entry
+                    # feature on nouns -- so an `if FEATURE_PROPS / elif
+                    # UNIT_PROPS` chain routes every noun-entry gender into the
+                    # form branch, where the T_WORDFORM guard drops it and the
+                    # elif can never run.  That was flaw M4: all 310,362 noun
+                    # gender triples fell out of the graph here.  T_PART stays
+                    # excluded: MWE components carry the bulk of these triples
+                    # and are collapsed away, so their values are unreachable in
+                    # the built graph anyway.
+                    if local in FEATURE_PROPS or local in UNIT_PROPS:
                         sc = code_of(subj)
-                        if sc is not None and (sc >> TYPE_SHIFT) in (T_WORDFORM, T_FORMLU):
-                            feat.append((sc, local, _localname(oiri)))
-                    elif local in UNIT_PROPS:
-                        # aspect/clitic hang off the lexical-unit, not off a
-                        # word-form, so the guard above would drop them.  T_PART
-                        # is deliberately excluded: MWE components carry the
-                        # bulk of these triples and are collapsed away, so their
-                        # values are unreachable in the built graph anyway.
-                        sc = code_of(subj)
-                        if sc is not None and (sc >> TYPE_SHIFT) == T_LU:
-                            unit.append((sc, local, _localname(oiri)))
+                        if sc is not None:
+                            t = sc >> TYPE_SHIFT
+                            if t in (T_WORDFORM, T_FORMLU):
+                                if local in FEATURE_PROPS:
+                                    feat.append((sc, local, _localname(oiri)))
+                            elif t == T_LU and local in UNIT_PROPS:
+                                unit.append((sc, local, _localname(oiri)))
                     continue
                 else:
                     continue
@@ -472,8 +523,8 @@ def _label(prop, value):
 def feat_string(props, pos_local=None, unit_props=None):
     """-> ' (samostalnik, imenovalnik, ednina)' or ''.
 
-    Order is POS, then the lexical-unit properties (aspect / clitic), then the
-    word-form features in FEATURE_PROPS order.
+    Order is POS, then the lexical-unit properties (aspect / gender / clitic),
+    then the word-form features in FEATURE_PROPS order.
     """
     parts = []
     if pos_local:
@@ -484,6 +535,13 @@ def feat_string(props, pos_local=None, unit_props=None):
         for p in UNIT_PROPS:
             v = unit_props.get(p)
             if v is None:
+                continue
+            # A property that lives in both sets (gender) must not render twice
+            # when a node somehow carries it at both levels.  On this dump that
+            # never happens -- entry gender is noun-only and nouns have no
+            # form-level gender -- so this guard costs one lookup and never
+            # fires; it is here so the function stays correct if that changes.
+            if p in props:
                 continue
             sl = _label(p, v)
             if sl:
@@ -626,8 +684,16 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
     n_defnt = sum(1 for d in feat_map.values() if "definiteness" in d)
     n_aspect = sum(1 for d in unit_map.values() if "aspect" in d)
     n_clitic = sum(1 for d in unit_map.values() if "clitic" in d)
+    # gender is reported at BOTH levels, because it exists at both and the two
+    # counts mean different things: form gender is adjective/participle
+    # agreement, entry gender is the inherent gender of a noun.  Reporting only
+    # the form count is what let flaw 9 (M4) hide -- the diagnostic looked
+    # healthy while every noun's gender was being dropped.
+    n_gender_f = sum(1 for d in feat_map.values() if "gender" in d)
+    n_gender_u = sum(1 for d in unit_map.values() if "gender" in d)
     print(f"[feat] reachable on word entries: vform={n_vform:,} person={n_person:,} "
-          f"definiteness={n_defnt:,} aspect={n_aspect:,} clitic={n_clitic:,}",
+          f"definiteness={n_defnt:,} aspect={n_aspect:,} clitic={n_clitic:,} "
+          f"gender(form)={n_gender_f:,} gender(entry)={n_gender_u:,}",
           flush=True)
     stats["raw"] = {k: int(v) for k, v in dict(
         canon=len(canon), other=len(other), sense=len(sense), usage=len(usage),
@@ -1177,8 +1243,15 @@ def main():
                   # A store declares which text convention built it.  v3.1
                   # rendered no morphology and wrote collocations as lemma pairs;
                   # v4 added vform/person/definiteness on forms and aspect/clitic
-                  # on anchors; v5 verbalises the collocation nodes (flaw 8).
-                  "text_convention": "v5" if args.colloc_text == "phrase" else "v4",
+                  # on anchors; v5 verbalises the collocation nodes (flaw 8);
+                  # v6 renders entry-level noun gender on the anchor (flaw M4).
+                  # The convention is read off UNIT_PROPS rather than hard-coded
+                  # so a store built with gender switched back off cannot claim
+                  # to be a v6.
+                  "text_convention": (
+                      "v6" if ("gender" in UNIT_PROPS
+                               and args.colloc_text == "phrase")
+                      else "v5" if args.colloc_text == "phrase" else "v4"),
                   "feature_props": list(FEATURE_PROPS),
                   "unit_props": list(UNIT_PROPS),
                   "builder": os.path.basename(__file__),

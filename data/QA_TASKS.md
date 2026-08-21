@@ -149,7 +149,7 @@ in any extracted ball.
 |---|---|---|--:|:--:|
 | `lexinfo:case` | word-form | nominative, genitive, dative, accusative, locative, instrumental | — | ✅ |
 | `lexinfo:number` | word-form | singular, dual, plural | — | ✅ |
-| `lexinfo:gender` | word-form **+ lexical-unit** | masculine, feminine, neuter | 310,362 units | ⚠️ forms only — M4 |
+| `lexinfo:gender` | word-form **+ lexical-unit** | masculine, feminine, neuter | 310,362 units | ✅ v6 — forms since v3, noun entries since v6 (M4) |
 | `lexinfo:person` | word-form | **first, second, third** | 253,497 | ✅ v4 |
 | `lexinfo:vform` | word-form | **present, participle, imperative, supine, infinitive** | 452,782 | ✅ v4 |
 | `lexinfo:degree` | word-form | positive, comparative, superlative | — | ✅ |
@@ -166,12 +166,14 @@ in any extracted ball.
 **There is no `lexinfo:tense` and no `lexinfo:mood` predicate in this KG.** Verb tense is
 carried by `vform`, and only the present is stored synthetically — see §0.7.
 
-### 0.7 The morphology blockers — fixed in v4, and the one that is not fixable
+### 0.7 The morphology blockers — fixed in v4 and v6, and the one that is not fixable
 
 Four faults found while writing this document kept morphology out of the node text, silently
 disabling six of the types. Two were builder bugs, fixed in v4. The third is a property of
 the source data and constrains the design permanently. The fourth was found on 2026-08-20
-while specifying T8 and is **still open**.
+while specifying T8 and is **fixed in v6** (2026-08-21) — by a different change than the one
+this section originally proposed, for a reason worth reading before adding any other
+two-level property.
 
 **(M1) `person` never reached the node text — fixed.** `FEATURE_PROPS` listed `person`, but
 `VALUE_SL` mapped `firstPerson`/`secondPerson`/`thirdPerson` while the KG emits
@@ -212,32 +214,87 @@ periphrastic and are not stored anywhere** — the reference CSV's past/future t
 (`sem pritrgal`, `bom pritrgal`) are *composed*, not looked up. This is a permanent
 constraint on T5 and T6; see those sections for the decision it forces.
 
-**(M4) Noun `gender` sits on the lexical-unit and never reaches the node text — open.**
-`UNIT_PROPS` is `("aspect", "clitic")`; `gender` is missing from it. Noun gender is an
+**(M4) Noun `gender` sits on the lexical-unit and never reaches the node text — fixed in v6.**
+`UNIT_PROPS` was `("aspect", "clitic")`; `gender` was missing from it. Noun gender is an
 **entry** property in this KG, not a form property: `lexical-unit-69883` (*miza*) carries
 `lexinfo:gender lexinfo:feminine`, while every one of its forms renders as
 `oblika: miza (imenovalnik, množina)` — no gender anywhere. There are **310,362**
 `lexinfo:gender` triples on `lexical-unit` subjects, *exactly* the noun count, so every noun
-entry has one and none of them is in the store. (The 3,242,639 `word-form` gender triples are
+entry has one and none of them was in the store. (The 3,242,639 `word-form` gender triples are
 adjective and participle forms, where gender genuinely is a form feature and does render —
 `oblika: popraskal (deležnik na -l, ednina, moški spol)`.)
 
-Consequence: **T9 is not generatable from the v4 store at all, and T8's gender slot is
-unfillable.** The fix is one line —
+Consequence while it was open: **T9 was not generatable from the v4/v5 store at all, and T8's
+gender slot was unfillable.**
+
+**The one-line fix this section originally proposed does not work.** It was:
 
 ```python
 UNIT_PROPS = ("aspect", "gender", "clitic")
 ```
 
-— and `VALUE_SL` already maps `masculine/feminine/neuter` → `moški/ženski/srednji spol`, so
-noun anchors become `iztočnica: miza (samostalnik, ženski spol, imenovalnik, ednina)`. It costs
-a ~35-minute rebuild and it changes every noun **anchor** string, so `check_v4_text.py`'s
-"nominal strings are byte-identical to v3.1" assertion has to be narrowed to nominal *form*
-nodes. Nothing else in the inventory depends on it. **Decision pending:** until it lands, T8
-answers POS only and T9 cannot run.
+That changes nothing on its own, and the reason generalises to any property this KG stores at
+two levels. `gender` was **already in `FEATURE_PROPS`**, and the parse branch tested the sets
+in order:
+
+```python
+if local in FEATURE_PROPS:                       # gender matches HERE
+    if (sc >> TYPE_SHIFT) in (T_WORDFORM, T_FORMLU):   # a lexical-unit fails this
+        feat.append(...)                               # ... so it is dropped
+elif local in UNIT_PROPS:                        # unreachable for gender, forever
+    ...
+```
+
+Every noun-entry gender was routed into the **form** branch, discarded by the subject-type
+guard, and the `elif` could never run. Adding the name to `UNIT_PROPS` leaves that path
+untouched. The v6 fix instead dispatches on the **subject type** and consults both sets, which
+is what lets one property legitimately mean two things:
+
+```python
+if local in FEATURE_PROPS or local in UNIT_PROPS:
+    t = sc >> TYPE_SHIFT
+    if t in (T_WORDFORM, T_FORMLU):
+        if local in FEATURE_PROPS: feat.append(...)
+    elif t == T_LU and local in UNIT_PROPS:
+        unit.append(...)
+```
+
+`VALUE_SL` already mapped `masculine/feminine/neuter` → `moški/ženski/srednji spol`, so noun
+anchors now read `iztočnica: miza (samostalnik, ženski spol, imenovalnik, ednina)`.
+
+**Placement — anchor only.** The gender is rendered on the **anchor** and the entry's form
+leaves inherit it rather than repeat it. Two things justify that, both measured rather than
+assumed:
+
+* Gender is a property of the **entry** in this source, not of the form — the RDF models it
+  that way, and a noun's word-forms carry only `case` and `number`.
+* Every form leaf is adjacent to its anchor, so no extracted ball can contain a noun form
+  without the node carrying its gender. Measured on the v5 store
+  (`data/analysis/check_gender_reachability.py`): **200,000 of 200,000** sampled form leaves
+  have an anchor at hop 1. Repeating the label instead would have written it onto
+  **5,176,265** noun form leaves rather than **310,362** anchors — **×16.7**.
+
+Confirmed over all 401 `*-words.nt` (`data/analysis/scan_gender.py`, 2026-08-21): **310,362 of
+310,362** nouns carry exactly one entry gender, **none** carries two, and **no other part of
+speech carries one at all** — so the property's two roles never collide on one node. The full
+build reports `unit=328,544`, which is exactly 310,362 gender + 18,157 aspect + 25 clitic.
+
+It cost a 17 min 35 s rebuild and it changes every noun **anchor** string, so `check_v4_text.py`'s
+"nominal strings are byte-identical to v3.1" assertion is narrowed to nominal *form* nodes —
+`check_v6_text.py` asserts that forms are byte-identical and that **only anchors** changed.
+Nothing else in the inventory depends on it.
+
+**Built and verified 2026-08-21** (`kg_graph_v6_gemma3`, job 129977, `ACCEPTANCE: PASS`):
+310,362 of 36,735,791 nodes changed text, **all anchors**, labels added
+`moški spol` 223,357 · `ženski spol` 75,460 · `srednji spol` 11,545 — matching the raw-dump
+distribution exactly. Noun-anchor coverage **100.000 %**; noun form leaves carrying a gender
+**0**. Structure md5-identical to v5. Cost **+0.135 %** tokens (917,184,046 → 918,425,494),
+which is **+4 tokens on each of the 310,362 anchors and on nothing else**.
+
+**T8 and T9 are unblocked; generate against `kg_graph_v6_gemma3`.**
 
 Four types are generatable again after v4 — **T5, T6, T7, T10** — subject to M2's scope limit
-on T5/T6. **T8 (partially) and T9 (entirely) remain blocked on M4.**
+on T5/T6. **T8 (fully) and T9 (entirely) are unblocked by v6.**
 
 ### 0.8 Grading — exact match after a fixed normalization
 
@@ -375,8 +432,8 @@ missing 3rd form silently turns into a wrong 4th form and every later position i
 | T5 | `spreganje/celotno_spreganje` | `vform=present` + person + number | M2 scope |
 | T6 | `spreganje/spreganje_v_casu` | `vform=present` (+ participle) | M2 scope |
 | T7 | `spreganje/neosebne_oblike` | `vform` ∈ {inf, supine, imperative} | |
-| T8 | `besedna_vrsta/osnovne_lastnosti` | `partOfSpeech` on the anchor | M4 (gender slot) |
-| T9 | `besedna_vrsta/spol_samostalnika` | `gender` on the **anchor** | **M4 — blocked** |
+| T8 | `besedna_vrsta/osnovne_lastnosti` | `partOfSpeech` on the anchor | gender slot needs v6 (M4) |
+| T9 | `besedna_vrsta/spol_samostalnika` | `gender` on the **anchor** | needs v6 (M4) |
 | T10 | `besedna_vrsta/vrsta_in_vid_glagola` | `aspect` on the anchor | |
 | T11 | `stopnjevanje/vse_stopnje` | `degree` on forms | |
 | T12 | `pomen/razlaga_pomena` | `pomen:` nodes classed `defined` (Group D) | absorbs T13 |
@@ -410,7 +467,7 @@ against a v5 store** before generation — the open item is C14, not a known def
 | T6 | 9 fixed | ✅ | none |
 | T7 | 3 fixed | ⚠️→✅ | omitting an absent slot made arity variable; **fixed to `/`, slot never dropped** |
 | T8 | 1–2 fixed | ✅ | closed vocabulary, fully enumerable in the regex |
-| T9 | 1 | ✅ | blocked on M4, but trivially gradeable once rendered |
+| T9 | 1 | ✅ | trivially gradeable; rendered since v6 (M4) |
 | T10 | 1 | ✅ | best in the inventory — 3 values, 100 % coverage |
 | T11 | 3 fixed | ⚠️→✅ | no gap marker for "comparative but no superlative"; **fixed to `/`** |
 | T12 | open | ✅ | `\|` safe: 0 of 230,606 definitions contain one |
@@ -1178,7 +1235,7 @@ in the gold answer would teach a falsehood.
 
 | `partOfSpeech` | entries | `ODGOVOR:` |
 |---|--:|---|
-| `noun` | 310,362 | `samostalnik, <spol>` — gender slot blocked by **M4**, see below |
+| `noun` | 310,362 | `samostalnik, <spol>` — gender slot rendered since **v6** (M4), see below |
 | `adjective` | 52,634 | `pridevnik` |
 | `verb` | 18,159 | `glagol, <vid>` |
 | `adverb` | 15,228 | `prislov` |
@@ -1235,10 +1292,11 @@ that is taxonomically loose.
   *word class*, not a missing gender — the word class genuinely is recorded.
 - **Negative:** an MWE seed (no POS recorded anywhere) → `ODGOVOR: ni podatka v bazi`. A
   truthful negative that teaches a real boundary of the resource.
-- **Blocked slot (M4).** Noun gender lives on the lexical-unit and `UNIT_PROPS` omits it, so it
-  is not in the v4 store at all. Until the one-line builder fix and the rebuild land, the noun
-  row answers `ODGOVOR: samostalnik` and nothing more — never invent the gender. This is the
-  one decision T8 is waiting on; see §0.7 (M4).
+- **Gender slot (M4) — available since v6.** Noun gender lives on the lexical-unit, which the
+  parse branch dropped, so it was absent from every store through v5. It is rendered on the
+  anchor from **v6** onward, so the noun row answers `ODGOVOR: samostalnik, <spol>`. Against a
+  v4 or v5 store the row must still answer `ODGOVOR: samostalnik` and nothing more — never
+  invent the gender. Check `manifest.meta.text_convention` before generating; see §0.7 (M4).
 
 ### Output template
 
@@ -1248,7 +1306,7 @@ ODGOVOR: {besedna_vrsta}[, {lastnost}]
 
 | | |
 |---|---|
-| arity | **1 or 2, fixed by POS** — 2 for nouns (after M4) and verbs, 1 for everything else |
+| arity | **1 or 2, fixed by POS** — 2 for nouns (v6 onward, M4) and verbs, 1 for everything else |
 | sep | `, ` |
 | order | word class first, then the property — **graded** (two semantic slots) |
 | gap | — (a missing property drops the slot; it never becomes `/`) |
@@ -1365,9 +1423,11 @@ loose frame does the most damage.
   section previously said "the gender of the nominative singular form" and told the generator
   to check the paradigm for consistency. Noun word-forms carry no gender at all in this KG;
   there is one value per entry and nothing to reconcile.)*
-- **Blocked on M4.** That unit-level gender is not rendered into the node text, so it is absent
-  from the v4 store and this type **cannot be generated today**. One-line builder fix plus a
-  ~35-minute rebuild; see §0.7 (M4). Everything below assumes it has landed.
+- **Unblocked in v6 (was M4).** That unit-level gender reached no store through v5, so this
+  type could not be generated at all. It is rendered on the anchor from **v6** onward —
+  `iztočnica: miza (samostalnik, ženski spol, imenovalnik, ednina)` — so generate against
+  `kg_graph_v6_gemma3` or later. The fix was **not** the one-line `UNIT_PROPS` edit this
+  document first proposed; see §0.7 (M4) for why that could never have worked.
 - **Seed filter:** POS = noun.
 - **Gradeable line:** `ODGOVOR: moški spol`.
 - **No gender ambiguity exists in this KG.** 310,362 gender triples over 310,362 *distinct*
@@ -2634,7 +2694,7 @@ Zanima me, kaj je <F> v povedi <S> — sklon in število.
 
 | # | check | why |
 |---|---|---|
-| C1 | ~~Rebuild the store.~~ **Done 2026-08-20** — the v4 stores render `vform`/`person`/`definiteness` on forms and `aspect`/`clitic` on anchors (§0.7), and **v5** verbalises the collocation nodes (Group F). Generate against `kg_graph_v5_gemma3`. | T5, T6, T7 and T10 were ungeneratable before v4; T17 and T18 were parked before v5. |
+| C1 | ~~Rebuild the store.~~ **Done 2026-08-20/21** — the v4 stores render `vform`/`person`/`definiteness` on forms and `aspect`/`clitic` on anchors (§0.7), **v5** verbalises the collocation nodes (Group F), and **v6** renders noun `gender` on the anchor (M4). Generate against `kg_graph_v6_gemma3`. | T5, T6, T7 and T10 were ungeneratable before v4; T17 and T18 were parked before v5; T8's gender slot and T9 entirely were blocked before v6. |
 | C2 | **Compute the band × type availability matrix** (R3) and record it. | T19/T20 have ~11 k eligible lemmas against 72,528 in the pool; low-band cells will be near-empty. |
 | C3 | **Measure the T20 intersection** (R2): direct example × unambiguous form. | If thin, fall back to the disjunction and record the fallback. |
 | C4 | **Measure the natural multi-entity rate** (R5) on real generated question strings, not on the 88.9 % figure. | D3 makes the union share emergent; if it comes out near zero, oversample ambiguous seeds via T4/T21. |
@@ -2644,7 +2704,7 @@ Zanima me, kaj je <F> v povedi <S> — sklon in število.
 | C8 | **Withhold 2–3 templates per type** for Tier A before generation, not after. | Retrofitting a held-out split from generated items risks the same phrasing appearing on both sides. |
 | C9 | **Run the §0.8 grader over the gold answers themselves** — every item must score `exact = 1.0` against its own gold. | Catches separator collisions, stray whitespace and normalization bugs before they are misread as model failures. Free, and it is the one test that validates the grading contract end to end. |
 | C10 | **Assert every gold answer matches its type's `regex`**, and that no *multi-item* gold contains its own separator inside an item. | Measured safe today for definitions (0/230,606 contain `\|`) and word forms (0 contain `,;\|/`), but nothing enforces it. Single-item types are exempt by design — 4 of 51,172 examples contain a `\|` and must not be split (§0.9). |
-| C11 | **Decide M4** (render noun `gender` into the anchor, one line + a ~35 min rebuild). | T9 is ungeneratable and T8's noun row is POS-only until it lands (§0.7). |
+| C11 | ~~**Decide M4** (render noun `gender` into the anchor, one line + a ~35 min rebuild).~~ **Done 2026-08-21 — the v6 store renders it on the anchor.** The proposed one-line `UNIT_PROPS` edit was **not** the fix and would have changed nothing: `gender` was already in `FEATURE_PROPS`, so the `if/elif` set test routed every noun-entry gender into the form branch, where the subject-type guard dropped it. The parse branch now dispatches on subject type (§0.7). | T9 was ungeneratable and T8's noun row POS-only until it landed. Generate both against `kg_graph_v6_gemma3`. |
 | C12 | ~~**Decide T14** — keep with the 90.1 % majority-class baseline reported, restrict the pool, or drop.~~ **Closed 2026-08-21.** The 90.1 % was measured over all anchors, 90.7 % of which are MWE entries whose second sense is an empty shell; on the seed pool the baseline is **37.1 %**. T14 now counts the senses T12 lists (Group D). Remaining work is C17, not a decision. | The premise was a measurement artefact. Kept, with its role restated: a count-vs-list consistency probe, not independent sense knowledge (§T14). |
 | C13 | **Report a majority-class / constant-answer baseline for every type**, not just T14. | T14 is the extreme case, but T9 (3 values), T10 (3 values) and T16 (75 % single-antonym) all admit cheap constant strategies. A score without its baseline is unreadable. |
 | C14 | ~~**Reopen T17/T18** only with a verbalisation source (Group F).~~ **Done 2026-08-20 — the source is the export itself.** Remaining work: regenerate both types against a v5 store and confirm the gold lines come off the node text unmodified. | The verbalisation is now node text, so the check is that nothing downstream still splits on `+`. |

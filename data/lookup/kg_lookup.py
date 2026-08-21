@@ -6,7 +6,7 @@ There are two graphs on disk, and "look at the graph" means a different thing in
 each.  Pick the layer by the question you are actually asking:
 
   store   "What does OUR GRAPH know about X?"
-          The built store in `data/stores/kg_graph_v5_gemma3`: collapsed, deduplicated,
+          The built store in `data/stores/kg_graph_v6_gemma3`: collapsed, deduplicated,
           every node carrying self-describing text.  This is what the QA
           generator and the model will see, so it is the layer that settles
           coverage questions -- if a fact is not here, the model cannot use it
@@ -58,7 +58,7 @@ LIB = os.path.join(DATA, "lib")                      # data/lib -- graph_store
 # verb morphology was rendered) or kg_graph_v3 (before the v3.1 sense-indexing
 # and unescaping).
 STORE = os.environ.get("KG_STORE") or os.path.join(
-    DATA, "stores", "kg_graph_v5_gemma3")
+    DATA, "stores", "kg_graph_v6_gemma3")
 RAW = os.path.join(DATA, "kg_raw", "OntoLex DSB")
 
 TYPE_SHIFT = 56
@@ -530,7 +530,7 @@ it was built from.""")
     st = sub.add_parser(
         "store", formatter_class=RAWD,
         help="the built graph -- fast, resolved node text",
-        description="""Query the built graph in `data/stores/kg_graph_v5_gemma3`.
+        description="""Query the built graph in `data/stores/kg_graph_v6_gemma3`.
 
 Nodes here carry self-describing text -- `iztočnica: milijonar (samostalnik,
 imenovalnik, ednina)`, `pomen 1: …`, `zgled: …`, `kolokacija: boj proti kriminaliteti`
