@@ -1,6 +1,8 @@
 # QA task types — specification for the generation pipeline
 
-> **Status: drafted 2026-08-20; revised 2026-08-20 (T8 schema, T12/T13 merge, §0.8 grading).
+> **Status: drafted 2026-08-20; revised 2026-08-20 (T8 schema, T12/T13 merge, §0.8 grading);
+> revised 2026-08-21 (Group D `sense_class` — T12 and T14 now read one shared sense filter,
+> and T14's "90.1 %" alarm is retired as a measurement artefact).
 > Scope: the question types locked by D14 of
 > [`QA_DATASET_DESIGN.md`](QA_DATASET_DESIGN.md).** That document decides *what* the dataset
 > is; this one decides *how each individual question type gets generated*. It is written to
@@ -126,8 +128,14 @@ then form features in the order `vform, person, case, number, gender, degree, de
 A generator may rely on that order.
 
 Edges are **untyped**; the relation type lives in the node text. Extraction is uniform
-**hop 2** from every matched lexical unit (D4), with `sestavina` traversal directional:
-downward (MWE → word) always, upward (word → MWE) capped at K = 15 (D5).
+**hop 2** from every matched lexical unit (D4), with two hub caps:
+
+- `sestavina` traversal is directional: downward (MWE → word) always, upward
+  (word → MWE) capped at K = 15 (D5).
+- `sense → kolokacija` is capped at K = 15 **pooled across all of the anchor's senses**,
+  selected by seeded weighted sampling with `w ∝ log(1 + proxy(partner))` over a pool
+  sorted by node id, seeded from the anchor's node code (D5b). Uncapped, a high-band
+  anchor costs a p50 of 22,704 tokens; capped, 1,986.
 
 ### 0.6 Feature vocabulary actually present in the RDF
 
@@ -371,9 +379,9 @@ missing 3rd form silently turns into a wrong 4th form and every later position i
 | T9 | `besedna_vrsta/spol_samostalnika` | `gender` on the **anchor** | **M4 — blocked** |
 | T10 | `besedna_vrsta/vrsta_in_vid_glagola` | `aspect` on the anchor | |
 | T11 | `stopnjevanje/vse_stopnje` | `degree` on forms | |
-| T12 | `pomen/razlaga_pomena` | `pomen:` nodes with a definition | absorbs T13 |
+| T12 | `pomen/razlaga_pomena` | `pomen:` nodes classed `defined` (Group D) | absorbs T13 |
 | ~~T13~~ | ~~`pomen/nastevanje_pomenov`~~ | — | **retired → T12** |
-| T14 | `pomen/stevilka_pomenov` | count of `pomen:` nodes | |
+| T14 | `pomen/stevilka_pomenov` | count of the senses T12 lists | shares T12's filter |
 | T15 | `sopomenke/navedi_sopomenke` | `sopomenka:` nodes | |
 | T16 | `protipomenke/navedi_protipomenke` | `protipomenka:` nodes | Tier C |
 | T17 | `kolokacije/navedi_kolokacije` | `kolokacija:` nodes (v5: the phrase itself) | **unparked** |
@@ -406,7 +414,7 @@ against a v5 store** before generation — the open item is C14, not a known def
 | T10 | 1 | ✅ | best in the inventory — 3 values, 100 % coverage |
 | T11 | 3 fixed | ⚠️→✅ | no gap marker for "comparative but no superlative"; **fixed to `/`** |
 | T12 | open | ✅ | `\|` safe: 0 of 230,606 definitions contain one |
-| T14 | 1 int | ⚠️ **validity** | gradeable, but **90.1 % of anchors have exactly 2 senses** — see below |
+| T14 | 1 int | ⚠️→✅ | the "90.1 % answer 2" alarm was measured over the **wrong population**; **fixed** by counting what T12 lists — see below |
 | T15 | open | ✅ | comma safe: 0 of 523 sampled synonym partners contain one (max 11 words) |
 | T16 | open | ✅ | same; 75 % of anchors have exactly 1 antonym |
 | T17 | open | ✅ | **unparked** — the KG has the verbalisations after all; gold is the inflected phrase, graded case-insensitively (Group F) |
@@ -415,21 +423,22 @@ against a v5 store** before generation — the open item is C14, not a known def
 | T20 | 2 fixed | ⚠️→✅ | had its own shape; **unified with T21** |
 | T21 | open | ⚠️→✅ | spec had **two** shapes (`tožilnik ali orodnik, ednina` vs `rodilnik ednine ali imenovalnik množine`); **unified to full pairs always** |
 
-**The one type that is verifiable but not informative — T14.** Sense counts are almost constant:
+**The T14 alarm was a measurement artefact — resolved 2026-08-21.** The earlier figure
+(1 sense 8.6 %, **2 senses 90.1 %**, 3+ 1.3 %) was measured over *all* anchors. But **90.7 % of
+the store's 4.34 M anchors are multi-word-expression entries**, and 98.1 % of those have exactly
+two senses — where, in 93.5 % of cases, the lower-id one is a completely bare shell carrying
+nothing at all. The 90.1 % was a fact about how MWEs are exported, not about words.
 
-```
-1 sense    8.6%
-2 senses  90.1%     <- a model that always answers "2" scores 90.1%
-3+         1.3%
-```
+Measured on the D8 seed pool T14 will actually be generated from (72,561 lemmas), counting
+every `pomen:` node as the old spec said, the distribution is **1: 37.8 %, 2: 17.7 %, 3: 15.3 %,
+4: 8.7 %, 5: 5.4 %, >5: 15.0 %** — majority-class baseline **37.8 %**, not 90.1 %.
 
-Exact-match grading works perfectly and measures almost nothing. Three options, in order of
-preference: **(1)** keep T14 but report the majority-class baseline (90.1 %) beside every score,
-so the number is never read as skill — *recommended, cheap, honest*; **(2)** restrict the seed
-pool to anchors with ≠ 2 senses, which makes the type informative but unrepresentative and
-shrinks the pool to ~10 %; **(3)** drop T14 and let T12 carry the sense material. Decision
-required before generation — this is the one place where "easily verifiable" and "worth
-measuring" come apart.
+That number is defensible but the answer still is not, because it counts empty shells and the
+entry-reified placeholder. T14 now counts **the senses T12 lists** (Group D, `sense_class`),
+seeded from the 40,926 pool lemmas that have at least one: **1: 37.1 %, 2: 25.1 %, 3: 12.8 %,
+4: 7.4 %, 5: 4.8 %, >5: 12.9 %**, baseline **37.1 %**. Same difficulty, true gold, and the count
+is the length of T12's list by construction. C12 is closed; option (2) solved a problem that
+did not exist.
 
 **What made the rest easy.** Two measurements did most of the work. No word-form surface
 anywhere contains `,`, `;`, `|` or `/` — so positional comma-separated paradigm lines are safe
@@ -1633,6 +1642,64 @@ Also: the reference file's COBUILD-style full-sentence glosses ("*Kadar sodišč
 pravno odredbo nekomu, mu jo pošlje*") came partly from **WordNet and a bridge dictionary**,
 not from this KG. Do not imitate that answer style — it is not reproducible here.
 
+### What counts as a `pomen` — the shared `sense_class` contract
+
+Measured against `kg_graph_v5_gemma3`, 2026-08-21. **A `pomen:` node is not a meaning.** It is
+one `ontolex:LexicalSense` IRI, and the export mints those for structural reasons that have
+nothing to do with polysemy. Both types in this group read the same classification, and
+**T14's number is the length of T12's list, by construction.**
+
+The store's senses come in two layers:
+
+| layer | how to recognise it | what it carries |
+|---|---|---|
+| **native** | `sense id == entry id`, one per core entry | the entry's collocations, forms and synonyms — `otrok`'s has **degree 3,824** — and **never a definition** |
+| **imported** | any other sense id | the definitions; **77.6 %** of them attach to nothing but the entry |
+
+Verified over the whole store: 100,801 entries carry a native sense — that is **every** core
+(`id < 1 M`) word entry and only those; **100 %** render as `pomen 1:` and **0 %** carry a
+definition. In the D8 pool the split is 100,801 native (all fallback) against 173,168 imported
+(127,082 defined, 46,086 fallback), and **49.0 %** of the pool's sense nodes are degree-1
+shells with nothing attached at all. Raw-dump confirmation: `sense-97358` on
+`lexical-unit-97358` has exactly two triples in all 42 GB — `rdf:type LexicalSense` and
+`isSenseOf`. It is a shell. Its sibling `sense-16281180` carries `"del sistema dihal"@sl`.
+
+One function, called by both generators — never two implementations:
+
+```
+sense_class(sense, anchor) ->
+    placeholder   sense id == the entry's own id.  The entry reified: `pomen 1: <lemma>`,
+                  never defined, often the busiest node in the neighbourhood.
+    fallback      text is the headword repeated, optionally + ` (zgled: …)`.
+    defined       anything else — the sense carries a real skos:definition.
+```
+
+**Only `defined` counts, for either type.** That rule survives a test the alternatives fail:
+the model sees node **text, not ids**, and `pomen 1: otrok` (placeholder) is identical in shape
+to `pomen 2: otrok` (an ordinary fallback). Any policy that keeps one and drops the other is
+not derivable from the model's input. *"Count a sense iff its text is not the headword
+repeated"* is. Four policies were scored on the pool before this was settled; the alternatives
+— drop the placeholder only, or keep fallbacks that have material attached — disagree with
+this one on **31.2 %** of anchors and push 37.8 % of the pool to an answer of `0`.
+
+**Reliability.** Checked against the RDF itself (every sense id carrying a `skos:definition`,
+grepped from the dump and joined back to the store): **154** of the pool's senses carry a
+definition whose text *is* the headword — `pomen 8: imeti`, `pomen: Shakespearejev` — and are
+classed `fallback`, which is the wanted behaviour, since such an item would be a gold answer
+that repeats the question. A further **363** are classed `defined` without a matching
+`skos:definition` in my extraction — but the extraction itself lost ~528 sense ids to
+interleaved parallel `grep` output, which accounts for them; re-derive from the builder's `dfn`
+map rather than from a grep if the residual matters. The rule is otherwise exact, because
+**every sense belongs to exactly one entry** — verified over all 8,468,227, zero shared — so
+"text equals the anchor's lemma" is never ambiguous.
+
+**What no filter can fix.** The imported layer records *several glosses per meaning*:
+`fotograf` gets both *kdor se ukvarja s fotografiranjem* and *oseba, ki fotografira poklicno*;
+`dekan` has 3, `dekanica` 4, `dekanja` 4 for the same content; `dvigniti` has 36. The KG never
+says which records describe the same sense, so the true sense count is not recoverable.
+**Neither type may ask how many meanings a word *has*** — only how many are recorded in this
+database. T14's wording follows from that, not from style.
+
 ---
 
 ## T12 — `pomen/razlaga_pomena` (absorbs the former T13, `nastevanje_pomenov`)
@@ -1679,13 +1746,15 @@ exact-match grading practical rather than brittle (§0.8).
   more than one in the RDF), and it is the *store* text the model is shown. Taking gold from the
   node text guarantees the answer string is present verbatim in the input — the property the
   whole grading contract rests on.
-- **Distinguish a real definition from a lemma fallback.** `body = d or lemma_of_lu(lu)`: a
-  sense with no definition renders as the entry's own lemma, optionally plus ` (zgled: …)`.
-  Strip that suffix; if what remains equals the anchor's lemma, the sense has **no** definition
-  and is excluded. Without this check the type emits items whose gold answer is the headword
-  repeated.
-- **Seed filter:** at least one sense with a real definition. Among core lemmas **40.6 %**
-  qualify, among tail lemmas 7.3 % — D8's pool already biases toward the core.
+- **Which senses count:** exactly those `sense_class` calls `defined` (Group D). `body = d or
+  lemma_of_lu(lu)`, so a sense with no definition renders as the entry's own lemma, optionally
+  plus ` (zgled: …)`. Strip that suffix; if what remains equals the anchor's lemma, the sense is
+  `fallback` (or the `placeholder`) and is excluded. Without this check the type emits items
+  whose gold answer is the headword repeated. **Call the shared function — T14 counts the list
+  this produces, and a second implementation is how the two silently drift apart.**
+- **Seed filter:** at least one `defined` sense. **56.4 %** of the 72,561-lemma D8 pool qualify
+  (40,926 lemmas); the often-quoted **40.6 %** is the same count over the *unfiltered* 100,801
+  core word entries, not over the pool — don't mix the denominators. Among tail lemmas 7.3 %.
 - **Ordering:** dictionary ordinal ascending, as rendered in `pomen N:`. Senses with no ordinal
   sort last, stable by sense id.
 - **Gradeable line:** the definition texts only, `|`-separated, in ordinal order, **no
@@ -1697,23 +1766,37 @@ exact-match grading practical rather than brittle (§0.8).
 - **UI part:** one sense per line, numbered with the **graph's** ordinal so that a gap (sense 2
   undefined) is visible. This is where the user-facing "one definition per line" rendering
   lives; the gradeable line stays single-line so the eval parser is one rule for all 20 types.
+- **Deduplicate identical definitions within an entry.** 292 pool anchors (**0.40 %**) carry the
+  same definition on two senses — `naslikati` → *ustvariti sliko* twice. Emit it once. **T14 must
+  dedup identically**, or the count stops matching the list.
 - **Junk items.** Exclude the 26 empty definitions. For the 21.7 % that are 1–2 words, recommend
   **keeping** them — they are genuine lexicographic data, and dropping a fifth of the pool to
   make the metric look harder is the wrong trade. Instead report `exact` broken down by gold
-  length, so a score dominated by one-word glosses is visible rather than hidden. *(The former
-  T13's warning about "raba obliki" sense labels was a **reference-file** artefact, not a KG
-  one: exactly 2 of 230,606 definitions begin with `raba`.)*
-- **Negative:** **59 % of core lemmas have no defined sense** — the largest natural negative pool
-  in the dataset. `ODGOVOR: ni podatka v bazi`, with the UI part offering what *is* attached
-  (examples, collocations, synonyms). A monosemous entry is **not** a negative; it takes an
-  ordinary one-item answer.
-- **Relation to T14.** T14 counts *all* senses including lemma fallbacks; T12 lists only
-  *defined* ones. The two therefore legitimately disagree — a word can answer `3` to T14 and
-  list two definitions here. Both UI parts must say which they mean, or the pair reads as a
-  contradiction.
-- **Expected arity is low.** Among anchors that have at least one defined sense, roughly **71 %
-  have exactly one**. The multi-item case is the minority, which is another reason the merged
-  type must not treat one item as a special shape.
+  length, so a score dominated by one-word glosses is visible rather than hidden.
+- **Sense *labels* stored as definitions — keep them, but know they are there.** The former T13's
+  warning was dismissed on too narrow a test (2 of 230,606 definitions begin with `raba`). The
+  class does exist in this KG, it just uses other forms: **15,210 (12.0 %)** of the pool's
+  definitions begin `o …` — `leten` → *o starosti*, `vnaprej` → *o prihodnosti*, `otrok` → *v
+  razmerju do staršev* — which is the "used of X" label, not a paraphrase. Also `zveza: hočem
+  reči` (200), `zanikano` (15), `nerazvrščeno` (3), `npr. streho` (50), and **32 unanswered
+  editor's notes** shipped verbatim: `obsegati` → *vsebovati?*, `dvigniti` → *dati del telesa ali
+  nečesa (pokrov) v drug položaj - ali dati sem samo telo?*. **Recommendation: keep them.**
+  Filtering would change both the list and T14's count for a reason **invisible in the node text
+  the model reads**, which is the same property that decided `sense_class` in the first place.
+  Report a breakdown instead. If they are ever filtered, both types must filter identically.
+- **Negative:** **43.6 % of the D8 pool has no defined sense** (31,635 lemmas) — the largest
+  natural negative pool in the dataset, and **shared with T14**: the same lemma answers
+  `ODGOVOR: ni podatka v bazi` under both types, never `0` under one and a list under the other.
+  The UI part offers what *is* attached (examples, collocations, synonyms). A monosemous entry is
+  **not** a negative; it takes an ordinary one-item answer. *(The "59 % of core lemmas" figure
+  elsewhere is over the unfiltered 100,801 core entries — see the seed-filter bullet.)*
+- **Relation to T14.** They no longer disagree: **T14's gold is the length of this list**, from
+  the same `sense_class` call, the same dedup and the same seed pool. The earlier design let them
+  differ and papered over it in the UI text; that taught the training data to say *ima 4 pomene*
+  next to a two-item list for one lemma.
+- **Expected arity.** Among the 40,926 anchors with at least one defined sense: **1: 37.1 %,
+  2: 25.1 %, 3: 12.8 %, 4: 7.4 %, 5: 4.8 %, >5: 12.9 %.** One item is the plurality but not the
+  majority, which is another reason the merged type must not treat it as a special shape.
 
 ### Output template
 
@@ -1835,7 +1918,10 @@ phrasings in this whole document, and neither appears in either reference file �
 **Tier A** candidates.
 
 **Dropped in the merge:** `Koliko različnih stvari lahko pomeni <L>?` — it asks for a count, so
-it belongs to T14, and leaving it here would give one surface two different gold answers.
+it belongs to T14, and leaving it here would give one surface two different gold answers. It is
+not usable in T14 either, as written: it asks what the *word* can mean rather than what the base
+records, which T14's ⚠️ bullet rules out. Reword to `Koliko pomenov je za <L> zabeleženih?` or
+drop it.
 
 ---
 
@@ -1843,34 +1929,52 @@ it belongs to T14, and leaving it here would give one surface two different gold
 
 ### What it is
 
-**Count the senses.** A number, optionally followed by short sense heads.
+**Count the recorded senses.** A number, optionally followed by short sense heads.
 
 ### How to implement
 
-- **Source:** count of `pomen:` nodes on the anchor.
+- **Source: the senses T12 lists.** `len(T12_items(anchor))` — the same `sense_class` call
+  (Group D), the same dedup, the same seed pool, obtained by **calling the same function**, not
+  by reimplementing the filter. If the two ever disagree on a lemma, the generator has a bug —
+  C17 asserts they never do.
+- **Seed only anchors with at least one `defined` sense** — 40,926 of the 72,561-lemma pool. The
+  remaining 31,635 are the **shared negative**: `ODGOVOR: ni podatka v bazi`, the same string T12
+  emits, so the type never has to answer `0` and no lemma gets a number from one type and a
+  refusal from the other.
 - **Fix the agreement bug.** The reference file gets Slovene number agreement wrong in
-  **100/100 rows** ("*ima registrirana 1 pomen*"). Correct forms:
-  - 1 → `ima 1 pomen`
-  - 2 → `ima 2 pomena`
-  - 3–4 → `ima 3 pomene`
-  - 5+ → `ima 5 pomenov`
-  Implement this as a table lookup on `n mod 100`, not a heuristic, and unit-test it.
+  **100/100 rows** ("*ima registrirana 1 pomen*"). Correct forms, in the database framing the
+  bullet below requires:
+  - 1 → `v bazi je zabeležen 1 pomen`
+  - 2 → `v bazi sta zabeležena 2 pomena`
+  - 3–4 → `v bazi so zabeleženi 3 pomeni`
+  - 5+ → `v bazi je zabeleženih 5 pomenov`
+  Note that the verb and the participle agree too, not just the noun — a table lookup on
+  `n mod 100` returning the whole phrase, not a heuristic, and unit-tested (C7). The case is a
+  property of the frame, so a UI sentence that keeps a `ima` frame needs the accusative table
+  instead (`ima 1 pomen` / `2 pomena` / `3 pomene` / `5 pomenov`). Pick one frame per type and
+  keep it.
 - **Gradeable line:** the bare integer — `ODGOVOR: 3`. Exact-match gradeable with zero
   ambiguity, which makes it a natural smoke test for the pipeline.
-- **⚠️ The answer distribution is nearly constant — decide before generating.** Measured over
-  15,000 anchors: **1 sense 8.6 %, 2 senses 90.1 %, 3+ 1.3 %.** A model that always answers `2`
-  scores **90.1 %**. The type is perfectly verifiable and almost uninformative. Options, in
-  order of preference:
-  1. **Keep it and always report the 90.1 % majority-class baseline next to the score** —
-     cheap, honest, and it keeps a type whose *format* is a useful smoke test. **Recommended.**
-  2. Restrict the seed pool to anchors with ≠ 2 senses: informative, but unrepresentative of
-     the resource and it shrinks the pool to ~10 %.
-  3. Drop T14 and let T12 carry the sense material.
-  Whichever is chosen must be recorded here, since it changes what the number means.
-- **Counting policy must be fixed and stated:** does a lemma-fallback sense count? Recommend
-  **yes** (the count is a structural fact about the entry, independent of definition
-  coverage), but state it in the UI part so the answer is not silently surprising.
-- **Negative:** an entry with no senses at all.
+- **The answer distribution, on the pool as now seeded:** **1: 37.1 %, 2: 25.1 %, 3: 12.8 %,
+  4: 7.4 %, 5: 4.8 %, >5: 12.9 %** — majority-class baseline **37.1 %**, reported beside every
+  score (C13). *(The old "90.1 % answer 2" figure was measured over all 4.34 M anchors, 90.7 % of
+  which are MWE entries whose second sense is an empty shell — see §1.1. It was never a fact
+  about words.)*
+- **⚠️ Ask about the database, not about Slovene.** The KG records several glosses per meaning
+  and never says which describe the same sense (`fotograf` 2, `dekan` 3 vs `dekanica` 4,
+  `dvigniti` 36 — Group D), so *"koliko pomenov **ima** beseda X"* has no true answer here.
+  Question and UI text must both say **zabeleženih / razloženih v bazi**. This is a correctness
+  constraint, not a stylistic one: it is what makes the gold true.
+- **Counting policy — settled.** Only `defined` senses count. The entry-reified `placeholder`
+  does not (it is the entry, not a meaning), and neither does a `fallback` sense whose text is
+  the headword repeated. Rationale and the three rejected alternatives are in Group D; the short
+  version is that no other policy is derivable from the text the model is shown.
+- **What this type actually measures.** With the shared filter, T14 is `len(T12)` — it is a
+  **format smoke test and a count-vs-list consistency probe** ("does the model's number match
+  the list it would give?"), not an independent capability. That is a real thing to measure and
+  worth keeping, but it must not be read as sense knowledge. Recorded here because the doc's
+  earlier option 3 (drop T14) becomes reasonable if the probe is not wanted.
+- **Negative:** shared with T12 — a lemma with no defined sense. 31,635 of the pool.
 
 ### Output template
 
@@ -1884,12 +1988,12 @@ ODGOVOR: {n}
 | sep | — |
 | order | — (arity 1) |
 | gap | — |
-| regex | `^ODGOVOR: (?:0\|[1-9][0-9]*)$` |
+| regex | `^ODGOVOR: [1-9][0-9]*$` — **`0` is deliberately not allowed**; a lemma with no defined sense is a §0.2 negative, not a count of zero, and a `0` reaching the gold means the seed filter leaked |
 | example | `ODGOVOR: 3` |
 
-The Slovene agreement table (`1 pomen` / `2 pomena` / `3 pomene` / `5 pomenov`) belongs to the
-**UI part only**. Keeping the number bare in the gradeable line means the agreement bug the
-reference file has in 100/100 rows cannot affect the score.
+The Slovene agreement table (see the implementation bullet) belongs to the **UI part only**.
+Keeping the number bare in the gradeable line means the agreement bug the reference file has in
+100/100 rows cannot affect the score.
 
 ### Existing formulations
 
@@ -1908,19 +2012,30 @@ Reference CSV, n = 100:
 | 8 | `Preveri večpomenskost besede <L>.` |
 | 6 | `Koliko leksikalnih pomenov vsebuje beseda <L>?` |
 
+**Six of these ten are unusable as written.** `Ali ima beseda <L> več pomenov?`, `Koliko pomenov
+ima beseda <L>?`, `Ali je beseda <L> enopomenska ali večpomenska?`, `Koliko ločenih pomenov ima
+lema <L>?`, `Preveri večpomenskost besede <L>.` and `Koliko leksikalnih pomenov vsebuje beseda
+<L>?` all ask what the **word** has; our gold can only say what the **database records**, and the
+two differ wherever the imported layer duplicates a gloss. The four `število … registriranih /
+zabeleženih` frames are already database-framed and are the model to follow.
+
 ### Suggested new templates
 
+Every frame names the database. This is a correctness requirement (see the ⚠️ bullet above), so
+new frames must keep it — a phrasing that asks about Slovene rather than about the entry makes
+the gold false no matter how the count is computed.
+
 ```
-Koliko pomenov ima <L>?
-Je <L> večpomenska beseda?
+Koliko pomenov je za <L> zabeleženih v bazi?
 Koliko različnih pomenov je zabeleženih za <L>?
-Ali ima beseda <L> samo en pomen?
-Število pomenov besede <L>?
-Povej, koliko pomenov ima <L>.
-Je <L> enopomenska?
-Koliko gesel oziroma pomenov ima <L>?
-Zanima me, ali je <L> večpomenska.
-Ima <L> več kot en pomen?
+Koliko pomenov besede <L> je razloženih v slovarju?
+Število zabeleženih pomenov za <L>?
+Koliko pomenskih razlag ima geslo <L>?
+Povej, koliko pomenov je pri <L> opisanih.
+Koliko razlag je v bazi pri besedi <L>?
+Za koliko pomenov besede <L> obstaja razlaga?
+Koliko ločenih pomenov je pri geslu <L> popisanih?
+Zanima me, koliko pomenov je za <L> registriranih.
 ```
 
 ---
@@ -2164,14 +2279,25 @@ unnumbered and non-exhaustive.
 
 ### How to implement
 
-- **Source:** `kolokacija:` nodes attached to the anchor's senses. Each has degree exactly 2
-  and is a leaf-like connector, not a hub — which is why wiring collocations in costs ~0 % at
-  the median ball size. Since v5 the node text **is** the phrase (`kolokacija: mineralna
-  voda`), so the gold answer is read straight off the node with no post-processing.
-- **Ranking:** the graph carries no frequency on the collocation node. Rank deterministically
-  (e.g. by the partner's own proxy value, then alphabetically) and say in the UI part that
-  the list is a selection, not a ranking by corpus frequency. **Do not claim "najpogostejše"**
-  — the reference file does, and it cannot back the claim either.
+- **Source:** `kolokacija:` nodes attached to the anchor's senses. Since v5 the node text
+  **is** the phrase (`kolokacija: mineralna voda`), so the gold answer is read straight off
+  the node with no post-processing.
+- **The anchor side is a hub** *(corrected 2026-08-21)*. An earlier version of this spec
+  said collocation nodes are "a leaf-like connector, not a hub — which is why wiring
+  collocations in costs ~0 % at the median ball size". The degree-2 part is true of the
+  collocation node, but the *sense* on the other end fans out without bound: p99 = 791,
+  max = 14,233 (`pomen 1: imeti`). Extraction applies the **D5b** cap — K = 15 pooled
+  across the anchor's senses.
+- **Selection:** the graph carries no frequency on the collocation node, so there is no
+  "top N" to report. **Draw the gold from the D5b sample** — the 15 collocations the
+  extractor already put in the ball — so gold is in-ball by construction and no comparator
+  has to be kept in sync. Order the drawn phrases canonically (`sl_key`) for the gradeable
+  line; that ordering is presentation, not ranking.
+- **Say it is a selection**, not a ranking by corpus frequency. **Do not claim
+  "najpogostejše"** — the reference file does, and it cannot back the claim either.
+  Deterministic ranking was tried and rejected in favour of sampling: every key biases
+  toward one slice of the partner-frequency distribution, and the best-looking one merely
+  returned whatever sat just under a hand-picked cutoff (D5b).
 - **Gradeable line:** the phrases in canonical order:
   `ODGOVOR: mineralna voda, mineralno gnojilo, mineralna snov, mineralna surovina, mineralno olje`
 - **Grading note:** match case-insensitively. 175 of the reference file's 1,307 items are
@@ -2514,16 +2640,19 @@ Zanima me, kaj je <F> v povedi <S> — sklon in število.
 | C4 | **Measure the natural multi-entity rate** (R5) on real generated question strings, not on the 88.9 % figure. | D3 makes the union share emergent; if it comes out near zero, oversample ambiguous seeds via T4/T21. |
 | C5 | **Pick and evaluate the extraction model** (R4). Its recall against our own templates is measurable for free — we author them, so the gold target word is known. | An extractor miss is an end-to-end service error no amount of GTLM training recovers. |
 | C6 | **Verify Tier C leakage**: no training item anywhere contains `protipomenka` / `antonim` / `nasprotje`. | T16's whole value is that the relation is unseen. |
-| C7 | **Unit-test the Slovene number agreement table** (T14) and the canonical orderings (T1, T5, T15, T17, T21). | Grading is exact-match on these strings; an ordering bug reads as a model failure. |
+| C7 | **Unit-test the Slovene number agreement table** (T14), the canonical orderings (T1, T5, T15, T17, T21), and **`sense_class`** (Group D) against a fixture holding one placeholder, one fallback with an example snippet, one definition equal to the headword, and one ordinary definition. | Grading is exact-match on these strings; an ordering bug reads as a model failure. `sense_class` decides both the T12 list and the T14 count, so a bug there is a systematic wrong-gold, not noise. |
 | C8 | **Withhold 2–3 templates per type** for Tier A before generation, not after. | Retrofitting a held-out split from generated items risks the same phrasing appearing on both sides. |
 | C9 | **Run the §0.8 grader over the gold answers themselves** — every item must score `exact = 1.0` against its own gold. | Catches separator collisions, stray whitespace and normalization bugs before they are misread as model failures. Free, and it is the one test that validates the grading contract end to end. |
 | C10 | **Assert every gold answer matches its type's `regex`**, and that no *multi-item* gold contains its own separator inside an item. | Measured safe today for definitions (0/230,606 contain `\|`) and word forms (0 contain `,;\|/`), but nothing enforces it. Single-item types are exempt by design — 4 of 51,172 examples contain a `\|` and must not be split (§0.9). |
 | C11 | **Decide M4** (render noun `gender` into the anchor, one line + a ~35 min rebuild). | T9 is ungeneratable and T8's noun row is POS-only until it lands (§0.7). |
-| C12 | **Decide T14** — keep with the 90.1 % majority-class baseline reported, restrict the pool, or drop. | 90.1 % of anchors have exactly 2 senses; the type is verifiable but nearly uninformative as specified (§1.1). |
+| C12 | ~~**Decide T14** — keep with the 90.1 % majority-class baseline reported, restrict the pool, or drop.~~ **Closed 2026-08-21.** The 90.1 % was measured over all anchors, 90.7 % of which are MWE entries whose second sense is an empty shell; on the seed pool the baseline is **37.1 %**. T14 now counts the senses T12 lists (Group D). Remaining work is C17, not a decision. | The premise was a measurement artefact. Kept, with its role restated: a count-vs-list consistency probe, not independent sense knowledge (§T14). |
 | C13 | **Report a majority-class / constant-answer baseline for every type**, not just T14. | T14 is the extreme case, but T9 (3 values), T10 (3 values) and T16 (75 % single-antonym) all admit cheap constant strategies. A score without its baseline is unreadable. |
 | C14 | ~~**Reopen T17/T18** only with a verbalisation source (Group F).~~ **Done 2026-08-20 — the source is the export itself.** Remaining work: regenerate both types against a v5 store and confirm the gold lines come off the node text unmodified. | The verbalisation is now node text, so the check is that nothing downstream still splits on `+`. |
 | C15 | **Assert every generated gold is in its type's canonical order** — including the set-valued types whose order is *not* graded. | Grading tolerance is not a licence for sloppy training data: the model must see exactly one ordering for a given set, or it is being taught noise on a surface it is forced to emit. Cheap to check (re-sort and compare), and it is the only thing standing between "order is not graded" and "order is arbitrary". |
 | C16 | **Unit-test `sl_key`** against a fixture including `č`, `š`, `ž` and a non-Slovene character. | `sl_SI` is not installed on this cluster and Python's default sort is wrong for Slovene (§0.8.2); a silent fallback would make the training data non-canonical without failing anything. |
+| C17 | **Assert `T14 gold == len(T12 gold)`** for every lemma appearing in both, and that a lemma is a negative in both types or in neither. | The two share `sense_class`, the dedup and the seed pool *by design*; nothing enforces it. Drift here teaches the training data to say *ima 4 pomene* beside a two-item list — the exact contradiction the shared filter exists to remove. |
+| C18 | **Implement D5b's sampler and pin its reproducibility.** Assert (a) the candidate pool is sorted by node id before drawing, (b) the RNG seed derives from the anchor's node code and nothing else, (c) rebuilding the store leaves every ball byte-identical, and (d) every gold phrase is in its own ball. | Found 2026-08-21: `sestavina` was never the only hub. Uncapped, a top-band anchor costs a p50 of 22,704 tokens (max 135,515) against 1,986 capped. (a) and (b) are silent failures — CSR adjacency order is not stable across builds (0.44 % of `indices` rows moved in v5), so an unsorted pool or an order-dependent seed makes the dataset unreproducible without failing anything. |
+| C19 | **Record the realised collocation mix** once generation runs: partner-proxy percentiles and function-word share over all sampled balls, against the §3.1c single-anchor figures. | §3.1c measures the sampler on `voda` alone. The weights are justified by a power law fitted globally (slope −1.418, R² = 0.933), but the mix the dataset actually gets is unmeasured until items exist. |
 
 ---
 
