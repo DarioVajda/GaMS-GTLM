@@ -2,7 +2,7 @@
 #
 # v5 store: the COLLOCATION-VERBALISATION rebuild.  Structure is byte-identical
 # to v4 -- this build changes the text of collocation nodes only, fixing flaw 8
-# in build_gtlm_graph_v3.py:
+# in build_gtlm_graph.py:
 #
 #   v2/v3/v4 wrote a collocation as its two member lemmas joined by a plus
 #       kolokacija: kisov + voda
@@ -81,7 +81,7 @@ echo "store: $STORE"
 echo "ref  : $REF"
 "$PY" -c "import sys, numpy, transformers; print('env OK ', sys.executable, sys.version.split()[0], 'numpy', numpy.__version__, 'transformers', transformers.__version__)"
 
-"$PY" $ROOT/data/build/build_gtlm_graph_v3.py \
+"$PY" $ROOT/data/build/build_gtlm_graph.py \
   --kg-dir "$ROOT/data/kg_raw/OntoLex DSB" \
   --workers "${SLURM_CPUS_PER_TASK}" \
   --tokenizer "$TOKENIZER" \

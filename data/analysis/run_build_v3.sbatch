@@ -33,7 +33,7 @@ echo "host: $(hostname)  cpus: ${SLURM_CPUS_PER_TASK}  start: $(date)"
 
 # v3 adds ~2.4M reified collocation nodes on top of v2's graph and runs 8
 # variants instead of 4, hence the bump from 150G/4h to 200G/6h.
-"$PY" /shared/workspace/povejmo/gams_gtlm/data/build/build_gtlm_graph_v3.py \
+"$PY" /shared/workspace/povejmo/gams_gtlm/data/build/build_gtlm_graph.py \
   --kg-dir "/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB" \
   --out    "/shared/workspace/povejmo/gams_gtlm/data/analysis/results/results_v3.json" \
   --n-seeds 400 --max-hops 3 --workers "${SLURM_CPUS_PER_TASK}" --seed 42

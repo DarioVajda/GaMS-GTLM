@@ -2,7 +2,7 @@
 """
 On-disk store for the v3 GTLM graph.
 
-`build_gtlm_graph_v3.build()` spends ~12 minutes (parse -> collapse -> reify ->
+`build_gtlm_graph.build()` spends ~12 minutes (parse -> collapse -> reify ->
 CSR -> tokenisation) reconstructing the same 36.7M-node graph from 42 GB
 of N-Triples on every run, then throws it away.  This module persists that
 result so downstream work (subgraph extraction, TextGraphDataset adaptation)
@@ -46,7 +46,7 @@ _ARRAYS = (
     ("token_len",  np.int32, "n"),
 )
 
-# kind ids that the derived masks test against (mirrors build_gtlm_graph_v3)
+# kind ids that the derived masks test against (mirrors build_gtlm_graph)
 K_FORM, K_EXAMPLE, K_COLLOC = 1, 3, 5
 
 
@@ -197,7 +197,7 @@ def save_graph(out_dir, G, token_len, *, stats=None, meta=None,
 def load_graph(store_dir, *, mmap_arrays=True, mmap_text=True, verbose=True):
     """Load a store written by `save_graph`.
 
-    Returns a dict shaped like `build_gtlm_graph_v3.build()`'s return value --
+    Returns a dict shaped like `build_gtlm_graph.build()`'s return value --
     plus `token_len`, `manifest` and `stats` -- so analysis code can consume it
     unchanged.  With the defaults nothing is read into RAM until touched.
     """

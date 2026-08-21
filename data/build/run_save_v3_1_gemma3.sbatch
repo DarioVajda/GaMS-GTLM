@@ -58,7 +58,7 @@ REF=$ROOT/data/stores/kg_graph_v3_1_gams2b
 echo "host: $(hostname)  cpus: ${SLURM_CPUS_PER_TASK}  start: $(date)"
 "$PY" -c "import sys, numpy, transformers; print('env OK ', sys.executable, sys.version.split()[0], 'numpy', numpy.__version__, 'transformers', transformers.__version__)"
 
-"$PY" $ROOT/data/build/build_gtlm_graph_v3.py \
+"$PY" $ROOT/data/build/build_gtlm_graph.py \
   --kg-dir "$ROOT/data/kg_raw/OntoLex DSB" \
   --workers "${SLURM_CPUS_PER_TASK}" \
   --tokenizer "$TOKENIZER" \
@@ -77,7 +77,7 @@ du -sh "$STORE"
 # not reproducible and the two stores cannot be compared node for node.
 #
 # indices.npy is the ONE array compared as a multiset rather than byte for byte.
-# The builder merges parsed files with pool.imap_unordered (build_gtlm_graph_v3
+# The builder merges parsed files with pool.imap_unordered (build_gtlm_graph
 # ~line 419), so files arrive in completion order and the neighbours of a node
 # that several files touch -- shared examples, shared forms -- are appended in a
 # run-dependent order.  Measured on this pair: 92,945 rows of 36,735,791 (0.25%),

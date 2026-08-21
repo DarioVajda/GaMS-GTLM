@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-v3 builder + sizing analysis for the GTLM-compatible CJVT graph.
+Builder + sizing analysis for the GTLM-compatible CJVT graph.
+
+This is THE builder: one file, continuously improved.  The "vN" in a store name
+is a text/structure convention, not a separate script -- every convention from v3
+onwards is reachable from this file's flags, and the manifest records which one
+built a given store ("text_convention").  The flaw list below is the changelog.
 
 Fixes the four defects recorded in data/README.md "Known flaws" for v2:
 

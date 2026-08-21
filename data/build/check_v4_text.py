@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Acceptance check for a v4 store against its v3.1 predecessor.
 
-v4 changes node TEXT only (flaw 7 in build_gtlm_graph_v3.py): vform / person /
+v4 changes node TEXT only (flaw 7 in build_gtlm_graph.py): vform / person /
 definiteness are rendered on form nodes, aspect / clitic on anchors.  Structure
 is untouched.  This script asserts exactly that, and measures the defect the
 change exists to fix.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Acceptance check for a v5 store against its v4 predecessor.
 
-v5 changes the text of COLLOCATION nodes only (flaw 8 in build_gtlm_graph_v3.py).
+v5 changes the text of COLLOCATION nodes only (flaw 8 in build_gtlm_graph.py).
 A frac:Collocation node carries no text of its own and nothing in the dump points
 at one, so v2/v3/v4 wrote the two member lemmas joined by a plus:
 

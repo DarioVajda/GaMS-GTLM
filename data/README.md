@@ -4,7 +4,7 @@
 > resolves all four defects that were listed as *Known flaws* there. The v2
 > section is retained at the bottom purely as history — **do not quote v2
 > figures**. Builder:
-> [`build/build_gtlm_graph_v3.py`](build/build_gtlm_graph_v3.py).
+> [`build/build_gtlm_graph.py`](build/build_gtlm_graph.py).
 >
 > **Companion document:** [`QA_DATASET_DESIGN.md`](QA_DATASET_DESIGN.md) records the design
 > of the question–answer dataset built on top of this graph, including a full-corpus census
@@ -274,7 +274,7 @@ model is asked to attach different answers to inputs that are identical up to
 permutation. That is label noise manufactured by the builder, not a gap in the
 source data.
 
-**v3.1 fixes it** (`build_gtlm_graph_v3.py`, flaw 5). A sense node now gets:
+**v3.1 fixes it** (`build_gtlm_graph.py`, flaw 5). A sense node now gets:
 
 - its **dictionary ordinal** when its entry has more than one sense
   (`pomen 2: pes`), which makes siblings distinct unconditionally; and

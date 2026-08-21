@@ -65,7 +65,7 @@ TYPE_SHIFT = 56
 T_LU = 1          # lexical-unit -> headword anchor
 T_WORDFORM = 3    # word-form    -> inflected form leaf
 
-# `kind.npy` values, from build_gtlm_graph_v3.py.  Unlike node_codes these cover
+# `kind.npy` values, from build_gtlm_graph.py.  Unlike node_codes these cover
 # the minted nodes too, so they are what lets a search reach collocations.
 K_ANCHOR, K_FORM, K_SENSE, K_EXAMPLE = 0, 1, 2, 3
 K_TRANS, K_COLLOC, K_SYN, K_ANT, K_OTHER = 4, 5, 6, 7, 8
@@ -299,7 +299,7 @@ def _tier(text, kind, want, word_re):
 
 
 # code type id -> the IRI stem it came from, so every printed label can be fed
-# straight back to `raw iri`.  Mirrors TYPE_NAME in build_gtlm_graph_v3.py.
+# straight back to `raw iri`.  Mirrors TYPE_NAME in build_gtlm_graph.py.
 _STEM = {1: "lexical-unit", 2: "lexical-unit-part", 3: "word-form",
          4: "form-lexical-unit", 5: "sense", 6: "sense-translation",
          7: "translation-form", 8: "example", 9: "resource",

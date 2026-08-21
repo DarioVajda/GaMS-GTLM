@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # v4 store: the TEXT-CONVENTION rebuild.  Structure is byte-identical to v3.1 --
-# this build changes node text only, fixing flaw 7 in build_gtlm_graph_v3.py:
+# this build changes node text only, fixing flaw 7 in build_gtlm_graph.py:
 #
 #   (a) person was silently dropped from all 253,497 forms carrying it, because
 #       VALUE_SL listed firstPerson/secondPerson/thirdPerson and the KG emits
@@ -75,7 +75,7 @@ echo "store: $STORE"
 echo "ref  : $REF"
 "$PY" -c "import sys, numpy, transformers; print('env OK ', sys.executable, sys.version.split()[0], 'numpy', numpy.__version__, 'transformers', transformers.__version__)"
 
-"$PY" $ROOT/data/build/build_gtlm_graph_v3.py \
+"$PY" $ROOT/data/build/build_gtlm_graph.py \
   --kg-dir "$ROOT/data/kg_raw/OntoLex DSB" \
   --workers "${SLURM_CPUS_PER_TASK}" \
   --tokenizer "$TOKENIZER" \

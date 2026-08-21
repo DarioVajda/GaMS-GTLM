@@ -67,7 +67,7 @@ echo "host: $(hostname)  cpus: ${SLURM_CPUS_PER_TASK}  start: $(date)"
 #
 # --no-analysis skips the 8 sizing variants (~11 min); results_v3.json already
 # holds them and a store-backed rerun reproduces them byte-identically.
-"$PY" $ROOT/data/build/build_gtlm_graph_v3.py \
+"$PY" $ROOT/data/build/build_gtlm_graph.py \
   --kg-dir "$ROOT/data/kg_raw/OntoLex DSB" \
   --workers "${SLURM_CPUS_PER_TASK}" \
   --save-graph "$STORE" \

@@ -24,7 +24,7 @@ fi
 echo "host: $(hostname)  cpus: ${SLURM_CPUS_PER_TASK}  start: $(date)"
 
 # Same seed and settings as run 126763, but sourced entirely from the store.
-"$PY" $ROOT/data/build/build_gtlm_graph_v3.py \
+"$PY" $ROOT/data/build/build_gtlm_graph.py \
   --load-graph "$ROOT/data/stores/kg_graph_v3" \
   --out        "$ROOT/data/analysis/results/results_v3_from_store.json" \
   --n-seeds 400 --max-hops 3 --seed 42
