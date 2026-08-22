@@ -1,0 +1,80 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // Does the structural bias buy anything on real lexicographical graphs?
+  //
+  // Two arms over identical data, identical backbone, identical schedule:
+  //   spd=true,  magnetic=true   -- the arm asked for
+  //   spd=false, magnetic=false  -- the CONTROL: the model still reads the same
+  //                                 packed node texts in the same order, so the
+  //                                 difference is attributable to the bias and
+  //                                 to nothing else
+  //
+  // Both are far above the majority-class baseline (10.65 % over these four
+  // types), which is what makes the comparison worth running at all -- see the
+  // `baselines` block written into every record in results/train_runs.jsonl.
+  //
+  // The single-run results from 2026-08-22 (seed 42, before this sweep config
+  // existed) were test EM .7283 with the bias against .5978 without.  This
+  // sweep re-runs both over three seeds so the gap has an error bar.
+  //
+  //   .venv/bin/python -m sweep train train/configs/bias_ablation.jsonc
+  //
+  // Note: no "container" key.  The sweep runner only wraps in pyxis when one is
+  // given, and ana/aga run Ubuntu 22.04 / python3.10 natively -- which is what
+  // this repo's .venv is built against.  Adding a B200/B300 arm later means
+  // adding the container back.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "bias_ablation",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 2,
+      "partition": "frida",
+      "account": "povejmo",
+      "nodelist": "ana",
+      "gpus": "A100_80GB:1",
+      "cpus": 8,
+      "mem": "96G",
+      "time": "08:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "google/gemma-3-1b-it",
+  "types": "T3,T4,T9,T10",
+
+  // The ablation axis, as a BUNDLE (a list of objects) rather than two lists:
+  // two lists would be two independent axes and expand to the 2x2 product,
+  // adding spd-only and magnetic-only arms nobody asked for and tripling the
+  // queue time.  A bundle is one axis whose values are coherent settings.
+  "arm": [
+    {"spd": true,  "magnetic": true},
+    {"spd": false, "magnetic": false}
+  ],
+  "rrwp": false,
+
+  "seed": [0, 1, 2],
+
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-eager",
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 5e-4,
+  "bias_lr": 3e-2,
+  "num_epochs": 8,
+  "batch_size": 4,
+  "accumulation_steps": 4,
+  "eval_steps": 40,
+  "max_length": 2048,
+  "num_workers": 4,
+  "include_f1": true
+}
