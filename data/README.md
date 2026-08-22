@@ -38,8 +38,14 @@ data/
 │                v2 builder, run_analysis*.sbatch, run_build_v[23].sbatch,
 │                results/*.json
 ├── lookup/      kg_lookup.py — the query CLI (`bin/lookup` wraps it)
-├── datasets/    reference/ the two reference QA sets; generated/ our output
-├── stores/      kg_graph_v3, kg_graph_v3_1_*, kg_graph_v4_*, kg_graph_v5_* (gitignored, ~4 GB each)
+├── qa/          produces the QA dataset from a store: build_dataset.py and the
+│                pieces it composes — seeds/spec/templates/gen/d5b/grade/
+│                selftest/inspect, plus run_generate.sbatch; and build_balls.py,
+│                which turns items into the text graphs a GTLM reads
+├── datasets/    reference/ the two reference QA sets; generated/ our items;
+│                balls/ one text graph per item (nodes + edges, explicit)
+│                        — consumed by ../train/, which fine-tunes GTLM on them
+├── stores/      kg_graph_v3 … kg_graph_v7_gemma3 (gitignored, ~4 GB each)
 ├── kg_raw/      the untouched CJVT N-Triples (83 GB, gitignored)
 └── logs/        Slurm job logs
 ```
@@ -49,6 +55,58 @@ Three rules keep it that way. A directory names a **purpose, not an import**:
 `build/`, because what it produces is the census, not a store. Anything imported
 by two or more of build/analysis/lookup goes in **`lib/`**. Data products live
 under a directory that says what they are, never loose in `data/`.
+
+`qa/` is the one package rather than a bag of scripts, because its pieces have to
+agree with each other: `spec.py` is the per-type answer contract that both
+`gen.py` and `grade.py` read, and `d5b.py` is the collocation sampler that both
+the T17 generator and — later — the ball builder must call rather than
+reimplement. `analysis/measure_d5b.py` imports from it for the same reason.
+
+### Generating the dataset
+
+```
+sbatch data/qa/run_generate.sbatch                    # -> datasets/generated/v1
+python -m qa.inspect datasets/generated/v1 --stats    # what came out
+python -m qa.inspect datasets/generated/v1 -n 3       # read some of it
+python -m qa.selftest --dataset datasets/generated/v1 --store data/stores/kg_graph_v7_gemma3
+python -m qa.grade   datasets/generated/v1/test.jsonl --predictions preds.jsonl
+```
+
+`report.json` records the availability matrix (computed by *running* every
+generator over every pool entry, not by predicting eligibility), the realised
+type × band × split counts, and the negative mix.
+
+### What v1 came out as (2026-08-22, against `kg_graph_v7_gemma3`)
+
+**12,493 items** — train 9,268 / dev 1,040 / test 2,185 — over 19 types and 279
+distinct question frames, from a seed pool of **72,334 lemmas** (196 excluded for
+a source-ambiguous lemma, Finding 10's neighbourhood). Negatives are **8.5 %**
+(mismatch 442 / nonexistent 318 / absent 308), tiers A 3.9 % and C 0.9 %. The
+selftest (`QA_TASKS.md` §2) passes on all of C6, C7, C9, C10, C11, C13, C15,
+C16, C17, C18, and the grader scores the gold at **100.00 %** on every split,
+type and band.
+
+Availability — every generator *run* over every pool entry, not predicted:
+
+| | | | |
+|---|---|---|---|
+| T8 72,334 | T17 65,288 | T12/T14 40,781 | T9 38,741 |
+| T15 35,517 | T3 33,553 | T21 33,550 | T2 33,537 |
+| T1 33,267 | T4 32,781 | T19 10,175 | T7 8,061 |
+| T10 8,060 | T5/T6 8,057 | T16 3,699 | T20 2,386 |
+| **T11 575** — the thinnest, after C22 rejects degenerate gradation | | | |
+
+Two numbers to read with the results, both reported by C13: **T20's
+majority-class baseline is 53.9 %** (a dictionary example cites its headword in
+the base form) and **T9's is 42.6 %**. A per-type score below its own baseline
+row means nothing was learned.
+
+Four defects were found by *reading* generated items rather than by any
+assertion, and each produced a check: Finding 12 / C23 (lemma-filled paradigms),
+C24 (frames asking for fewer slots than the answer contract fills), C20 (false
+premises) and C22 (degenerate gradation). C17 caught a fifth on its own — T12
+and T14 were drawing their negatives from separate random streams, so their
+agreement was a coincidence that held in one generation and broke in the next.
 
 ---
 
@@ -148,12 +206,21 @@ binary; member-count histogram `{1: 8875, 2: 4707758, 3: 406, 4: 44, 5: 4}`).
 
 ---
 
-## Finding 1 — collocations are nearly free. The prediction was wrong.
+## Finding 1 — collocations are nearly free *at the median only* ⚠️
+
+> **⚠️ PARTLY SUPERSEDED 2026-08-21 — see finding 9.** The per-seed cost table below
+> is correct as measured. The conclusion drawn from it was not: v2's prediction was
+> **right**, and this finding dismissed it on a sample that could not see it.
 
 v2 predicted that wiring collocations in "will add a **new hub class on common
 words**, which is likely to destroy the currently-flat single-word case." It was
-explicitly flagged as *must be measured, not assumed*. Measured, it does not
-happen.
+explicitly flagged as *must be measured, not assumed*.
+
+**v2 was right.** The hub is real — `pomen 1: imeti` carries 14,233 collocation
+edges — and this finding missed it by sampling lexical units uniformly, where the
+median anchor has 4 collocations and the hubs are a thin tail. Everything below is
+accurate for the median seed and misleading for the seeds the QA dataset actually
+draws. Finding 9 has the corrected picture.
 
 **Median neighborhood is completely unchanged**, and even the tails barely move
 (`expand` + examples, nodes):
@@ -171,6 +238,13 @@ The largest effect anywhere is **+21 % at word p99 / hop 2** (614 → 740, i.e.
 +126 nodes); at hop 3 the difference is under **0.01 %**, and for MWE seeds
 **+2.7 %** at the median.
 
+> **⚠️ SUPERSEDED 2026-08-21 — this subsection was wrong.** See finding 9. Reason 1 is
+> false as measured, reason 2 is true but measures the wrong direction, and the
+> conclusion does not hold. Kept here because the reasoning error is instructive.
+
+<details>
+<summary>Original text — "Why the feared hub never forms"</summary>
+
 **Why the feared hub never forms.** Two structural reasons:
 
 1. **Collocations hang off *senses*, not lemmas.** A common word's collocations
@@ -182,6 +256,23 @@ The largest effect anywhere is **+21 % at word p99 / hop 2** (614 → 740, i.e.
 
 So the `sestavina` (MWE↔word) hub remains the **only** structure in this graph
 that explodes, exactly as in v2.
+
+</details>
+
+**What is actually true.** Reason 1 is empirically false: collocations are **not**
+spread across a common word's senses, they pile onto sense 1. `imeti` has 14,249
+collocations over all its senses and 14,233 of them — 99.9 % — hang off `pomen 1`.
+`voda`: 3,003 of 3,026, 99.2 %.
+
+Reason 2 is true but irrelevant. A collocation node does have degree exactly 2; the
+hub is the **sense on the other end**, and the argument only ever measured the
+`kolokacija → sense` direction. Traversed the other way, `sense → kolokacija` is
+unbounded: p90 = 101, p99 = 791, max = 14,233, with 28.8 % of collocation-bearing
+senses above 15.
+
+So `sestavina` is **not** the only structure that explodes. Both hubs need a cap,
+and both are capped — `sestavina` by D5, `sense → kolokacija` by D5b (per anchor,
+K = 15). Full measurements in `QA_DATASET_DESIGN.md` §3.1b.
 
 ## Finding 2 — dropping Levi halves the node count, but tokens are a wash
 
@@ -227,7 +318,11 @@ built over the **node set**, so node count is the structural cost driver, while
 tokens are merely context length — but the saving should be stated as *nodes*,
 not tokens.
 
-## Finding 3 — the MWE explosion is unchanged, and it is still the whole story
+## Finding 3 — the MWE explosion is unchanged (but it is *not* the whole story) ⚠️
+
+> **⚠️ TITLE CORRECTED 2026-08-21.** The MWE numbers below stand. "The whole story"
+> does not — the `sense → kolokacija` hub is a second explosion of the same order.
+> See finding 9.
 
 | seed kind | hop | nodes (p50) | **GaMS-2B tokens (p50)** |
 |---|---|--:|--:|
@@ -669,6 +764,95 @@ invariant holds.
 
 ---
 
+## Finding 9 — `sestavina` was never the only hub. `sense → kolokacija` is the second.
+
+**Status: measured 2026-08-21 on `kg_graph_v5_gemma3`.** Structure is md5-identical to
+v4, so this holds for every store from v3 onward — it is a property of the graph, not of
+the v5 text change. Supersedes finding 1's conclusion, finding 3's title, and the
+"why the feared hub never forms" subsection.
+
+### What was believed
+
+Findings 1 and 3 concluded that collocations are "nearly free" and that `sestavina` is
+the **only** structure that explodes. Two reasons were given: collocations spread over a
+lemma's many senses, and a collocation node has degree exactly 2.
+
+### What is true
+
+| claim | verdict |
+|---|---|
+| a collocation node has degree exactly 2 | **true**, but it measures `kolokacija → sense` — the harmless direction |
+| collocations spread across a lemma's senses | **false** — they pile onto sense 1 |
+| `sestavina` is the only hub | **false** |
+
+`imeti` has 14,249 collocations across all senses; 14,233 sit on `pomen 1` — **99.9 %**.
+`voda`: 3,003 of 3,026, **99.2 %**. Traversed `sense → kolokacija`, the fan-out is
+unbounded:
+
+| | value |
+|---|--:|
+| collocation-bearing senses | 120,871 |
+| p50 / p90 / p99 | 4 / 101 / 791 |
+| max | 14,233 (`pomen 1: imeti`) |
+| senses above 15 | 34,827 (**28.8 %**) |
+
+Top hubs: `imeti`, `biti`, `tako`, `iti`, `leto`, `bolj`, `priti`, `čas` — the same
+function words that head the `sestavina` hub list.
+
+### Why the original measurement missed it
+
+Findings 1 and 3 sampled lexical units **uniformly**, where the median anchor has 4
+collocations. The hubs are a thin tail under that sampling, so p50 and even p90 look
+flat. But D9 defines the QA frequency proxy as `collocation memberships + MWE
+memberships` and D10 bands on it — so the dataset samples *the tail on purpose*. The
+study's sampling distribution and the dataset's are close to inverted.
+
+Ball cost, 2 hops, D5 already applied, over the top 400 anchors by proxy:
+
+| `sense → kolokacija` cap | p50 | p90 | p99 | max |
+|---|--:|--:|--:|--:|
+| 0 | 1,844 | 2,826 | 6,388 | 9,046 |
+| **15 (D5b)** | **1,986** | **2,964** | **6,516** | **9,192** |
+| 100 | 2,806 | 3,789 | 7,189 | 9,995 |
+| uncapped | 22,704 | 41,779 | 80,429 | 135,515 |
+
+### Worked example — the two `kisova voda` nodes
+
+Seeded on each of the two nodes carrying that string (2 hops):
+
+| seed | uncapped | D5 only | D5 + D5b |
+|---|--:|--:|--:|
+| `iztočnica: kisova voda` | 5,073 n / 50,526 t | **121 n / 1,997 t** | 121 n / 1,997 t |
+| `kolokacija: kisova voda` | 3,013 n / 26,242 t | **3,013 n / 26,242 t** | **24 n / 231 t** |
+| `iztočnica: voda` | 21,118 n / 343,001 t | 3,124 n / 27,842 t | **113 n / 1,654 t** |
+
+The middle row is the point: D5 caps **zero** hubs on a collocation seed, because no
+`sestavina` edge is traversed at all. The path is
+`kolokacija → pomen 1: voda → its 3,003 other collocations`. Row 1 needs no D5b — once
+D5 has capped the MWE fan-out, no collocation-heavy sense is reached.
+
+### Consequence
+
+D5b (per anchor, K = 15) is added to `QA_DATASET_DESIGN.md` §4, measured in §3.1b, and
+T17/T18 draw their gold from the sampled set, so a gold phrase can never fall outside its
+own ball.
+
+**Which 15, though, is not a ranking problem.** Three deterministic keys were tried and
+all three are biased: partner proxy ascending lands in the hapax tail
+(`akratotermalna voda`), descending walks into `imeti nad vodo`, and the best-looking
+variant — cut at a threshold, then sort descending — turns out to return whatever sits
+just under the threshold, which had been picked by eye. Any fixed key also re-selects the
+same slice of the distribution on every anchor.
+
+D5b therefore **samples** rather than ranks: K = 15 drawn without replacement with
+`w ∝ log(1 + proxy(partner))`, seeded from the anchor's node code. The partner-proxy
+distribution is a power law (log-log slope **−1.418**, R² = **0.933**), which is what
+justifies the log damping — linear weights put a third of the list on function words.
+Sampling also makes T17/T18's gold in-ball by construction, since the gold is drawn from
+the sampled set. Measurements in `QA_DATASET_DESIGN.md` §3.1c.
+
+---
+
 ## Finding 10 — noun gender was never in the store, and the recorded one-line fix could not have put it there
 
 > **Status: fixed in v6, built and verified 2026-08-21.** Store
@@ -843,16 +1027,188 @@ T8's noun row was POS-only; both run against a v6 store.
 
 ---
 
+## Finding 11 — the store kept one collocation per *member set*, and threw away a fifth of the phrases
+
+**Status: found and fixed 2026-08-21; the v7 store.** This is the first version bump
+since v3 that changes **structure** rather than node text, and it is a bug fix, not a
+feature. It is also a fix to a defect that **two earlier findings each half-saw and
+neither caught**, which is the part worth reading.
+
+### The defect
+
+Each collocation is reified once per participant, so the dump holds several
+`frac:Collocation` IRIs over one `{sense_a, sense_b}` member set. Finding 2 (v2) saw
+that and deduplicated on the member set. That was **correct at the time**: the nodes
+were textless, the builder rendered them as `kolokacija: boj + kriminaliteta`, and
+every duplicate of one member set produced a byte-identical string. Keeping one was
+keeping all the information there was.
+
+Finding 8 (v5) then gave the nodes their curated phrase, by dereferencing the sense
+id embedded in the IRI. It did not revisit the key — and the duplicates do **not**
+name the same dependent sense. They name different ones, which is to say different
+curated phrases. The dedup that had been lossless became lossy in the same commit
+that made the nodes worth having.
+
+`_dedup_pairs_keyed`'s docstring asserted the opposite outright:
+
+> the duplicates differ only in the `frac:head` half of the IRI, so they all carry
+> the same sense id in the other half. Which representative survives therefore does
+> not affect the verbalisation
+
+Measured against the v6 store, that is false:
+
+| | |
+|---|--:|
+| binary collocation IRIs | 4,707,758 |
+| distinct member sets | 2,981,731 |
+| member sets naming **more than one** dependent sense | **439,370 (15.3 %)** |
+| curated phrases dropped | **717,545 (20.0 %)** |
+
+And the loss was **systematic, not random**: the surviving representative was the
+lowest IRI code, i.e. the earliest-entered entry, so the store consistently preferred
+one end of the editing history. `iziti` + `zbirka` has 8 curated phrases — *zbirka
+izide*, *iziti v zbirki*, … — and the store kept 1.
+
+### The fix
+
+Key the dedup on **(member set, phrase)** — one node per distinct node *text*, which
+is the only distinction the model can make anyway. Two details:
+
+- **Fold before keying.** The phrase is normalised (case, whitespace, one trailing
+  period) before it becomes a key, because the QA grader matches collocations
+  case-insensitively; a member set carrying both `Cvileče gume` and `cvileče gume`
+  would produce a gold list containing the same item twice and failing its own
+  dedup invariant. Keying on the raw surface gives 3,744,612 pairings against
+  3,744,066 — 546 nodes, small but exactly the ones that break a downstream
+  contract. Which *surface* survives a fold is decided the same way `build()`
+  decides between several `writtenRep` values for one form: fewest capitals, then
+  alphabetical.
+- **Phrase mode only.** Under `--colloc-text pair` every duplicate still renders
+  identically, so keying on the text is precisely the old behaviour and a pair store
+  stays byte-identical to v4. The old key was a defect in phrase mode and an option
+  in neither, so **v6 is no longer reachable from this builder** in phrase mode.
+
+### Measured effect
+
+| | v6 | v7 |
+|---|--:|--:|
+| collocation nodes | 2,981,731 | **3,744,066** (+25.6 %) |
+| …verbalised, not a lemma-pair fallback | 100.00 % | **100.00 %** (0 fallbacks) |
+| store nodes | 36,735,791 | **37,498,126** (+2.1 %) |
+| directed edges | 48,534,031 | **50,058,701** (+3.1 %) |
+| synonym / antonym nodes | 181,260 / 3,449 | unchanged, same ids |
+| IRI-backed nodes | 33,569,351 | unchanged |
+
+Note that the v6 collocation-node count **equals** the member-set count exactly. That
+identity is the defect stated as an arithmetic fact: the store held one node per
+pairing rather than one per phrase.
+
+**The pre-build simulation under-predicted this.** It estimated 3,569,711 nodes
+(+19.7 %) against the 3,744,066 (+25.6 %) the rebuild produced. The cause is in the
+simulation, not the build: it read each phrase out of the *store's* MWE anchor text
+with a regex that strips a trailing parenthetical, so phrases that legitimately end
+in one collapsed together. The builder reads `canonicalForm → writtenRep` directly
+and keeps them apart. The simulated figure is recorded here because it was quoted in
+`QA_TASKS.md` and `QA_DATASET_DESIGN.md` before the rebuild; **the measured figure is
+the one to cite.**
+
+### What it unblocks
+
+`ALL(anchor)` — the set the QA grader accepts a collocation answer against
+(`QA_TASKS.md` §0.8.3) — was missing a fifth of its members, and missing them
+non-uniformly. Every T17 item graded against a v6 store would have scored a correct,
+in-graph phrase as an invention whenever the model read a node the dedup had
+dropped. That is not a small inaccuracy in a metric; it is the metric measuring the
+wrong thing.
+
+---
+
+## Finding 12 — ~9 % of noun paradigms are lemma-filled, and one QA type turns that into a *plausible* wrong answer
+
+**Status: found 2026-08-22 by reading generated items; filtered, not fixable.** Unlike
+Findings 5–11 this is **not** a builder defect. The store renders faithfully what the
+export contains; the export contains paradigm cells that were never inflected.
+
+### The defect
+
+Generated T20 (`primeri_uporabe/analiza_oblike_v_povedi`) asks what form a word takes in
+a real corpus sentence. One item read:
+
+```
+Q: … beseda odstotkov v povedi … torej 40 odstotkov.
+A: ODGOVOR: rodilnik dvojine          <- wrong: genitive PLURAL
+```
+
+The generator was not guessing. It labels a form only when that surface occupies exactly
+one cell of the paradigm, so the label is correct by construction — that is the whole of
+design decision D15. The paradigm it consulted:
+
+```
+rodilnik     dvojina   odstotkov     <- right
+rodilnik     množina   odstotek      <- WRONG, should be `odstotkov`
+imenovalnik  množina   odstotek      <- WRONG, should be `odstotki`
+```
+
+`odstotkov` looked unambiguous **only because the cell it should have shared was filled
+with the lemma**. The ambiguity test worked exactly as specified; its premise — that the
+paradigm is complete — was false and had never been written down.
+
+This is the same class as T11's degenerate gradation, where the KG stores `oblika:
+mikaven (imenovalnik, ednina, moški spol, primernik, določna oblika)` — a comparative
+identical to the positive. The cell exists in the RDF, the surface was never inflected.
+
+### How much of it there is
+
+Measured over the **49,078** noun entries carrying ≥ 12 filled case×number cells:
+
+| test | entries | share |
+|---|---|---|
+| nominative plural == nominative singular | 4,406 | **8.98 %** |
+| lemma surface in all 18 cells | 3,335 | 6.8 % |
+
+The population is mostly foreign proper nouns (*Baudelaire*, *Apollinaire*, *SMS*) plus
+ordinary Slovene words whose plural column was simply never filled (*pilot*). Some
+lemmas have **both** a healthy and a defective entry — *Moliere* and *Gilmore* appear on
+both sides — so this must be decided per **entry**, never per lemma.
+
+### The filter
+
+`qa/gen.py:healthy_grid` requires the nominative plural to differ from the nominative
+singular *and* the filled cells to hold ≥ 6 distinct surfaces (a real Slovene noun has
+eight to ten; an uninflected one has one, repeated). It is applied **inside**
+`nominal_grid`, not at the five call sites, so no type can forget it.
+
+Recorded as check C23 in `QA_TASKS.md` and as an amendment to D15 in
+`QA_DATASET_DESIGN.md`. Cost ~9 % of the noun pool for T1, T2, T3, T4, T20 and T21.
+
+### Why it was worth finding
+
+The other five affected types would have failed loudly: T1 renders an eighteen-cell
+table of one repeated surface, T21 an eighteen-way disjunction — obviously broken to
+anyone reading one item. **T20 is the only type where the defect is invisible in the
+output**, because *"rodilnik dvojine"* is a well-formed, plausible answer to a
+well-formed question about a real sentence. It was caught by reading items, not by any
+assertion, which is the argument for the human half of verification existing at all.
+
+---
+
 ## Practical implications
 
-- **Collocations can stay in unconditionally.** They cost ~0 % at the median and
-  ≤21 % in the worst percentile measured, and they carry real lexicographic
-  signal. This was the main open question from v2; it is now settled.
+- **Collocations can stay in, but not unconditionally** *(revised 2026-08-21 —
+  finding 9)*. They cost ~0 % at the median and ≤21 % in the worst percentile
+  measured **here**, and they carry real lexicographic signal. But this sizing study
+  seeded uniformly over lexical units, where the median anchor has 4 collocations.
+  The QA dataset samples by a frequency proxy that *is* collocation count (D9/D10),
+  so it draws precisely the anchors this study under-weights: uncapped, the top 400
+  anchors by proxy cost a p50 of 22,704 tokens and a max of 135,515. Collocations
+  stay in **with the D5b per-anchor cap applied**.
 - **Raw k-hop around an MWE seed is unusable beyond hop 1**; around a
   single-word seed it is fine to hop 2 and usually hop 3.
-- **The lever is still, and only, the `sestavina` hub.** Any real extractor must
-  cap constituent degree or filter MWE membership before going past the danger
-  hop. Nothing else in the graph needs taming.
+- **There are two levers, not one** *(revised 2026-08-21 — finding 9)*. Any real
+  extractor must cap `sestavina` constituent degree (D5) **and** the
+  `sense → kolokacija` fan-out (D5b) before going past the danger hop. The earlier
+  claim that `sestavina` was the only structure needing taming was wrong; nothing
+  *else* does.
 - **`form_mode=collapse` unless morphological questions are in scope.**
 - **Tags are worth a second look.** At 4–6 tokens each on every node they are the
   single largest avoidable overhead in v3. The design principle only requires
@@ -971,19 +1327,24 @@ directory is named for the tokenizer that filled it:
 
 | directory | tokenizer | text convention | status |
 |---|---|---|---|
-| `data/stores/kg_graph_v6_gemma3` | `cjvt/GaMS3-12B-Instruct` (vocab 262,145) | v6 | **current** — what `lookup` and downstream work read |
-| `data/stores/kg_graph_v5_gemma3` | `cjvt/GaMS3-12B-Instruct` | v5 | superseded by v6 — no noun gender on anchors (Finding 10); kept as the acceptance reference |
+| `data/stores/kg_graph_v7_gemma3` | `cjvt/GaMS3-12B-Instruct` (vocab 262,145) | v7 | **current** — what `lookup`, the QA generator and downstream work read |
+| `data/stores/kg_graph_v6_gemma3` | `cjvt/GaMS3-12B-Instruct` | v6 | superseded by v7 — one collocation node per member set instead of per phrase (Finding 11); kept as v7's acceptance reference |
+| `data/stores/kg_graph_v5_gemma3` | `cjvt/GaMS3-12B-Instruct` | v5 | superseded by v6 — no noun gender on anchors (Finding 10) |
 | `data/stores/kg_graph_v4_gemma3` | `cjvt/GaMS3-12B-Instruct` | v4 | superseded by v5 — collocations as lemma pairs (Finding 8); kept as v5's acceptance reference |
 | `data/stores/kg_graph_v4_gams2b` | `cjvt/GaMS-2B` (vocab 256,000) | v4 | for tokenizer diffing |
 | `data/stores/kg_graph_v3_1_gemma3` | `cjvt/GaMS3-12B-Instruct` | v3.1 | superseded by v4 — no morphology on verb forms |
 | `data/stores/kg_graph_v3_1_gams2b` | `cjvt/GaMS-2B` | v3.1 | superseded; kept for diffing |
 | `data/stores/kg_graph_v3` | `cjvt/GaMS-2B` | v3 | pre-v3.1 sense conventions |
 
-`manifest.meta.colloc_text` records `phrase` (v5/v6) or `pair` (v3/v4) — the builder
-can still produce either via `--colloc-text`, and the two differ in node text only.
+`manifest.meta.colloc_text` records `phrase` (v5–v7) or `pair` (v3/v4) — the builder
+can still produce either via `--colloc-text`. Through v6 the two differed in node
+**text** only; from **v7** they also differ in the dedup key, and therefore in
+structure (Finding 11), because keying on the member set was a defect in phrase mode
+and an option in neither.
 `manifest.meta.text_convention` is derived rather than hard-coded: a store claims
-**v6** only when `gender` is in `UNIT_PROPS` *and* collocations are verbalised, so a
-store built with either switched back off cannot misreport itself as current.
+**v7** only when `gender` is in `UNIT_PROPS` *and* collocations are verbalised, so a
+store built with either switched back off cannot misreport itself as current. v6 is
+no longer reachable from the builder in phrase mode, deliberately.
 `manifest.meta.unit_props` records the entry-level properties in full.
 
 `manifest.meta.text_convention` records which convention built a store, alongside

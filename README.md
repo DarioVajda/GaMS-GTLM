@@ -147,9 +147,10 @@ started. The upstream Gemma 3 adapter has landed, so the backbone is no longer a
   once instead of per run; `data/lib/graph_store.py` loads it in seconds. Its
   `token_len` uses the Gemma 3 tokenizer, which every Gemma 3 size shares with
   GaMS3-12B, so one store serves the whole iteration ladder below.
-- **Next.** Write the subgraph extractor on top of the store, with a cap on the
-  `sestavina` MWE↔word hub, the one structure that explodes; adapt into
-  `TextGraphDataset`; then train on a small Gemma 3 before scaling to GaMS3-12B.
+- **Next.** Write the subgraph extractor on top of the store, capping **both** hubs —
+  the `sestavina` MWE↔word fan-out (D5) and the `sense`→`kolokacija` fan-out (D5b,
+  found 2026-08-21); adapt into `TextGraphDataset`; then train on a small Gemma 3
+  before scaling to GaMS3-12B.
 - **Open.** The lexicographical QA dataset — questions and answers anchored to KG entities —
   is not yet generated. Its design is **locked** as of 2026-08-18; see
   [`data/QA_DATASET_DESIGN.md`](data/QA_DATASET_DESIGN.md) for the decisions, the open
