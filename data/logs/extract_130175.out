@@ -1,0 +1,65 @@
+host: ana  start: Sat Aug 22 15:43:44 UTC 2026
+NVIDIA A100 80GB PCIe, 81920 MiB
+model:  cjvt/GaMS3-12B-Instruct
+prompt: /shared/workspace/povejmo/gams_gtlm/data/prompt.txt
+items:  519
+
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:11<00:44, 11.04s/it]Loading checkpoint shards:  40%|████      | 2/5 [01:05<01:49, 36.43s/it]Loading checkpoint shards:  60%|██████    | 3/5 [01:14<00:48, 24.17s/it]Loading checkpoint shards:  80%|████████  | 4/5 [01:25<00:18, 18.72s/it]Loading checkpoint shards: 100%|██████████| 5/5 [01:32<00:00, 14.61s/it]Loading checkpoint shards: 100%|██████████| 5/5 [01:32<00:00, 18.50s/it]
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:628: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.6` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:633: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.95` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:650: UserWarning: `do_sample` is set to `False`. However, `top_k` is set to `64` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:628: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.6` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:633: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.95` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:650: UserWarning: `do_sample` is set to `False`. However, `top_k` is set to `64` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`.
+  warnings.warn(
+  [32/519]  4s
+  [64/519]  7s
+  [96/519]  12s
+  [128/519]  15s
+  [160/519]  19s
+  [192/519]  22s
+  [224/519]  25s
+  [256/519]  29s
+  [288/519]  33s
+  [320/519]  37s
+  [352/519]  40s
+  [384/519]  44s
+  [416/519]  47s
+  [448/519]  52s
+  [480/519]  56s
+  [512/519]  59s
+  [519/519]  61s
+
+ type     n   parsed   recall  resolved  empty []  extra/item
+   T1    30   100.0%    96.7%     70.0%      0.0%        0.03
+   T2    30   100.0%    93.3%     70.0%      0.0%        0.07
+   T3    30   100.0%    96.7%     63.3%      0.0%        0.03
+   T4    20   100.0%   100.0%     50.0%      0.0%        0.00
+   T5    30   100.0%   100.0%     66.7%      0.0%        0.00
+   T6    30   100.0%   100.0%     66.7%      0.0%        0.00
+   T7    20   100.0%   100.0%     85.0%      0.0%        0.25
+   T8    30   100.0%    93.3%     33.3%      0.0%        0.10
+   T9    29   100.0%   100.0%     69.0%      0.0%        0.00
+  T10    30   100.0%   100.0%     66.7%      0.0%        0.00
+  T11    30   100.0%    93.3%     66.7%      0.0%        0.07
+  T12    30   100.0%   100.0%     66.7%      0.0%        0.00
+  T14    30   100.0%   100.0%     66.7%      0.0%        0.00
+  T15    30   100.0%   100.0%     66.7%      0.0%        0.00
+  T16    20   100.0%    95.0%     85.0%      0.0%        0.05
+  T17    30   100.0%    90.0%     70.0%      0.0%        0.10
+  T19    30   100.0%    93.3%     70.0%      0.0%        0.07
+  T20    20   100.0%   100.0%     50.0%      0.0%        0.00
+  T21    20   100.0%    50.0%     65.0%      5.0%        0.50
+  ALL   519   100.0%    95.4%     65.5%      0.2%        0.06
+
+returned strings per item: mean 1.02 p90 1 max 4
+negatives: recall 94.5 % over 329 items
+
+[wrote] /shared/workspace/povejmo/gams_gtlm/data/analysis/results/extraction_v1.json
+[wrote] /shared/workspace/povejmo/gams_gtlm/data/analysis/results/extraction_v1_items.jsonl
+end: Sat Aug 22 15:46:28 UTC 2026

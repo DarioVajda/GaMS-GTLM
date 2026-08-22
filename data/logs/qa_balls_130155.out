@@ -1,0 +1,7 @@
+host: apl  start: Sat Aug 22 14:47:37 UTC 2026
+types: T12,T14,T15,T19,T20,T21,T17,T11
+[load] 37,498,126 nodes / 50,058,701 edges from /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3  0.0s
+[train] 4,105 items  nodes/graph mean 36.7 p50 35 p90 59 max 69
+[dev] 456 items  nodes/graph mean 37.1 p50 35 p90 57 max 66
+[test] 920 items  nodes/graph mean 36.6 p50 34 p90 60 max 67
+end: Sat Aug 22 14:48:01 UTC 2026

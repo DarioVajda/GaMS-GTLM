@@ -1,0 +1,7 @@
+host: apl  start: Sat Aug 22 10:42:47 UTC 2026
+store: /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3
+out  : /shared/workspace/povejmo/gams_gtlm/data/datasets/generated/v1
+[load] 37,498,126 nodes / 50,058,701 edges from /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3  0.0s
+[store] /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3  convention=v7  37,498,126 nodes
+[pool] 10,000/100,801 anchors, 7,711 kept
+[2026-08-22T10:43:40.833] error: *** JOB 130064 ON apl CANCELLED AT 2026-08-22T10:43:40 DUE to SIGNAL Terminated ***

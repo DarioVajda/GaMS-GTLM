@@ -1,0 +1,145 @@
+host: ixb1  start: Sat Aug 22 20:03:57 UTC 2026  shard 2/4
+[inner] host=ixb1 python=Python 3.10.12 shard=2/4
+NVIDIA B200, 183359 MiB
+model:  cjvt/GaMS3-12B-Instruct
+prompt: /shared/workspace/povejmo/gams_gtlm/data/prompt_v3.txt
+items:  3,122
+
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:06<00:26,  6.64s/it]Loading checkpoint shards:  40%|████      | 2/5 [00:09<00:13,  4.43s/it]Loading checkpoint shards:  60%|██████    | 3/5 [00:12<00:07,  3.82s/it]Loading checkpoint shards:  80%|████████  | 4/5 [00:16<00:03,  3.74s/it]Loading checkpoint shards: 100%|██████████| 5/5 [00:18<00:00,  3.22s/it]Loading checkpoint shards: 100%|██████████| 5/5 [00:18<00:00,  3.71s/it]
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:628: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.6` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:633: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.95` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:650: UserWarning: `do_sample` is set to `False`. However, `top_k` is set to `64` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:628: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.6` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:633: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.95` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
+  warnings.warn(
+/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:650: UserWarning: `do_sample` is set to `False`. However, `top_k` is set to `64` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`.
+  warnings.warn(
+  [32/3122]  2s
+  [64/3122]  4s
+  [96/3122]  6s
+  [128/3122]  8s
+  [160/3122]  9s
+  [192/3122]  11s
+  [224/3122]  13s
+  [256/3122]  14s
+  [288/3122]  16s
+  [320/3122]  18s
+  [352/3122]  19s
+  [384/3122]  21s
+  [416/3122]  23s
+  [448/3122]  25s
+  [480/3122]  27s
+  [512/3122]  30s
+  [544/3122]  32s
+  [576/3122]  34s
+  [608/3122]  35s
+  [640/3122]  37s
+  [672/3122]  39s
+  [704/3122]  40s
+  [736/3122]  42s
+  [768/3122]  44s
+  [800/3122]  46s
+  [832/3122]  47s
+  [864/3122]  49s
+  [896/3122]  51s
+  [928/3122]  52s
+  [960/3122]  54s
+  [992/3122]  56s
+  [1024/3122]  58s
+  [1056/3122]  59s
+  [1088/3122]  61s
+  [1120/3122]  63s
+  [1152/3122]  64s
+  [1184/3122]  66s
+  [1216/3122]  68s
+  [1248/3122]  70s
+  [1280/3122]  72s
+  [1312/3122]  73s
+  [1344/3122]  75s
+  [1376/3122]  77s
+  [1408/3122]  78s
+  [1440/3122]  80s
+  [1472/3122]  82s
+  [1504/3122]  84s
+  [1536/3122]  85s
+  [1568/3122]  87s
+  [1600/3122]  89s
+  [1632/3122]  91s
+  [1664/3122]  93s
+  [1696/3122]  95s
+  [1728/3122]  97s
+  [1760/3122]  99s
+  [1792/3122]  101s
+  [1824/3122]  104s
+  [1856/3122]  106s
+  [1888/3122]  108s
+  [1920/3122]  110s
+  [1952/3122]  112s
+  [1984/3122]  114s
+  [2016/3122]  116s
+  [2048/3122]  117s
+  [2080/3122]  119s
+  [2112/3122]  121s
+  [2144/3122]  123s
+  [2176/3122]  124s
+  [2208/3122]  126s
+  [2240/3122]  128s
+  [2272/3122]  130s
+  [2304/3122]  131s
+  [2336/3122]  133s
+  [2368/3122]  135s
+  [2400/3122]  137s
+  [2432/3122]  139s
+  [2464/3122]  140s
+  [2496/3122]  142s
+  [2528/3122]  144s
+  [2560/3122]  145s
+  [2592/3122]  147s
+  [2624/3122]  149s
+  [2656/3122]  151s
+  [2688/3122]  153s
+  [2720/3122]  154s
+  [2752/3122]  156s
+  [2784/3122]  158s
+  [2816/3122]  159s
+  [2848/3122]  161s
+  [2880/3122]  163s
+  [2912/3122]  165s
+  [2944/3122]  166s
+  [2976/3122]  168s
+  [3008/3122]  170s
+  [3040/3122]  172s
+  [3072/3122]  174s
+  [3104/3122]  175s
+  [3122/3122]  176s
+
+ type      n   parsed   recall  resolved  empty []  extra/item
+   T1    174   100.0%    99.4%     93.1%      0.0%        0.01
+   T2    173   100.0%    98.8%     98.3%      0.0%        0.01
+   T3    174   100.0%    98.9%     97.7%      0.0%        0.01
+   T4    174   100.0%    98.3%     90.2%      0.0%        0.02
+   T5    174   100.0%    98.3%     96.0%      0.0%        0.02
+   T6    173   100.0%   100.0%     99.4%      0.0%        0.00
+   T7    161   100.0%    97.5%     97.5%      0.0%        0.02
+   T8    174   100.0%    97.7%     91.4%      0.0%        0.03
+   T9    173   100.0%   100.0%     98.3%      0.0%        0.00
+  T10    173   100.0%    98.8%     96.5%      0.0%        0.01
+  T11    155   100.0%    98.7%     94.8%      0.0%        0.06
+  T12    174   100.0%    98.3%     95.4%      0.0%        0.02
+  T14    173   100.0%   100.0%     96.0%      0.0%        0.00
+  T15    174   100.0%   100.0%     98.9%      0.0%        0.00
+  T16     29   100.0%   100.0%     96.6%      0.0%        0.00
+  T17    173   100.0%   100.0%     97.1%      0.0%        0.00
+  T19    174   100.0%   100.0%     97.7%      0.0%        0.00
+  T20    174   100.0%    98.9%     92.0%      0.0%        0.01
+  T21    173   100.0%    80.9%     93.6%      0.0%        0.45
+  ALL   3122   100.0%    98.0%     95.8%      0.0%        0.04
+
+returned strings per item: mean 1.02 p90 1 max 3
+negatives: recall 95.5 % over 268 items
+[wrote] /shared/workspace/povejmo/gams_gtlm/data/analysis/results/extraction_v2_items.part2.jsonl
+end: Sat Aug 22 20:07:42 UTC 2026
