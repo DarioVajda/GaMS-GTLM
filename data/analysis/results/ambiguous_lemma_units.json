@@ -1,0 +1,4046 @@
+{
+ "units": {
+  "11470405": [
+   "d'Isere",
+   "d'isera"
+  ],
+  "11490657": [
+   "premosorazmeren",
+   "premosorazmerna"
+  ],
+  "11849448": [
+   "muska",
+   "muski"
+  ],
+  "11936845": [
+   "gledati",
+   "glej"
+  ],
+  "12050075": [
+   "Gyöo",
+   "Györ"
+  ],
+  "12047000": [
+   "Flyo",
+   "Flyz"
+  ],
+  "12050073": [
+   "Grün",
+   "Grüo"
+  ],
+  "11937545": [
+   "korenjaško",
+   "kujavo"
+  ],
+  "11938261": [
+   "Sameh",
+   "Samehi"
+  ],
+  "12055848": [
+   "Jyväskylo",
+   "Jyväskylä"
+  ],
+  "12054374": [
+   "IgE",
+   "Iga"
+  ],
+  "12059416": [
+   "Kopriven",
+   "Kopriveo"
+  ],
+  "11937295": [
+   "gorjo",
+   "gorjé"
+  ],
+  "11937822": [
+   "nevtrum",
+   "nevtruo"
+  ],
+  "11938260": [
+   "Sameh",
+   "Samehi"
+  ],
+  "12067301": [
+   "Mesteo",
+   "Mester"
+  ],
+  "12070014": [
+   "nCELJE",
+   "nCELJa"
+  ],
+  "11936846": [
+   "gledati",
+   "glej"
+  ],
+  "12086028": [
+   "sekel",
+   "sekeo"
+  ],
+  "12091948": [
+   "Veškajjeo",
+   "Veškajješ"
+  ],
+  "12095036": [
+   "ZAE",
+   "ZAa"
+  ],
+  "12099658": [
+   "Apokrif",
+   "Apokrifi"
+  ],
+  "12100876": [
+   "Atomerömo",
+   "Atomerömü"
+  ],
+  "12136238": [
+   "Luleo",
+   "Luleå"
+  ],
+  "54941": [
+   "Džez",
+   "džez",
+   "džezi"
+  ],
+  "12161491": [
+   "Seničen",
+   "Seničeo"
+  ],
+  "12161502": [
+   "Stanoven",
+   "Stanoveo"
+  ],
+  "12105921": [
+   "Bojsen",
+   "Bojseo"
+  ],
+  "8246164": [
+   "remek",
+   "remeo"
+  ],
+  "12181159": [
+   "Narod",
+   "narod",
+   "narodi"
+  ],
+  "12132495": [
+   "Koriten",
+   "Koriteo"
+  ],
+  "12076802": [
+   "Qäbälo",
+   "Qäbälä"
+  ],
+  "12067309": [
+   "Moo",
+   "Mop"
+  ],
+  "12224545": [
+   "napad",
+   "pehoten"
+  ],
+  "100673": [
+   "gdo",
+   "kdo"
+  ],
+  "12161501": [
+   "So",
+   "St"
+  ],
+  "12225840": [
+   "pilot",
+   "pilotov"
+  ],
+  "12225843": [
+   "citronast",
+   "citronasta"
+  ],
+  "12225845": [
+   "oliven",
+   "olivna"
+  ],
+  "8178522": [
+   "željan",
+   "željen"
+  ],
+  "8180723": [
+   "TEžAK",
+   "Težak",
+   "težak",
+   "težek"
+  ],
+  "8201689": [
+   "lobi",
+   "lobij"
+  ],
+  "8269759": [
+   "grammy",
+   "grammyja"
+  ],
+  "8379808": [
+   "bedeti",
+   "bedite"
+  ],
+  "8435895": [
+   "kumar",
+   "kumara"
+  ],
+  "12121479": [
+   "Gio",
+   "Giz"
+  ],
+  "12001300": [
+   "nSKOPJE",
+   "nSKOPJo"
+  ],
+  "12121491": [
+   "Györköo",
+   "Györkös"
+  ],
+  "12128335": [
+   "Järvenpäo",
+   "Järvenpää"
+  ],
+  "12132506": [
+   "Kuyo",
+   "Kuyt"
+  ],
+  "12146650": [
+   "Otepäo",
+   "Otepää"
+  ],
+  "12151028": [
+   "Pohorjeo",
+   "Pohorjet"
+  ],
+  "12151043": [
+   "Pripjao",
+   "Pripjat"
+  ],
+  "12151036": [
+   "Praproten",
+   "Praproteo"
+  ],
+  "12169174": [
+   "Vöröo",
+   "Vöröš"
+  ],
+  "12175696": [
+   "Podeželan",
+   "podeželan",
+   "podeželani"
+  ],
+  "12175730": [
+   "Apokrif",
+   "Apokrifi"
+  ],
+  "12175845": [
+   "Popoln",
+   "popolen",
+   "popoln"
+  ],
+  "12175692": [
+   "izmeček",
+   "izmečki"
+  ],
+  "12175694": [
+   "levičar",
+   "levičarji"
+  ],
+  "12175699": [
+   "MISIJONAR",
+   "Misijonar",
+   "misijonar",
+   "misijonarji"
+  ],
+  "12174655": [
+   "Šmartnemo",
+   "Šmartnemu"
+  ],
+  "12175662": [
+   "Kojsan",
+   "Kojsani"
+  ],
+  "12175669": [
+   "Sameh",
+   "Samehi"
+  ],
+  "12175695": [
+   "Podatek",
+   "podatek",
+   "podatki"
+  ],
+  "12175973": [
+   "bolje",
+   "dobro"
+  ],
+  "12175661": [
+   "Kojsan",
+   "Kojsani"
+  ],
+  "12175693": [
+   "Sodnik",
+   "sodnik",
+   "sodniki"
+  ],
+  "12175997": [
+   "edin",
+   "edini"
+  ],
+  "12172705": [
+   "Zemio",
+   "Zemir"
+  ],
+  "12175691": [
+   "ČLAN",
+   "Član",
+   "član",
+   "člani"
+  ],
+  "12175697": [
+   "sorodnik",
+   "sorodniki"
+  ],
+  "12175698": [
+   "Odvetnik",
+   "odvetnik",
+   "odvetniki"
+  ],
+  "12175998": [
+   "nek",
+   "neki"
+  ],
+  "12182077": [
+   "Lori",
+   "lori",
+   "loriji"
+  ],
+  "12182721": [
+   "jegličevka",
+   "jegličevke"
+  ],
+  "12225896": [
+   "Avstro",
+   "avstro",
+   "avstroo"
+  ],
+  "12225897": [
+   "SNG",
+   "SNo",
+   "sno"
+  ],
+  "12225899": [
+   "pekan",
+   "pekči"
+  ],
+  "12225900": [
+   "poo",
+   "pot"
+  ],
+  "12225903": [
+   "drug",
+   "drugi"
+  ],
+  "8246694": [
+   "snovatelje",
+   "snovatelči"
+  ],
+  "8403695": [
+   "šprot",
+   "šproti"
+  ],
+  "8438259": [
+   "rent",
+   "rent-a"
+  ],
+  "8470004": [
+   "vertov",
+   "vertova"
+  ],
+  "8493169": [
+   "makula",
+   "makule"
+  ],
+  "12216695": [
+   "škarpena",
+   "škarpene"
+  ],
+  "8787337": [
+   "fuzarioza",
+   "fuzarioze"
+  ],
+  "8803417": [
+   "nihajka",
+   "nihajki"
+  ],
+  "8940991": [
+   "maček",
+   "mačka"
+  ],
+  "8987472": [
+   "H3A",
+   "H3O"
+  ],
+  "9191075": [
+   "hialuronska",
+   "hialuronski"
+  ],
+  "9195312": [
+   "ardenska",
+   "ardenski"
+  ],
+  "9327232": [
+   "sarmatska",
+   "sarmatski"
+  ],
+  "9401238": [
+   "kosmičja",
+   "kosmičje"
+  ],
+  "10468698": [
+   "IPO",
+   "ipa"
+  ],
+  "10745731": [
+   "silikokalcija",
+   "silikokalicija"
+  ],
+  "10829597": [
+   "kombilimuzinska",
+   "kombilimuzinski"
+  ],
+  "11114251": [
+   "afra",
+   "afro"
+  ],
+  "11266611": [
+   "štiriventilska",
+   "štiriventilski"
+  ],
+  "11868436": [
+   "žrebička",
+   "žrebičko"
+  ],
+  "8173832": [
+   "Amazonka",
+   "Amazonke"
+  ],
+  "8313367": [
+   "videooprema",
+   "videoopremo"
+  ],
+  "8342459": [
+   "zelen",
+   "zelena"
+  ],
+  "8389563": [
+   "scudetta",
+   "scudetto"
+  ],
+  "8432832": [
+   "epidermoliza",
+   "epidermolizo"
+  ],
+  "8574387": [
+   "ivljenjska",
+   "ivljenjski"
+  ],
+  "8685181": [
+   "škota",
+   "škoto"
+  ],
+  "8987428": [
+   "protoliza",
+   "protolize"
+  ],
+  "9137330": [
+   "drozga",
+   "drozgo"
+  ],
+  "9227751": [
+   "endoproteza",
+   "endoproteze"
+  ],
+  "9341390": [
+   "elektronik",
+   "elektronika"
+  ],
+  "9417370": [
+   "anima",
+   "anime"
+  ],
+  "10428902": [
+   "turnokolesarska",
+   "turnokolesarski"
+  ],
+  "10641612": [
+   "guma",
+   "gumi"
+  ],
+  "10689776": [
+   "karathana",
+   "karathane"
+  ],
+  "11261452": [
+   "joga",
+   "jogi"
+  ],
+  "35233": [
+   "Strašen",
+   "strašan",
+   "strašen"
+  ],
+  "8246692": [
+   "služitelje",
+   "služitelči"
+  ],
+  "8256060": [
+   "protidopinška",
+   "protidopinški"
+  ],
+  "8307167": [
+   "Nova",
+   "nov",
+   "nova"
+  ],
+  "8367137": [
+   "morejo",
+   "moči"
+  ],
+  "8367244": [
+   "morma",
+   "mormo"
+  ],
+  "8404273": [
+   "gostüvanj",
+   "gostüvanjih"
+  ],
+  "8549419": [
+   "trilema",
+   "trileme"
+  ],
+  "11641005": [
+   "omerta",
+   "omerte"
+  ],
+  "9192922": [
+   "kišta",
+   "kišto"
+  ],
+  "9199247": [
+   "voljera",
+   "voljeri",
+   "voljero"
+  ],
+  "9199249": [
+   "voliera",
+   "voliero"
+  ],
+  "10322528": [
+   "priseljevalen",
+   "priseljevalna"
+  ],
+  "11175359": [
+   "pokal",
+   "pokati"
+  ],
+  "11337557": [
+   "highlina",
+   "highline"
+  ],
+  "11567471": [
+   "Lutkarije",
+   "lutkarija"
+  ],
+  "11676357": [
+   "vsednost",
+   "vsednosti"
+  ],
+  "8277618": [
+   "amiloza",
+   "amilozo"
+  ],
+  "8426411": [
+   "car",
+   "cara"
+  ],
+  "8580633": [
+   "lep",
+   "lepo"
+  ],
+  "8917021": [
+   "slan",
+   "slana"
+  ],
+  "9191071": [
+   "linolenska",
+   "linolenski"
+  ],
+  "9339556": [
+   "potite",
+   "potiti"
+  ],
+  "9426487": [
+   "milimol",
+   "milimola"
+  ],
+  "9489809": [
+   "sedeč",
+   "sedeče"
+  ],
+  "9930847": [
+   "napad",
+   "napada"
+  ],
+  "10101842": [
+   "SPON",
+   "spon",
+   "spona"
+  ],
+  "10281490": [
+   "podjemen",
+   "podjemna"
+  ],
+  "11083221": [
+   "rolba",
+   "rolbo"
+  ],
+  "11124562": [
+   "škotina",
+   "škotino"
+  ],
+  "11554163": [
+   "merina",
+   "merino"
+  ],
+  "8367392": [
+   "bitev",
+   "bitva"
+  ],
+  "8509017": [
+   "biogoriv",
+   "biogoriva"
+  ],
+  "8800639": [
+   "sekvencioniranja",
+   "sekvencioniranje"
+  ],
+  "8992644": [
+   "ita",
+   "ito"
+  ],
+  "9238005": [
+   "stajling",
+   "stajlinga"
+  ],
+  "9433871": [
+   "hišen",
+   "hišna"
+  ],
+  "26043": [
+   "netesan",
+   "netesen"
+  ],
+  "30780": [
+   "pretesan",
+   "pretesen"
+  ],
+  "35547": [
+   "SVETAL",
+   "svetal",
+   "svetel"
+  ],
+  "8239357": [
+   "Temen",
+   "teman",
+   "temen"
+  ],
+  "8339093": [
+   "suša",
+   "suši"
+  ],
+  "9861213": [
+   "neoprenska",
+   "neoprenski"
+  ],
+  "11520607": [
+   "profesionalen",
+   "profesionalno"
+  ],
+  "11780328": [
+   "nogomet",
+   "nogometa"
+  ],
+  "11818331": [
+   "pavra",
+   "pavri"
+  ],
+  "8442683": [
+   "vesna",
+   "vesno"
+  ],
+  "8444859": [
+   "sit",
+   "sitem"
+  ],
+  "8451372": [
+   "kemoprofilaksa",
+   "kemoprofilakse",
+   "kemoprofilakso"
+  ],
+  "8746873": [
+   "hoblovina",
+   "hoblovino"
+  ],
+  "8917008": [
+   "veganska",
+   "veganski"
+  ],
+  "9217849": [
+   "proevropska",
+   "proevropski"
+  ],
+  "9252362": [
+   "legionel",
+   "legionela"
+  ],
+  "9535113": [
+   "makroraven",
+   "makroravni"
+  ],
+  "9709903": [
+   "gol",
+   "goli"
+  ],
+  "10228457": [
+   "Čreve",
+   "čreva"
+  ],
+  "11062143": [
+   "besedite",
+   "besediti"
+  ],
+  "11122750": [
+   "superheroj",
+   "superherojih"
+  ],
+  "11236290": [
+   "superminister",
+   "superministra"
+  ],
+  "11826365": [
+   "prerazmnožitev",
+   "prerazmnožitve"
+  ],
+  "70668": [
+   "Mula",
+   "Mulo",
+   "mula",
+   "mulo"
+  ],
+  "90609": [
+   "Spin",
+   "spin",
+   "udarec"
+  ],
+  "100702": [
+   "mnog",
+   "mnogi"
+  ],
+  "8246537": [
+   "prositelje",
+   "prositelči"
+  ],
+  "8246822": [
+   "živji",
+   "živči"
+  ],
+  "8377390": [
+   "blažilnik",
+   "blažilnika"
+  ],
+  "8394846": [
+   "parodontalen",
+   "parodontalna"
+  ],
+  "8696996": [
+   "Halo",
+   "hala",
+   "halo"
+  ],
+  "8769435": [
+   "rola",
+   "rolo"
+  ],
+  "8954036": [
+   "imunoprofilaksa",
+   "imunoprofilakse"
+  ],
+  "9220493": [
+   "kontingenca",
+   "kontingence"
+  ],
+  "9451426": [
+   "globok",
+   "globoka"
+  ],
+  "9704174": [
+   "brexit",
+   "brexita"
+  ],
+  "10012369": [
+   "saga",
+   "sago"
+  ],
+  "10200913": [
+   "vodite",
+   "voditi"
+  ],
+  "10795829": [
+   "replica",
+   "replico"
+  ],
+  "100693": [
+   "malogdo",
+   "malokdo"
+  ],
+  "8311617": [
+   "Boginja",
+   "Boginji",
+   "boginja"
+  ],
+  "8441416": [
+   "Rana",
+   "ran",
+   "rana"
+  ],
+  "8525004": [
+   "antiperspirant",
+   "antiperspirantih"
+  ],
+  "8636385": [
+   "metrovka",
+   "metrovke",
+   "metrovko"
+  ],
+  "8763739": [
+   "strokoven",
+   "strokovno"
+  ],
+  "8771212": [
+   "viv",
+   "viva"
+  ],
+  "8837725": [
+   "Višnja",
+   "Višnji"
+  ],
+  "11191169": [
+   "brisalnik",
+   "brisalnika"
+  ],
+  "9028621": [
+   "soproizvodnja",
+   "soproizvodnjo"
+  ],
+  "9032530": [
+   "slab",
+   "slabe"
+  ],
+  "9067050": [
+   "kakovosten",
+   "kakovostno"
+  ],
+  "9136769": [
+   "županja",
+   "županji"
+  ],
+  "9817735": [
+   "non",
+   "nona",
+   "nono"
+  ],
+  "10136252": [
+   "Trojnim",
+   "Trojno"
+  ],
+  "10428906": [
+   "zahodnobalkanska",
+   "zahodnobalkanski"
+  ],
+  "10827464": [
+   "razledenitev",
+   "razledenitve"
+  ],
+  "10926453": [
+   "marikultura",
+   "marikulturo"
+  ],
+  "10965049": [
+   "samosvoj",
+   "samosvoje"
+  ],
+  "11068581": [
+   "bajramska",
+   "bajramski"
+  ],
+  "11167894": [
+   "petelj",
+   "petlja"
+  ],
+  "8246059": [
+   "oboževatelje",
+   "oboževatelči"
+  ],
+  "8246546": [
+   "prelagatelje",
+   "prelagatelči"
+  ],
+  "8367242": [
+   "mogu",
+   "moči"
+  ],
+  "8588515": [
+   "plantella",
+   "plantelle"
+  ],
+  "8768091": [
+   "fauna",
+   "fauno"
+  ],
+  "9095648": [
+   "optimizem",
+   "optimizma"
+  ],
+  "9191086": [
+   "jedek",
+   "jedka"
+  ],
+  "9241868": [
+   "samokandidatura",
+   "samokandidature"
+  ],
+  "9262617": [
+   "jurjevimi",
+   "jurjevo"
+  ],
+  "9509713": [
+   "andropavza",
+   "andropavzi"
+  ],
+  "9532295": [
+   "mešanček",
+   "mešančka"
+  ],
+  "8246801": [
+   "ustavljač",
+   "ustavljči"
+  ],
+  "8446373": [
+   "ugoden",
+   "ugodno"
+  ],
+  "8476898": [
+   "pokablitva",
+   "pokablitve"
+  ],
+  "8559725": [
+   "supermota",
+   "supermoto"
+  ],
+  "8820848": [
+   "glifosat",
+   "glifosata"
+  ],
+  "8899132": [
+   "rastoč",
+   "rastoče"
+  ],
+  "8933323": [
+   "oseben",
+   "osebna"
+  ],
+  "8987067": [
+   "LIZ",
+   "Liz",
+   "liza"
+  ],
+  "9233206": [
+   "tempor",
+   "temporih"
+  ],
+  "9276874": [
+   "konzulta",
+   "konzulti"
+  ],
+  "11827201": [
+   "karitas",
+   "karitasa"
+  ],
+  "9363003": [
+   "kuma",
+   "kume"
+  ],
+  "9918674": [
+   "gudek",
+   "gudeki"
+  ],
+  "10144292": [
+   "exellenca",
+   "exellence"
+  ],
+  "10307466": [
+   "konzulta",
+   "konzulte"
+  ],
+  "10903342": [
+   "futsalska",
+   "futsalski"
+  ],
+  "10991684": [
+   "Metalna",
+   "metalen"
+  ],
+  "11266895": [
+   "tranca",
+   "trance"
+  ],
+  "11307721": [
+   "transglutaminaza",
+   "transglutaminazi"
+  ],
+  "11328668": [
+   "univerzal",
+   "univerzala"
+  ],
+  "8307279": [
+   "vectra",
+   "vectre",
+   "vectro"
+  ],
+  "8419652": [
+   "nič",
+   "niča"
+  ],
+  "8458643": [
+   "romansera",
+   "romansero"
+  ],
+  "8473783": [
+   "mozzarella",
+   "mozzarelle"
+  ],
+  "8552769": [
+   "rdeč",
+   "rdeče"
+  ],
+  "8570611": [
+   "Ženska",
+   "ženska",
+   "ženski"
+  ],
+  "8649216": [
+   "nakit",
+   "nakita"
+  ],
+  "8670829": [
+   "tog",
+   "toga"
+  ],
+  "8886366": [
+   "hadž",
+   "hadža"
+  ],
+  "9821172": [
+   "smrčkast",
+   "smrčkasti"
+  ],
+  "9863009": [
+   "poseben",
+   "posebno"
+  ],
+  "10959902": [
+   "mortala",
+   "mortale"
+  ],
+  "11166851": [
+   "zlat",
+   "zlata"
+  ],
+  "11260171": [
+   "tamala",
+   "tamali"
+  ],
+  "11557838": [
+   "peška",
+   "peški"
+  ],
+  "11635821": [
+   "partizan",
+   "partizana"
+  ],
+  "11844216": [
+   "rut",
+   "ruta"
+  ],
+  "8303201": [
+   "residenca",
+   "residence"
+  ],
+  "8664621": [
+   "Drugoligaška",
+   "drugoligaški"
+  ],
+  "8873490": [
+   "septa",
+   "septo"
+  ],
+  "9371689": [
+   "kvadrilaterala",
+   "kvadrilaterale"
+  ],
+  "91793": [
+   "stranpot",
+   "stranpota"
+  ],
+  "10167919": [
+   "verben",
+   "verbene"
+  ],
+  "10322524": [
+   "imigracijska",
+   "imigracijski"
+  ],
+  "10752011": [
+   "protipropaganda",
+   "protipropagande"
+  ],
+  "10958871": [
+   "poticariada",
+   "poticariado"
+  ],
+  "10964965": [
+   "rekord",
+   "rekorda"
+  ],
+  "11067417": [
+   "naroden",
+   "narodno"
+  ],
+  "11192416": [
+   "radiokirurgija",
+   "radiokirurgijo"
+  ],
+  "30762": [
+   "presvetal",
+   "presvetel"
+  ],
+  "8255771": [
+   "tuj",
+   "tuje"
+  ],
+  "8312672": [
+   "avantima",
+   "avantime"
+  ],
+  "8331205": [
+   "kurba",
+   "kurbami"
+  ],
+  "8399483": [
+   "levorok",
+   "levoroka"
+  ],
+  "8561509": [
+   "kičma",
+   "kičme"
+  ],
+  "8648192": [
+   "draft",
+   "drafta"
+  ],
+  "8663388": [
+   "ksilem",
+   "ksilm"
+  ],
+  "8807240": [
+   "perinatologija",
+   "perinatologije"
+  ],
+  "9343916": [
+   "metališča",
+   "metališče"
+  ],
+  "9420221": [
+   "šarola",
+   "šarole"
+  ],
+  "9506829": [
+   "šengenska",
+   "šengenski"
+  ],
+  "10719960": [
+   "posmeh",
+   "posmeha"
+  ],
+  "10846363": [
+   "vélik",
+   "vélika"
+  ],
+  "10887934": [
+   "spodnjeposavska",
+   "spodnjeposavski"
+  ],
+  "8159466": [
+   "jockey",
+   "jockeyjih"
+  ],
+  "8231374": [
+   "raje",
+   "rajši"
+  ],
+  "8351425": [
+   "lečina",
+   "lečino"
+  ],
+  "8360860": [
+   "Band",
+   "band",
+   "bandih"
+  ],
+  "8378758": [
+   "Gospoda",
+   "gospod",
+   "gospoda"
+  ],
+  "8472152": [
+   "suproliga",
+   "suprolige"
+  ],
+  "8473395": [
+   "SPO",
+   "spa"
+  ],
+  "8473786": [
+   "pira",
+   "pire"
+  ],
+  "9023512": [
+   "uspešen",
+   "uspešno"
+  ],
+  "9085808": [
+   "neizvedba",
+   "neizvedbo"
+  ],
+  "9274828": [
+   "pesa",
+   "peso"
+  ],
+  "9499619": [
+   "asan",
+   "asana",
+   "asane"
+  ],
+  "10371137": [
+   "tí",
+   "tía"
+  ],
+  "30286": [
+   "pregrenak",
+   "pregrenek"
+  ],
+  "30773": [
+   "Pretemen",
+   "preteman",
+   "pretemen"
+  ],
+  "45449": [
+   "Tako",
+   "tako",
+   "takó"
+  ],
+  "90276": [
+   "sorodnik",
+   "sorodniki"
+  ],
+  "100714": [
+   "nek",
+   "neki"
+  ],
+  "8277374": [
+   "ekstaza",
+   "ekstazi"
+  ],
+  "8740837": [
+   "eVsebine",
+   "evsebina"
+  ],
+  "8742216": [
+   "fad",
+   "fado"
+  ],
+  "10963374": [
+   "samoprepoved",
+   "samoprepovedi"
+  ],
+  "11266609": [
+   "osteopatska",
+   "osteopatski"
+  ],
+  "9631733": [
+   "concorda",
+   "concorde"
+  ],
+  "9825991": [
+   "nova",
+   "novami"
+  ],
+  "11514469": [
+   "salta",
+   "salto"
+  ],
+  "11531986": [
+   "pendolina",
+   "pendolino"
+  ],
+  "8169312": [
+   "izooktan",
+   "izooktana"
+  ],
+  "8452679": [
+   "metropolitska",
+   "metropolitski"
+  ],
+  "8727496": [
+   "enovaljen",
+   "enovaljni"
+  ],
+  "8965946": [
+   "uporabite",
+   "uporabiti"
+  ],
+  "9067053": [
+   "ploden",
+   "plodno"
+  ],
+  "9334856": [
+   "izjasnitev",
+   "izjasnitvi"
+  ],
+  "9436350": [
+   "lockout",
+   "lockouta"
+  ],
+  "9450122": [
+   "osmerozob",
+   "osmerozobi"
+  ],
+  "9763705": [
+   "varen",
+   "varno"
+  ],
+  "9923281": [
+   "magazinska",
+   "magazinski"
+  ],
+  "10331494": [
+   "četrtinka",
+   "četrtinko"
+  ],
+  "11106131": [
+   "sončica",
+   "sončice"
+  ],
+  "11581419": [
+   "avtohiša",
+   "avtohišo"
+  ],
+  "8257013": [
+   "tajen",
+   "tajna"
+  ],
+  "8282771": [
+   "odstoten",
+   "odstotno"
+  ],
+  "8361976": [
+   "multilaterala",
+   "multilaterale"
+  ],
+  "8372423": [
+   "kinocenter",
+   "kinocentrih"
+  ],
+  "8381001": [
+   "kriptovaluta",
+   "kriptovalute"
+  ],
+  "8382225": [
+   "desetkilogramska",
+   "desetkilogramski"
+  ],
+  "8435714": [
+   "ramplača",
+   "ramplači"
+  ],
+  "8439521": [
+   "devede",
+   "devedejih"
+  ],
+  "8448264": [
+   "približen",
+   "približno"
+  ],
+  "8584707": [
+   "pokojninski",
+   "pokojninsko"
+  ],
+  "8816873": [
+   "vinček",
+   "vinčka"
+  ],
+  "8824214": [
+   "melrosa",
+   "melrose"
+  ],
+  "8960931": [
+   "analitika",
+   "analitiko"
+  ],
+  "9090159": [
+   "izvodnja",
+   "izvodnjo"
+  ],
+  "9289749": [
+   "gomoljevka",
+   "gomoljevke"
+  ],
+  "11134": [
+   "21",
+   "21."
+  ],
+  "35828": [
+   "Temen",
+   "teman",
+   "temen"
+  ],
+  "8248947": [
+   "seria",
+   "serie"
+  ],
+  "10797064": [
+   "grafikulja",
+   "grafikuljo"
+  ],
+  "10998635": [
+   "maščobnokislinska",
+   "maščobnokislinski"
+  ],
+  "11127079": [
+   "čitavnica",
+   "čitavnice"
+  ],
+  "11165404": [
+   "pouk",
+   "pouka"
+  ],
+  "11330394": [
+   "transkripta",
+   "transkripte"
+  ],
+  "11365056": [
+   "interliga",
+   "interlige"
+  ],
+  "8501158": [
+   "Črnooka",
+   "črnook"
+  ],
+  "8558977": [
+   "gorskohitrosten",
+   "gorskohitrostna"
+  ],
+  "8569845": [
+   "retra",
+   "retro"
+  ],
+  "8644774": [
+   "tehnološki",
+   "tehnološko"
+  ],
+  "8661932": [
+   "misleč",
+   "misleče"
+  ],
+  "8754544": [
+   "tipa",
+   "tipo"
+  ],
+  "8774375": [
+   "fosfodiesteraza",
+   "fosfodiesterazi"
+  ],
+  "8806987": [
+   "budala",
+   "budale"
+  ],
+  "8888114": [
+   "harmonikark",
+   "harmonikarka"
+  ],
+  "9236555": [
+   "kombilimuzina",
+   "kombilimuzino"
+  ],
+  "9307336": [
+   "stis",
+   "stisih"
+  ],
+  "9726741": [
+   "newtonmeter",
+   "newtonmetrih"
+  ],
+  "9940412": [
+   "drobnarijska",
+   "drobnarijski"
+  ],
+  "10148438": [
+   "mleka",
+   "mleko"
+  ],
+  "10233298": [
+   "premontaža",
+   "premontaži"
+  ],
+  "11067599": [
+   "Odslikave",
+   "odslikava",
+   "odslikavi"
+  ],
+  "11349139": [
+   "trinog",
+   "trinogi"
+  ],
+  "11554527": [
+   "pent",
+   "penta"
+  ],
+  "11712427": [
+   "nevsebinske",
+   "nevsebinski"
+  ],
+  "8303924": [
+   "Gostilna",
+   "gostilen",
+   "gostilna"
+  ],
+  "8473781": [
+   "mozzarela",
+   "mozzarele"
+  ],
+  "8787335": [
+   "uvelost",
+   "uvelosti"
+  ],
+  "8887630": [
+   "hardcor",
+   "hardcore"
+  ],
+  "9551941": [
+   "frančiškank",
+   "frančiškanka"
+  ],
+  "10183360": [
+   "petorček",
+   "petorčka"
+  ],
+  "10666236": [
+   "osovina",
+   "osovino"
+  ],
+  "10672648": [
+   "brejk",
+   "brejka"
+  ],
+  "16487": [
+   "dolžan",
+   "dolžen"
+  ],
+  "50758": [
+   "Bukev",
+   "bukev",
+   "bukva"
+  ],
+  "56566": [
+   "Florenca",
+   "Florence"
+  ],
+  "60664": [
+   "Iinventarizacija",
+   "Inventarizacija",
+   "inventarizacija"
+  ],
+  "8383612": [
+   "bluetooth",
+   "bluetoothu"
+  ],
+  "8574382": [
+   "priposestvovalen",
+   "priposestvovalna"
+  ],
+  "8789161": [
+   "šmikla",
+   "šmikle"
+  ],
+  "11223940": [
+   "vodarska",
+   "vodarski"
+  ],
+  "11454507": [
+   "neuveljavitev",
+   "neuveljavitve"
+  ],
+  "11522006": [
+   "investitura",
+   "investituro"
+  ],
+  "11798578": [
+   "čikoš",
+   "čikoši"
+  ],
+  "22371": [
+   "Lahek",
+   "lahak",
+   "lahek"
+  ],
+  "8866794": [
+   "gramček",
+   "gramčka"
+  ],
+  "9067048": [
+   "resen",
+   "resno"
+  ],
+  "9294832": [
+   "korza",
+   "korzo"
+  ],
+  "9331241": [
+   "zaščitite",
+   "zaščititi"
+  ],
+  "10731670": [
+   "megaherčen",
+   "megaherčni"
+  ],
+  "10741162": [
+   "hidroksilacija",
+   "hidroksilacije"
+  ],
+  "11165824": [
+   "nešta",
+   "nešto"
+  ],
+  "11301068": [
+   "timeout",
+   "timeouta"
+  ],
+  "11492442": [
+   "desetka",
+   "desetko"
+  ],
+  "11693767": [
+   "neoplazma",
+   "neoplazme"
+  ],
+  "11715853": [
+   "moba",
+   "mobi"
+  ],
+  "30782": [
+   "pretežak",
+   "pretežek"
+  ],
+  "8260162": [
+   "Tele",
+   "tale"
+  ],
+  "8313377": [
+   "videonaprava",
+   "videonapravo"
+  ],
+  "8876779": [
+   "abusirska",
+   "abusirski"
+  ],
+  "8971368": [
+   "kapitalski",
+   "kapitalsko"
+  ],
+  "9124241": [
+   "probiotičen",
+   "probiotični"
+  ],
+  "9656214": [
+   "odvodnja",
+   "odvodnjo"
+  ],
+  "9678960": [
+   "dvopodročen",
+   "dvopodročna"
+  ],
+  "9844627": [
+   "obedienca",
+   "obedience"
+  ],
+  "10142455": [
+   "pupica",
+   "pupice"
+  ],
+  "10211768": [
+   "robača",
+   "robačo"
+  ],
+  "10436971": [
+   "nabrežina",
+   "nabrežine"
+  ],
+  "10903340": [
+   "ragbijska",
+   "ragbijski"
+  ],
+  "100705": [
+   "mnogogdo",
+   "mnogokdo"
+  ],
+  "8434868": [
+   "chardonnay",
+   "chardonnayjih"
+  ],
+  "8442569": [
+   "celoten",
+   "celotno"
+  ],
+  "8493608": [
+   "mena",
+   "meni"
+  ],
+  "8749833": [
+   "podetapa",
+   "podetape"
+  ],
+  "9192271": [
+   "slida",
+   "slide"
+  ],
+  "9678958": [
+   "dvoobmočen",
+   "dvoobmočna"
+  ],
+  "9721733": [
+   "protispisen",
+   "protispisna"
+  ],
+  "10346522": [
+   "medsosedska",
+   "medsosedski"
+  ],
+  "30212": [
+   "predroban",
+   "predroben"
+  ],
+  "8154932": [
+   "marakas",
+   "marake"
+  ],
+  "8165457": [
+   "Mavricijčanka",
+   "Mvricijčanka"
+  ],
+  "8253628": [
+   "Prodajalna",
+   "prodajalen",
+   "prodajalna"
+  ],
+  "8270076": [
+   "živ",
+   "živo"
+  ],
+  "8383673": [
+   "WiFi",
+   "wif"
+  ],
+  "8412499": [
+   "brezplačnik",
+   "brezplačnika"
+  ],
+  "8467157": [
+   "adiecta",
+   "adiecto"
+  ],
+  "11230842": [
+   "impreza",
+   "imprezo"
+  ],
+  "11541366": [
+   "reklam",
+   "reklama"
+  ],
+  "11793715": [
+   "šestbaten",
+   "šestbatne"
+  ],
+  "30445": [
+   "Premočan",
+   "premočan",
+   "premočen"
+  ],
+  "30678": [
+   "prešibak",
+   "prešibek"
+  ],
+  "42354": [
+   "nazaj",
+   "česati"
+  ],
+  "8960611": [
+   "turističen",
+   "turistično"
+  ],
+  "10239932": [
+   "kad",
+   "kadi"
+  ],
+  "11392715": [
+   "intermedijska",
+   "intermedijski"
+  ],
+  "11580974": [
+   "eki",
+   "eko"
+  ],
+  "8246188": [
+   "mural",
+   "murati"
+  ],
+  "8336874": [
+   "tuj",
+   "tuja"
+  ],
+  "8379074": [
+   "kontra",
+   "kontro"
+  ],
+  "8411428": [
+   "težek",
+   "težko"
+  ],
+  "8436448": [
+   "H2A",
+   "H2O"
+  ],
+  "8574391": [
+   "Moderna",
+   "moderen",
+   "moderna"
+  ],
+  "8576235": [
+   "dober",
+   "dobro"
+  ],
+  "8994957": [
+   "predizbira",
+   "predizbire"
+  ],
+  "9035045": [
+   "bati",
+   "bojte"
+  ],
+  "9336982": [
+   "migrantska",
+   "migrantski"
+  ],
+  "9380532": [
+   "megan",
+   "megana"
+  ],
+  "9614523": [
+   "zdravlja",
+   "zdravlje"
+  ],
+  "9779297": [
+   "adrenalin",
+   "adrenalina"
+  ],
+  "10416110": [
+   "taksa",
+   "taksi"
+  ],
+  "10909914": [
+   "protibegunska",
+   "protibegunski"
+  ],
+  "10997807": [
+   "evroskupina",
+   "evroskupine"
+  ],
+  "11205426": [
+   "nizek",
+   "nizka"
+  ],
+  "8251813": [
+   "prizidava",
+   "prizidavo"
+  ],
+  "8282753": [
+   "socialen",
+   "socialno"
+  ],
+  "8294099": [
+   "puška",
+   "puški"
+  ],
+  "8336336": [
+   "velik",
+   "veliko"
+  ],
+  "8729435": [
+   "Vojna",
+   "vojen",
+   "vojna"
+  ],
+  "8739924": [
+   "evrogol",
+   "evrogolu"
+  ],
+  "8741043": [
+   "executiva",
+   "executive"
+  ],
+  "8830009": [
+   "mažoreta",
+   "mažorete"
+  ],
+  "9424976": [
+   "plonk",
+   "plonka"
+  ],
+  "25407": [
+   "nelahak",
+   "nelahek"
+  ],
+  "8246218": [
+   "ruž",
+   "rči"
+  ],
+  "10209696": [
+   "tekstilija",
+   "tekstilijo"
+  ],
+  "10520634": [
+   "predodelitev",
+   "predodelitve"
+  ],
+  "10618171": [
+   "pretlačevanje",
+   "pretlačevanju"
+  ],
+  "10643209": [
+   "protipredlog",
+   "protipredlogih"
+  ],
+  "10963144": [
+   "skupinite",
+   "skupiniti"
+  ],
+  "10991635": [
+   "bal",
+   "bati"
+  ],
+  "30357": [
+   "Prekrasen",
+   "prekrasan",
+   "prekrasen"
+  ],
+  "8383475": [
+   "rhythm",
+   "rhythma"
+  ],
+  "8458057": [
+   "challenger",
+   "challengerjih"
+  ],
+  "8863389": [
+   "TTable",
+   "ttabla"
+  ],
+  "8924605": [
+   "krivic",
+   "krivica"
+  ],
+  "8962935": [
+   "naddružina",
+   "naddružine"
+  ],
+  "9236581": [
+   "variant",
+   "varianta"
+  ],
+  "9318730": [
+   "dvižnica",
+   "dvižnice"
+  ],
+  "9852950": [
+   "neobjava",
+   "neobjavo"
+  ],
+  "10773201": [
+   "EMX2",
+   "emx2a"
+  ],
+  "11472258": [
+   "prebavite",
+   "prebaviti"
+  ],
+  "60172": [
+   "ILUSTRACIJA",
+   "Ilustracija",
+   "ilustracija",
+   "ilustracije"
+  ],
+  "8251014": [
+   "informela",
+   "informelo"
+  ],
+  "8384374": [
+   "Sita",
+   "sit"
+  ],
+  "8449254": [
+   "močen",
+   "močno"
+  ],
+  "8724789": [
+   "zafir",
+   "zafira"
+  ],
+  "8741040": [
+   "exclusiva",
+   "exclusive"
+  ],
+  "8796601": [
+   "samoporjavitev",
+   "samoporjavitve"
+  ],
+  "8866822": [
+   "coupa",
+   "coupe"
+  ],
+  "9147180": [
+   "kamišibaj",
+   "kamišibaja"
+  ],
+  "9162928": [
+   "motokrosističen",
+   "motokrosistična"
+  ],
+  "9242721": [
+   "antidopinška",
+   "antidopinški"
+  ],
+  "9257761": [
+   "počitnic",
+   "počitnice"
+  ],
+  "9280173": [
+   "ekošola",
+   "ekošole"
+  ],
+  "9323401": [
+   "porjavitev",
+   "porjavitve"
+  ],
+  "9347851": [
+   "endura",
+   "enduro"
+  ],
+  "9384355": [
+   "lazul",
+   "lazuli"
+  ],
+  "9479788": [
+   "kanava",
+   "kanavo"
+  ],
+  "9492029": [
+   "maza",
+   "mazo"
+  ],
+  "10148098": [
+   "zakoličba",
+   "zakoličbe"
+  ],
+  "10798561": [
+   "tabula",
+   "tabule"
+  ],
+  "25240": [
+   "negodan",
+   "negoden"
+  ],
+  "8246862": [
+   "Čikaso",
+   "Čikasó"
+  ],
+  "8492272": [
+   "jasen",
+   "jasna"
+  ],
+  "8686337": [
+   "avtentikacija",
+   "avtentikaciji"
+  ],
+  "8734622": [
+   "označba",
+   "označbe",
+   "označbo"
+  ],
+  "11433512": [
+   "alkantara",
+   "alkantare"
+  ],
+  "9213294": [
+   "košta",
+   "košto"
+  ],
+  "9556565": [
+   "štiriglav",
+   "štiriglava"
+  ],
+  "9582192": [
+   "Naravine",
+   "naravina"
+  ],
+  "10172528": [
+   "Mako",
+   "maka",
+   "make"
+  ],
+  "11266892": [
+   "logija",
+   "logijo"
+  ],
+  "11274781": [
+   "koprenska",
+   "koprenski"
+  ],
+  "11353442": [
+   "subtrop",
+   "subtropih"
+  ],
+  "11362234": [
+   "gorskokolesarska",
+   "gorskokolesarski"
+  ],
+  "8250503": [
+   "biti",
+   "ne"
+  ],
+  "8312239": [
+   "passat",
+   "passata"
+  ],
+  "8362415": [
+   "grafija",
+   "grafijo"
+  ],
+  "8381497": [
+   "blogerka",
+   "blogerke"
+  ],
+  "8438317": [
+   "kia",
+   "kio"
+  ],
+  "8596538": [
+   "mentacija",
+   "mentacije"
+  ],
+  "8733050": [
+   "etabliran",
+   "etablirana"
+  ],
+  "9292391": [
+   "siloreznica",
+   "siloreznico"
+  ],
+  "9558045": [
+   "mlad",
+   "mlado"
+  ],
+  "9572856": [
+   "modrozob",
+   "modrozoba"
+  ],
+  "11236353": [
+   "minimota",
+   "minimoto"
+  ],
+  "11550262": [
+   "slavite",
+   "slaviti"
+  ],
+  "217": [
+   "Na",
+   "komu",
+   "na"
+  ],
+  "8307265": [
+   "zafira",
+   "zafire"
+  ],
+  "8310792": [
+   "orbitala",
+   "orbitale",
+   "orbitali"
+  ],
+  "8403618": [
+   "erlihioza",
+   "erlihiozi",
+   "erlihiozo"
+  ],
+  "8616371": [
+   "domač",
+   "domače"
+  ],
+  "9148991": [
+   "protitajkunska",
+   "protitajkunski"
+  ],
+  "9398847": [
+   "jurjevka",
+   "jurjevke"
+  ],
+  "9436364": [
+   "sukna",
+   "sukno"
+  ],
+  "10383285": [
+   "panamera",
+   "panamero"
+  ],
+  "10664250": [
+   "priključnina",
+   "priključnino"
+  ],
+  "11260156": [
+   "živeč",
+   "živeče"
+  ],
+  "11302396": [
+   "štirismeren",
+   "štirismerna"
+  ],
+  "11310120": [
+   "prem",
+   "prema"
+  ],
+  "11479857": [
+   "perlonska",
+   "perlonski"
+  ],
+  "11511796": [
+   "Videospotnice",
+   "videospotnica"
+  ],
+  "11665560": [
+   "devede",
+   "devedeje"
+  ],
+  "11847013": [
+   "predinvesticijska",
+   "predinvesticijski"
+  ],
+  "11863573": [
+   "transmaščoba",
+   "transmaščobe"
+  ],
+  "30699": [
+   "presladak",
+   "presladek"
+  ],
+  "8459796": [
+   "ciklamen",
+   "ciklamni"
+  ],
+  "8472396": [
+   "bl",
+   "blu"
+  ],
+  "8883600": [
+   "zvečilen",
+   "zvečilni"
+  ],
+  "10249291": [
+   "nepoplačil",
+   "nepoplačila"
+  ],
+  "65512": [
+   "krastačar",
+   "krastačarji"
+  ],
+  "8387025": [
+   "bogat",
+   "bogato"
+  ],
+  "8454734": [
+   "piper",
+   "piperjih"
+  ],
+  "8503345": [
+   "Plato",
+   "plata",
+   "plato"
+  ],
+  "8504148": [
+   "skrbeti",
+   "skrbite"
+  ],
+  "8544968": [
+   "brezglutenska",
+   "brezglutenski"
+  ],
+  "8751658": [
+   "čil",
+   "čili"
+  ],
+  "8947779": [
+   "nov",
+   "novo"
+  ],
+  "9298057": [
+   "pekel",
+   "peči"
+  ],
+  "9528842": [
+   "neinvaziven",
+   "neinvazivna"
+  ],
+  "9535509": [
+   "razkličen",
+   "razklična"
+  ],
+  "10128929": [
+   "Ultra",
+   "Ultro"
+  ],
+  "206": [
+   "H",
+   "h",
+   "k"
+  ],
+  "246": [
+   "PRI",
+   "Pri",
+   "pri",
+   "v"
+  ],
+  "261": [
+   "U",
+   "V",
+   "celoti",
+   "u",
+   "v"
+  ],
+  "262": [
+   "V",
+   "na",
+   "u",
+   "v"
+  ],
+  "272": [
+   "S",
+   "Z",
+   "s",
+   "veseljem",
+   "z"
+  ],
+  "274": [
+   "s",
+   "z"
+  ],
+  "278": [
+   "ZA",
+   "Za",
+   "silo",
+   "za"
+  ],
+  "614": [
+   "nazaj",
+   "česati"
+  ],
+  "618": [
+   "z",
+   "čestitati"
+  ],
+  "702": [
+   "cveteti",
+   "cveti"
+  ],
+  "715": [
+   "dajati",
+   "metati"
+  ],
+  "10532875": [
+   "avdionaprava",
+   "avdionapravo"
+  ],
+  "11314167": [
+   "postprodukcija",
+   "postprodukcije"
+  ],
+  "11361529": [
+   "ožiljenja",
+   "ožiljenje"
+  ],
+  "11799118": [
+   "brezkontakten",
+   "brezkontaktne"
+  ],
+  "762": [
+   "delovati",
+   "paralelo"
+  ],
+  "879": [
+   "doji",
+   "dojiti"
+  ],
+  "2536": [
+   "molsti",
+   "molzti"
+  ],
+  "3231": [
+   "obesiti",
+   "postaviti"
+  ],
+  "3255": [
+   "objavljati",
+   "spreminjati"
+  ],
+  "4645": [
+   "peljati",
+   "pelje"
+  ],
+  "4730": [
+   "plava",
+   "plavati"
+  ],
+  "5440": [
+   "pomolsti",
+   "pomolzti"
+  ],
+  "7015": [
+   "prikazati",
+   "se"
+  ],
+  "7087": [
+   "pripeka",
+   "pripekati"
+  ],
+  "8439": [
+   "sprevreči",
+   "sprevrže"
+  ],
+  "8574": [
+   "strmoglavi",
+   "strmoglaviti"
+  ],
+  "8788": [
+   "uči",
+   "učiti"
+  ],
+  "9240": [
+   "pahniti",
+   "voditi"
+  ],
+  "9772": [
+   "zamrzniti",
+   "zmrzniti"
+  ],
+  "12096": [
+   "II",
+   "II."
+  ],
+  "13327": [
+   "amortizacijska",
+   "amortizacijski"
+  ],
+  "14794": [
+   "brezmočan",
+   "brezmočen"
+  ],
+  "14819": [
+   "brezposelen",
+   "brezposeln"
+  ],
+  "15682": [
+   "cvetan",
+   "cveten"
+  ],
+  "16508": [
+   "Domiseln",
+   "domiselen",
+   "domiseln"
+  ],
+  "16732": [
+   "DROBAN",
+   "Droban",
+   "Droben",
+   "droban",
+   "droben"
+  ],
+  "17020": [
+   "edin",
+   "edini"
+  ],
+  "18300": [
+   "gnojan",
+   "gnojen"
+  ],
+  "18326": [
+   "godan",
+   "goden"
+  ],
+  "18408": [
+   "gorak",
+   "gorek"
+  ],
+  "18638": [
+   "grenak",
+   "grenek"
+  ],
+  "19088": [
+   "Hladen",
+   "hladan",
+   "hladen"
+  ],
+  "21923": [
+   "Krasen",
+   "krasan",
+   "krasen"
+  ],
+  "21997": [
+   "Krepak",
+   "krepak",
+   "krepek"
+  ],
+  "22139": [
+   "Krotak",
+   "krotak",
+   "krotek"
+  ],
+  "23675": [
+   "Mehak",
+   "mehak",
+   "mehek"
+  ],
+  "24145": [
+   "Močan",
+   "močan",
+   "močen"
+  ],
+  "24340": [
+   "motan",
+   "moten"
+  ],
+  "24601": [
+   "nadomestljiv",
+   "v"
+  ],
+  "25694": [
+   "nepopolen",
+   "nepopoln"
+  ],
+  "25970": [
+   "Nesmiseln",
+   "nesmiselen",
+   "nesmiseln"
+  ],
+  "27220": [
+   "oliven",
+   "olivna"
+  ],
+  "28641": [
+   "plehak",
+   "plehek"
+  ],
+  "29495": [
+   "Popoln",
+   "popolen",
+   "popoln"
+  ],
+  "30380": [
+   "Prelahek",
+   "prelahak",
+   "prelahek"
+  ],
+  "30420": [
+   "premehak",
+   "premehek"
+  ],
+  "30776": [
+   "pretenak",
+   "pretenek"
+  ],
+  "30918": [
+   "prhak",
+   "prhek"
+  ],
+  "32755": [
+   "rosan",
+   "rosen"
+  ],
+  "33579": [
+   "Šibak",
+   "šibak",
+   "šibek"
+  ],
+  "34018": [
+   "sladak",
+   "sladek"
+  ],
+  "34210": [
+   "smiselen",
+   "smiseln"
+  ],
+  "34410": [
+   "solzan",
+   "solzen"
+  ],
+  "35703": [
+   "Tankovski",
+   "protitankovski",
+   "tankovski"
+  ],
+  "35852": [
+   "tenak",
+   "tenek"
+  ],
+  "35919": [
+   "Tesen",
+   "tesan",
+   "tesen"
+  ],
+  "35942": [
+   "TEžAK",
+   "Težak",
+   "težak",
+   "težek"
+  ],
+  "37795": [
+   "voljan",
+   "voljen"
+  ],
+  "39010": [
+   "željan",
+   "željen"
+  ],
+  "39317": [
+   "za",
+   "znosen"
+  ],
+  "39847": [
+   "bolano",
+   "bolno"
+  ],
+  "40026": [
+   "ciklično",
+   "periodično"
+  ],
+  "40252": [
+   "bolje",
+   "dobro"
+  ],
+  "41408": [
+   "gdaj",
+   "kdaj"
+  ],
+  "44510": [
+   "rad",
+   "rada",
+   "rade",
+   "radi",
+   "rado"
+  ],
+  "41886": [
+   "mal",
+   "malo"
+  ],
+  "42233": [
+   "najraje",
+   "najrajši"
+  ],
+  "42885": [
+   "nerad",
+   "nerada",
+   "nerade",
+   "neradi",
+   "nerado"
+  ],
+  "43526": [
+   "delovati",
+   "paralelno"
+  ],
+  "43813": [
+   "popolnoma",
+   "poponoma"
+  ],
+  "44271": [
+   "preveliko",
+   "preveč"
+  ],
+  "44524": [
+   "raje",
+   "rajši"
+  ],
+  "46037": [
+   "vseen",
+   "vseeno"
+  ],
+  "46957": [
+   "Alarm",
+   "alarem",
+   "alarm"
+  ],
+  "47178": [
+   "amazonka",
+   "amazonke"
+  ],
+  "47179": [
+   "Amazonka",
+   "Amazonke"
+  ],
+  "47493": [
+   "ANSAMBEL",
+   "Ansambel",
+   "ansambel",
+   "ansambl"
+  ],
+  "47840": [
+   "Aristotel",
+   "Aristoteles"
+  ],
+  "49646": [
+   "Bloger",
+   "bloger",
+   "blogerji"
+  ],
+  "49735": [
+   "bofor",
+   "boforih"
+  ],
+  "49947": [
+   "Bord",
+   "bord",
+   "bordo"
+  ],
+  "49975": [
+   "borovka",
+   "borovke"
+  ],
+  "50261": [
+   "Brenta",
+   "brent",
+   "brenta"
+  ],
+  "51107": [
+   "CDE",
+   "Cd",
+   "cd"
+  ],
+  "51843": [
+   "ČLAN",
+   "Član",
+   "član",
+   "člani"
+  ],
+  "54869": [
+   "DVORANA",
+   "Dvorana",
+   "dvorana",
+   "miza"
+  ],
+  "55902": [
+   "etnija",
+   "etnije"
+  ],
+  "56402": [
+   "FILM",
+   "Film",
+   "filem",
+   "film"
+  ],
+  "57115": [
+   "Galop",
+   "galop",
+   "galopi"
+  ],
+  "57974": [
+   "gomoljika",
+   "gomoljike"
+  ],
+  "58104": [
+   "gosenica",
+   "gosenice"
+  ],
+  "58841": [
+   "H",
+   "h",
+   "k"
+  ],
+  "59044": [
+   "Hči",
+   "hčer",
+   "hčera",
+   "hči"
+  ],
+  "61125": [
+   "izmeček",
+   "izmečki"
+  ],
+  "61648": [
+   "jablana",
+   "jablane"
+  ],
+  "62000": [
+   "jegličevka",
+   "jegličevke"
+  ],
+  "63169": [
+   "Kata",
+   "Kate",
+   "kate"
+  ],
+  "63583": [
+   "kirnja",
+   "kirnje"
+  ],
+  "63587": [
+   "kirurg",
+   "kirurgi"
+  ],
+  "63659": [
+   "klapavica",
+   "klapavice"
+  ],
+  "63835": [
+   "klinčkovci",
+   "klinčkovec"
+  ],
+  "65546": [
+   "kravel",
+   "kravl"
+  ],
+  "66258": [
+   "Kurac",
+   "kurac",
+   "kurc",
+   "kurec"
+  ],
+  "66794": [
+   "ledvica",
+   "ledvice"
+  ],
+  "67024": [
+   "Lestev",
+   "lestev",
+   "lestva"
+  ],
+  "67045": [
+   "Letev",
+   "letev",
+   "letva"
+  ],
+  "67082": [
+   "levičar",
+   "levičarji"
+  ],
+  "67218": [
+   "LIK",
+   "Lik",
+   "lik",
+   "likem"
+  ],
+  "67501": [
+   "lobi",
+   "lobij"
+  ],
+  "67698": [
+   "Lori",
+   "lori",
+   "loriji"
+  ],
+  "68060": [
+   "mahagoni",
+   "mahagonij"
+  ],
+  "68083": [
+   "mahovnica",
+   "mahovnice"
+  ],
+  "68151": [
+   "Mako",
+   "mako",
+   "makoji"
+  ],
+  "68157": [
+   "makovka",
+   "makovke"
+  ],
+  "68717": [
+   "MAT",
+   "MATI",
+   "Mat",
+   "Mati",
+   "mat",
+   "mati"
+  ],
+  "69578": [
+   "Milan",
+   "Milano"
+  ],
+  "69822": [
+   "MISIJONAR",
+   "Misijonar",
+   "misijonar",
+   "misijonarji"
+  ],
+  "69883": [
+   "MIZA",
+   "Miza",
+   "miza",
+   "mize"
+  ],
+  "70932": [
+   "nadlahet",
+   "nadlaht"
+  ],
+  "71488": [
+   "Narod",
+   "narod",
+   "narodi"
+  ],
+  "73941": [
+   "OBRAMBA",
+   "Obramba",
+   "abramba",
+   "obramba"
+  ],
+  "74706": [
+   "Odvetnik",
+   "odvetnik",
+   "odvetniki"
+  ],
+  "76534": [
+   "Paka",
+   "pak",
+   "paka"
+  ],
+  "76725": [
+   "papilom",
+   "papiloma"
+  ],
+  "77328": [
+   "penal",
+   "penale"
+  ],
+  "78457": [
+   "pletilja",
+   "pletilje"
+  ],
+  "78773": [
+   "Podatek",
+   "podatek",
+   "podatki"
+  ],
+  "78822": [
+   "Podeželan",
+   "podeželan",
+   "podeželani"
+  ],
+  "78921": [
+   "podlahet",
+   "podlaht"
+  ],
+  "79278": [
+   "POET",
+   "Poet",
+   "poet",
+   "poeta"
+  ],
+  "83873": [
+   "Promil",
+   "promil",
+   "promile"
+  ],
+  "84674": [
+   ">rak",
+   "RAK",
+   "Rak",
+   "rak"
+  ],
+  "87000": [
+   "S",
+   "s",
+   "z"
+  ],
+  "87156": [
+   "salmonid",
+   "salmonidi"
+  ],
+  "87563": [
+   "ŠARM",
+   "Šarm",
+   "šarem",
+   "šarm"
+  ],
+  "87930": [
+   "sekret",
+   "skret"
+  ],
+  "88650": [
+   "sinica",
+   "sinice"
+  ],
+  "88823": [
+   "šivilja",
+   "šivilje"
+  ],
+  "88867": [
+   "cinizem",
+   "Škandal",
+   "škandal"
+  ],
+  "89398": [
+   "slavci",
+   "slavec"
+  ],
+  "89734": [
+   "Smreka",
+   "smreka",
+   "smreke"
+  ],
+  "89955": [
+   "Sodnik",
+   "sodnik",
+   "sodniki"
+  ],
+  "90140": [
+   "somič",
+   "somiči"
+  ],
+  "91917": [
+   "striga",
+   "strige"
+  ],
+  "94450": [
+   "tukan",
+   "tukani"
+  ],
+  "94797": [
+   "Ukrep",
+   "ukrep",
+   "ukrepi"
+  ],
+  "95429": [
+   "U",
+   "V",
+   "u",
+   "v"
+  ],
+  "97098": [
+   "VRSTA",
+   "Vrsta",
+   "vrsta",
+   "vrste"
+  ],
+  "97575": [
+   "S",
+   "Z",
+   "s",
+   "z"
+  ],
+  "100658": [
+   "Kaj",
+   "kaj",
+   "kva"
+  ],
+  "100699": [
+   "marsigdo",
+   "marsikdo"
+  ],
+  "100764": [
+   "prikazati",
+   "se"
+  ],
+  "8152864": [
+   "mundial",
+   "mundiala"
+  ],
+  "8154544": [
+   "tamarindov",
+   "tamarindova"
+  ],
+  "8155503": [
+   "škarpena",
+   "škarpene"
+  ],
+  "8156142": [
+   "Mikena",
+   "Mikene"
+  ],
+  "8160180": [
+   "javorjev",
+   "javorjeva"
+  ],
+  "8160322": [
+   "maitaka",
+   "maitake"
+  ],
+  "8165058": [
+   "tamarindin",
+   "tamarindino"
+  ],
+  "8172128": [
+   ">rak",
+   "RAK",
+   "Rak",
+   "rak"
+  ],
+  "8172444": [
+   "ozvezdje",
+   "Škorpijon"
+  ],
+  "8176234": [
+   "MAAE",
+   "Maaa",
+   "Maae"
+  ],
+  "8177643": [
+   "Odvetnik",
+   "odvetnik",
+   "odvetniki"
+  ],
+  "8177991": [
+   "Ukrep",
+   "ukrep",
+   "ukrepi"
+  ],
+  "8179212": [
+   "aplikator",
+   "aplikatorja"
+  ],
+  "8179556": [
+   "Močan",
+   "močan",
+   "močen"
+  ],
+  "8180627": [
+   "ničemnii",
+   "ničemnik"
+  ],
+  "8180736": [
+   "baratha",
+   "barathe"
+  ],
+  "8181545": [
+   "Krepak",
+   "krepak",
+   "krepek"
+  ],
+  "8183089": [
+   "Lahek",
+   "lahak",
+   "lahek"
+  ],
+  "8183090": [
+   "Mehak",
+   "mehak",
+   "mehek"
+  ],
+  "8183958": [
+   "Šibak",
+   "šibak",
+   "šibek"
+  ],
+  "8184046": [
+   "SVETAL",
+   "svetal",
+   "svetel"
+  ],
+  "8184052": [
+   "bolje",
+   "dobro"
+  ],
+  "8185522": [
+   "brezposelen",
+   "brezposeln"
+  ],
+  "8185586": [
+   "grenak",
+   "grenek"
+  ],
+  "8187065": [
+   "curia",
+   "curie"
+  ],
+  "8189529": [
+   "Podeželan",
+   "podeželan",
+   "podeželani"
+  ],
+  "8191644": [
+   "dolžan",
+   "dolžen"
+  ],
+  "8191765": [
+   "sorodnik",
+   "sorodniki"
+  ],
+  "8191805": [
+   "Močan",
+   "močan",
+   "močen"
+  ],
+  "8192266": [
+   "voljan",
+   "voljen"
+  ],
+  "8192546": [
+   "izmeček",
+   "izmečki"
+  ],
+  "8193842": [
+   "Roadster",
+   "roadster",
+   "roadsterjih"
+  ],
+  "8193982": [
+   "edin",
+   "edini"
+  ],
+  "8194764": [
+   "nek",
+   "neki"
+  ],
+  "8194765": [
+   "nek",
+   "neki"
+  ],
+  "8195939": [
+   "FILM",
+   "Film",
+   "filem",
+   "film"
+  ],
+  "8198711": [
+   "ILUSTRACIJA",
+   "Ilustracija",
+   "ilustracija",
+   "ilustracije"
+  ],
+  "8199998": [
+   "hlamudrača",
+   "hlamudrače"
+  ],
+  "8200620": [
+   "ica",
+   "ico"
+  ],
+  "8201462": [
+   "Podatek",
+   "podatek",
+   "podatki"
+  ],
+  "8204797": [
+   "prikazati",
+   "se"
+  ],
+  "8204798": [
+   "prikazati",
+   "se"
+  ],
+  "8204799": [
+   "prikazati",
+   "se"
+  ],
+  "8206128": [
+   "penal",
+   "penale"
+  ],
+  "8206667": [
+   "podnebjeslovec",
+   "podnebjesloveo"
+  ],
+  "8207088": [
+   "gdo",
+   "kdo"
+  ],
+  "8207089": [
+   "gdo",
+   "kdo"
+  ],
+  "8209529": [
+   "VRSTA",
+   "Vrsta",
+   "vrsta",
+   "vrste"
+  ],
+  "8210006": [
+   "Kurac",
+   "kurac",
+   "kurc",
+   "kurec"
+  ],
+  "8210932": [
+   "levičar",
+   "levičarji"
+  ],
+  "8212934": [
+   "Mehak",
+   "mehak",
+   "mehek"
+  ],
+  "8213448": [
+   "prozodija",
+   "prozodijo"
+  ],
+  "8213813": [
+   "MISIJONAR",
+   "Misijonar",
+   "misijonar",
+   "misijonarji"
+  ],
+  "8213949": [
+   "mlatev",
+   "mlatve"
+  ],
+  "8214566": [
+   "Premočan",
+   "premočan",
+   "premočen"
+  ],
+  "8214610": [
+   "Močan",
+   "močan",
+   "močen"
+  ],
+  "8216380": [
+   "Popoln",
+   "popolen",
+   "popoln"
+  ],
+  "8223891": [
+   "oliven",
+   "olivna"
+  ],
+  "8231046": [
+   "pretežak",
+   "pretežek"
+  ],
+  "8231056": [
+   "remiks",
+   "remikse",
+   "remiksi"
+  ],
+  "8233309": [
+   "prispevalec",
+   "prispevalči"
+  ],
+  "9035475": [
+   "predkrog",
+   "predkroga"
+  ],
+  "8233943": [
+   "protitobačen",
+   "protitobačni"
+  ],
+  "8234826": [
+   "Sodnik",
+   "sodnik",
+   "sodniki"
+  ],
+  "8235160": [
+   "rekombinanten",
+   "rekombinantne"
+  ],
+  "8237431": [
+   "služitelje",
+   "služitelči"
+  ],
+  "8237545": [
+   "snovatelje",
+   "snovatelči"
+  ],
+  "8239177": [
+   "Tako",
+   "tako",
+   "takó"
+  ],
+  "8239852": [
+   "cinizem",
+   "Škandal",
+   "škandal"
+  ],
+  "8239889": [
+   "trenažer",
+   "trenažerjih"
+  ],
+  "8243336": [
+   "Čikaso",
+   "Čikasó"
+  ],
+  "8243529": [
+   "ČLAN",
+   "Član",
+   "član",
+   "člani"
+  ],
+  "8244015": [
+   "kopalka",
+   "kopalke"
+  ],
+  "8244016": [
+   "hibiskusov",
+   "hubiskusov"
+  ],
+  "8244130": [
+   "Tehtnica",
+   "¸Tehtnica"
+  ],
+  "8244141": [
+   "marakas",
+   "marake"
+  ],
+  "8244217": [
+   "Kara",
+   "Karo"
+  ],
+  "8244245": [
+   "opoteč",
+   "opoteča"
+  ],
+  "8244333": [
+   "bolivar",
+   "bolivarjih"
+  ],
+  "8244341": [
+   "Mavricijčanka",
+   "Mvricijčanka"
+  ],
+  "8244488": [
+   "Kutin",
+   "kutinov"
+  ],
+  "8244506": [
+   "vitaa",
+   "vitae"
+  ],
+  "8244543": [
+   "Alabama",
+   "Alabame"
+  ],
+  "8244727": [
+   "MAAE",
+   "Maaa",
+   "Maae"
+  ],
+  "8244804": [
+   "Neuchetel",
+   "Neuchâtel"
+  ],
+  "8244958": [
+   "Samoa",
+   "Samoe"
+  ],
+  "8245094": [
+   "cup",
+   "cupa"
+  ],
+  "8245147": [
+   "Apalača",
+   "Apalače"
+  ],
+  "8245199": [
+   "baratha",
+   "barathe"
+  ],
+  "8245619": [
+   "femma",
+   "femme"
+  ],
+  "8245724": [
+   "čik",
+   "čiko"
+  ],
+  "8245815": [
+   "prodajljivo",
+   "prodajljiči"
+  ],
+  "8248144": [
+   "leten",
+   "letno"
+  ],
+  "8248328": [
+   "iPhone",
+   "iphon",
+   "iphone"
+  ],
+  "8248337": [
+   "iPhone",
+   "iphona"
+  ],
+  "8248936": [
+   "evroliga",
+   "evrolige"
+  ],
+  "8284269": [
+   "govoreč",
+   "govoreče"
+  ],
+  "8314632": [
+   "aviarij",
+   "aviarijih"
+  ],
+  "8330567": [
+   "Bafto",
+   "bafta",
+   "bafto"
+  ],
+  "8344212": [
+   "baskitara",
+   "baskitare",
+   "baskitaro"
+  ],
+  "8367246": [
+   "Hotel",
+   "hotel",
+   "hoteti"
+  ],
+  "8389566": [
+   "Težak",
+   "težak",
+   "težek"
+  ],
+  "8393525": [
+   "šnica",
+   "šnice"
+  ],
+  "8408240": [
+   "kondiloma",
+   "kondilome"
+  ],
+  "8425653": [
+   "trešeta",
+   "trešeto"
+  ],
+  "9064591": [
+   "izvozen",
+   "izvozno"
+  ],
+  "9070910": [
+   "Zahteva",
+   "zahteva",
+   "zahtevati"
+  ],
+  "8430999": [
+   "brzincih",
+   "brzinec"
+  ],
+  "8438098": [
+   "Clio",
+   "clia",
+   "clio"
+  ],
+  "8439523": [
+   "deveda",
+   "devede"
+  ],
+  "8439525": [
+   "devedeja",
+   "devedeje"
+  ],
+  "8458651": [
+   "trubač",
+   "trubača"
+  ],
+  "8465735": [
+   "Polo",
+   "pola",
+   "polo"
+  ],
+  "8473788": [
+   "feta",
+   "fete"
+  ],
+  "8567457": [
+   "hiphop",
+   "hiphopa"
+  ],
+  "8574385": [
+   "akalen",
+   "akalna"
+  ],
+  "8682006": [
+   "dvetretjinska",
+   "dvetretjinski"
+  ],
+  "8690782": [
+   "multikina",
+   "multikino"
+  ],
+  "9103992": [
+   "hipoterapija",
+   "hipoterapijo"
+  ],
+  "9123943": [
+   "hath",
+   "hatha"
+  ],
+  "9149607": [
+   "urea",
+   "uree"
+  ],
+  "10974428": [
+   "scudett",
+   "scudetta"
+  ],
+  "8694401": [
+   "judikatura",
+   "judikature",
+   "judikaturo"
+  ],
+  "8701264": [
+   "startup",
+   "startupi"
+  ],
+  "9169965": [
+   "ŽREBČKA",
+   "žrebček"
+  ],
+  "9183961": [
+   "K2A",
+   "K2O"
+  ],
+  "9192328": [
+   "rifa",
+   "rifi"
+  ],
+  "9195330": [
+   "remak",
+   "remake"
+  ],
+  "9223764": [
+   "kolaterala",
+   "kolaterale"
+  ],
+  "9232665": [
+   "večkilometrska",
+   "večkilometrski"
+  ],
+  "9280909": [
+   "kadite",
+   "kaditi"
+  ],
+  "9320466": [
+   "volkuljica",
+   "volkuljice"
+  ],
+  "9799033": [
+   "juh",
+   "juha"
+  ],
+  "9849582": [
+   "term",
+   "terme"
+  ],
+  "10460487": [
+   "kač",
+   "kača"
+  ],
+  "10489598": [
+   "stoj",
+   "stoja"
+  ],
+  "10498730": [
+   "frtalja",
+   "frtalje"
+  ],
+  "11009738": [
+   "PONI",
+   "pona",
+   "poni"
+  ],
+  "10563074": [
+   "večvodilen",
+   "večvodilna"
+  ],
+  "11070877": [
+   "akustik",
+   "akustika"
+  ],
+  "11125827": [
+   "spitzenkandidat",
+   "spitzenkandidata"
+  ],
+  "11737610": [
+   "udarjališča",
+   "udarjališče"
+  ],
+  "11814237": [
+   "tevilka",
+   "tevilko"
+  ],
+  "11814240": [
+   "krga",
+   "krge"
+  ],
+  "12226095": [
+   "grezuljevka",
+   "grezuljevke"
+  ],
+  "12226114": [
+   "humorističnoso",
+   "humorističnost"
+  ],
+  "12226185": [
+   "kruljavoso",
+   "kruljavost"
+  ],
+  "12226688": [
+   "Lori",
+   "lori",
+   "loriji"
+  ],
+  "12226759": [
+   "grezuljevka",
+   "grezuljevke"
+  ],
+  "12226771": [
+   "jegličevka",
+   "jegličevke"
+  ],
+  "12227525": [
+   "Hladen",
+   "hladan",
+   "hladen"
+  ],
+  "12245899": [
+   "mahovnica",
+   "mahovnice"
+  ],
+  "12254150": [
+   "kirnja",
+   "kirnje"
+  ],
+  "12254151": [
+   "kirurg",
+   "kirurgi"
+  ],
+  "12254152": [
+   "klapavica",
+   "klapavice"
+  ],
+  "12254154": [
+   "krastačar",
+   "krastačarji"
+  ],
+  "12254155": [
+   "Mako",
+   "mako",
+   "makoji"
+  ],
+  "12254167": [
+   "škarpena",
+   "škarpene"
+  ],
+  "12254174": [
+   "sinica",
+   "sinice"
+  ],
+  "12254178": [
+   "somič",
+   "somiči"
+  ],
+  "12254203": [
+   "amazonka",
+   "amazonke"
+  ],
+  "12254826": [
+   "borovka",
+   "borovke"
+  ],
+  "12255048": [
+   "striga",
+   "strige"
+  ],
+  "12255049": [
+   "tukan",
+   "tukani"
+  ],
+  "12255301": [
+   "klinčkovci",
+   "klinčkovec"
+  ],
+  "12255368": [
+   "gomoljika",
+   "gomoljike"
+  ],
+  "12255671": [
+   "slavci",
+   "slavec"
+  ],
+  "12255807": [
+   "makovka",
+   "makovke"
+  ],
+  "12256014": [
+   "korenjaško",
+   "kujavo"
+  ],
+  "12256020": [
+   "salmonid",
+   "salmonidi"
+  ],
+  "12261353": [
+   "eo",
+   "ep"
+  ],
+  "12261453": [
+   "goved",
+   "goveo"
+  ],
+  "12261528": [
+   "leo",
+   "let"
+  ],
+  "12261608": [
+   "meo",
+   "meč"
+  ],
+  "12261651": [
+   "sloveo",
+   "sloves"
+  ],
+  "11984167": [
+   "HE",
+   "Ha"
+  ],
+  "11994119": [
+   "Lesičen",
+   "Lesičeo"
+  ],
+  "8714513": [
+   "bundesliga",
+   "bundeslige"
+  ],
+  "8743396": [
+   "vpisati",
+   "vpišite"
+  ],
+  "8754553": [
+   "brava",
+   "bravo"
+  ],
+  "8780380": [
+   "lingv",
+   "lingva"
+  ],
+  "8780568": [
+   "šentlovrenka",
+   "šentlovrenke"
+  ],
+  "8840297": [
+   "lajkoš",
+   "lajkoši"
+  ],
+  "8879436": [
+   "Remake",
+   "remaka",
+   "remake"
+  ],
+  "9330821": [
+   "Vilenice",
+   "vilenica"
+  ],
+  "9343517": [
+   "superliga",
+   "superlige"
+  ],
+  "8930291": [
+   "prisilka",
+   "prisilko"
+  ],
+  "9411510": [
+   "desen",
+   "desno"
+  ],
+  "9421128": [
+   "kupejevska",
+   "kupejevski"
+  ],
+  "9450062": [
+   "masonska",
+   "masonski"
+  ],
+  "9450170": [
+   "šesterozob",
+   "šesterozobi"
+  ],
+  "9457501": [
+   "kupa",
+   "kupe"
+  ],
+  "9460240": [
+   "boss",
+   "bosse"
+  ],
+  "9481833": [
+   "Manifesta",
+   "Manifesto"
+  ],
+  "9492030": [
+   "sada",
+   "sado"
+  ],
+  "9504401": [
+   "kvarčen",
+   "kvarčni"
+  ],
+  "9539731": [
+   "desettisočinka",
+   "desettisočinko"
+  ],
+  "9564409": [
+   "venecijanka",
+   "venecijanko"
+  ],
+  "9971949": [
+   "neizdaja",
+   "neizdaje"
+  ],
+  "10009997": [
+   "trubadura",
+   "trubaduri"
+  ],
+  "10069746": [
+   "kontraceptiva",
+   "kontraceptivi"
+  ],
+  "12002786": [
+   "Ostrožen",
+   "Ostrožeo"
+  ],
+  "12010378": [
+   "Renmin",
+   "Renmio"
+  ],
+  "12006832": [
+   "Pietilo",
+   "Pietilä"
+  ],
+  "10129008": [
+   "metrija",
+   "metrije"
+  ],
+  "10144287": [
+   "excellenca",
+   "excellence"
+  ],
+  "10173049": [
+   "grat",
+   "grata"
+  ],
+  "10274972": [
+   "poga",
+   "pogo"
+  ],
+  "10320211": [
+   "pump",
+   "pumpa"
+  ],
+  "10607560": [
+   "cistinoza",
+   "cistinozo"
+  ],
+  "10614699": [
+   "razbor",
+   "razbora"
+  ],
+  "10628937": [
+   "octava",
+   "octave"
+  ],
+  "10666364": [
+   "prikoličar",
+   "prikoličarjih"
+  ],
+  "10695231": [
+   "Škarij",
+   "škarje"
+  ],
+  "10873825": [
+   "perjanka",
+   "perjanko"
+  ],
+  "10875409": [
+   "clasica",
+   "clasico"
+  ],
+  "11210198": [
+   "delojemalska",
+   "delojemalski"
+  ],
+  "11230834": [
+   "imprez",
+   "impreza"
+  ],
+  "11238711": [
+   "vitara",
+   "vitare"
+  ],
+  "11243875": [
+   "tegula",
+   "tegule"
+  ],
+  "11254534": [
+   "samoosvoboditev",
+   "samoosvoboditve"
+  ],
+  "12030444": [
+   "Afd",
+   "Afo"
+  ],
+  "10899465": [
+   "megana",
+   "megane"
+  ],
+  "10909916": [
+   "protipriseljenska",
+   "protipriseljenski"
+  ],
+  "10946343": [
+   "bleščila",
+   "bleščilo"
+  ],
+  "11937678": [
+   "bolje",
+   "dobro"
+  ]
+ },
+ "n_forms_multi": 364899,
+ "n_forms_case_only": 53061,
+ "n_forms_distinct": 311838,
+ "n_units": 958,
+ "n_core_units": 196
+}

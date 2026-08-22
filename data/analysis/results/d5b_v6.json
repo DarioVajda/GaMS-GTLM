@@ -1,0 +1,170 @@
+{
+  "store": "kg_graph_v6_gemma3",
+  "convention": "v6",
+  "nodes": 36735791,
+  "half_edges": 97068062,
+  "fanout": {
+    "collocation_bearing_senses": 120871,
+    "p50": 4,
+    "p90": 101,
+    "p99": 791,
+    "max": 14233,
+    "above_K": 34827,
+    "above_K_share": 0.2881336300684201,
+    "hubs": [
+      [
+        "pomen 1: imeti",
+        14233
+      ],
+      [
+        "pomen 1: biti",
+        13873
+      ],
+      [
+        "pomen 1: tako",
+        10801
+      ],
+      [
+        "pomen 1: iti",
+        9749
+      ],
+      [
+        "pomen 1: leto",
+        8714
+      ],
+      [
+        "pomen 1: bolj",
+        8272
+      ],
+      [
+        "pomen 1: priti",
+        7049
+      ],
+      [
+        "pomen 1: čas",
+        6921
+      ]
+    ]
+  },
+  "top_anchors": [
+    [
+      "prikazati",
+      423468
+    ],
+    [
+      "biti",
+      196286
+    ],
+    [
+      "in",
+      189951
+    ],
+    [
+      "s",
+      181344
+    ],
+    [
+      "celoti",
+      163058
+    ],
+    [
+      "silo",
+      162005
+    ],
+    [
+      "komu",
+      109573
+    ],
+    [
+      "na",
+      98939
+    ],
+    [
+      "na",
+      85546
+    ],
+    [
+      "po",
+      80840
+    ]
+  ],
+  "ball_cost": {
+    "0": {
+      "p50": 2142,
+      "p90": 3243,
+      "p99": 6812,
+      "max": 9936
+    },
+    "15": {
+      "p50": 2285,
+      "p90": 3406,
+      "p99": 6974,
+      "max": 10072
+    },
+    "50": {
+      "p50": 2608,
+      "p90": 3723,
+      "p99": 7289,
+      "max": 10385
+    },
+    "100": {
+      "p50": 3088,
+      "p90": 4181,
+      "p99": 7714,
+      "max": 10833
+    },
+    "uncapped": {
+      "p50": 23009,
+      "p90": 41937,
+      "p99": 80936,
+      "max": 136146
+    }
+  },
+  "power_law": {
+    "slope": -1.7481722655419794,
+    "r2": 0.9260549877209678,
+    "n": 120871
+  },
+  "schemes": {
+    "voda": {
+      "pool_size": 3026,
+      "pool": {
+        "p10": 7,
+        "p50": 105,
+        "p90": 955,
+        "max": 14233,
+        "above_2000": 115
+      },
+      "uniform": {
+        "partner_proxy_p50": 109.23333333333333,
+        "hub_partners_mean": 0.4666666666666667,
+        "hub_partners_sd": 0.5617433182117573,
+        "sample": [
+          "dol v vodo",
+          "zjutraj z vodo",
+          "voda se ne ogreje"
+        ]
+      },
+      "log1p": {
+        "partner_proxy_p50": 245.33333333333334,
+        "hub_partners_mean": 1.1666666666666667,
+        "hub_partners_sd": 1.0354816378006046,
+        "sample": [
+          "vegetacija in voda",
+          "dol v vodo",
+          "prilesti iz vode"
+        ]
+      },
+      "linear": {
+        "partner_proxy_p50": 1416.9,
+        "hub_partners_mean": 5.566666666666666,
+        "hub_partners_sd": 1.7641491496532322,
+        "sample": [
+          "zjutraj z vodo",
+          "voda do uporabnikov",
+          "razmere brez vode"
+        ]
+      }
+    }
+  }
+}

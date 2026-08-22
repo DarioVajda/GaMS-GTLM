@@ -1,0 +1,170 @@
+{
+  "store": "kg_graph_v7_gemma3",
+  "convention": "v7",
+  "nodes": 37498126,
+  "half_edges": 100117402,
+  "fanout": {
+    "collocation_bearing_senses": 120871,
+    "p50": 4,
+    "p90": 114,
+    "p99": 1055,
+    "max": 64842,
+    "above_K": 35446,
+    "above_K_share": 0.29325479229922813,
+    "hubs": [
+      [
+        "pomen 1: biti",
+        64842
+      ],
+      [
+        "pomen 1: imeti",
+        30032
+      ],
+      [
+        "pomen 1: leto",
+        24242
+      ],
+      [
+        "pomen 1: iti",
+        14570
+      ],
+      [
+        "pomen 1: tako",
+        12993
+      ],
+      [
+        "pomen 1: priti",
+        11377
+      ],
+      [
+        "pomen 1: čas",
+        11197
+      ],
+      [
+        "pomen 1: dan",
+        11072
+      ]
+    ]
+  },
+  "top_anchors": [
+    [
+      "prikazati",
+      423479
+    ],
+    [
+      "biti",
+      247255
+    ],
+    [
+      "in",
+      189951
+    ],
+    [
+      "s",
+      181344
+    ],
+    [
+      "celoti",
+      163061
+    ],
+    [
+      "silo",
+      162005
+    ],
+    [
+      "komu",
+      109573
+    ],
+    [
+      "na",
+      98939
+    ],
+    [
+      "na",
+      85546
+    ],
+    [
+      "po",
+      80840
+    ]
+  ],
+  "ball_cost": {
+    "0": {
+      "p50": 2151,
+      "p90": 3228,
+      "p99": 6812,
+      "max": 9936
+    },
+    "15": {
+      "p50": 2292,
+      "p90": 3372,
+      "p99": 6974,
+      "max": 10065
+    },
+    "50": {
+      "p50": 2619,
+      "p90": 3685,
+      "p99": 7294,
+      "max": 10378
+    },
+    "100": {
+      "p50": 3099,
+      "p90": 4171,
+      "p99": 7722,
+      "max": 10833
+    },
+    "uncapped": {
+      "p50": 30936,
+      "p90": 58527,
+      "p99": 111292,
+      "max": 588537
+    }
+  },
+  "power_law": {
+    "slope": -1.8057569337010106,
+    "r2": 0.9320310582402722,
+    "n": 120871
+  },
+  "schemes": {
+    "voda": {
+      "pool_size": 4589,
+      "pool": {
+        "p10": 11,
+        "p50": 184,
+        "p90": 1741,
+        "max": 64842,
+        "above_2000": 369
+      },
+      "uniform": {
+        "partner_proxy_p50": 179.66666666666666,
+        "hub_partners_mean": 0.8,
+        "hub_partners_sd": 0.6531972647421809,
+        "sample": [
+          "obtok vode",
+          "zajetje z vodo",
+          "barake brez vode"
+        ]
+      },
+      "log1p": {
+        "partner_proxy_p50": 314.9,
+        "hub_partners_mean": 1.7,
+        "hub_partners_sd": 1.0376254944182255,
+        "sample": [
+          "barake brez vode",
+          "hladilnik vode",
+          "odvesti vodo"
+        ]
+      },
+      "linear": {
+        "partner_proxy_p50": 14637.366666666667,
+        "hub_partners_mean": 10.233333333333333,
+        "hub_partners_sd": 1.4761059883656353,
+        "sample": [
+          "imeti med vodami",
+          "biti med vodami",
+          "podjetje nad vodo"
+        ]
+      }
+    }
+  }
+}
