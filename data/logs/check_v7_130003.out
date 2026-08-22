@@ -1,0 +1,36 @@
+new: /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3
+old: /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v6_gemma3
+
+manifest text_convention = 'v7'  tokenizer = 'cjvt/GaMS3-12B-Instruct'
+manifest dedup_key       = 'member_set+phrase'  member_sets=2981731  pairings=3744066
+--- 1. the real (IRI-backed) layer is untouched ---
+    n_real 33,569,351 -> 33,569,351  identical=True
+    node_codes.npy   identical=True  f50b62aec05ba849506161a7d283283e
+    ntype[:n_real]   identical=True
+    kind[:n_real]    identical=True
+    mwe_set[:n_real] identical=True
+
+--- 2. the synonym / antonym layers are untouched ---
+    sopomenka      181,260 -> 181,260 nodes  same ids=True  text differs on 0
+    protipomenka   3,449 -> 3,449 nodes  same ids=True  text differs on 0
+
+--- 3/4. the collocation layer only grew, and holds no duplicate ---
+    collocation nodes 2,981,731 -> 3,744,066 (+25.6%)
+    distinct member sets 2,981,731 -> 2,981,731
+    member sets present in v6 but not v7: 0 (required 0)
+    v6 phrases missing from v7:           0 (required 0)
+    v6 phrases kept only up to the fold:  136 (intended: case-only duplicates)
+    member sets carrying a repeated phrase: 0 (required 0)
+    phrases per member set: mean 1.26  max 48  >1 on 467,294 sets (15.7%)
+
+--- 5. non-collocation adjacency is unchanged ---
+    real nodes sampled: 300,000  differing: 0 (required 0)
+
+--- 6. verbalisation rate did not regress ---
+    verbalised: v6 100.000% (2,981,731)  v7 100.000% (3,744,066)
+
+--- 7. reference-file reproduction ---
+    reference phrases: 1307   v6 1082 (82.8%)   v7 1196 (91.5%)
+    distinct phrases in store: 2,972,221 -> 3,731,907
+
+ACCEPTANCE: PASS

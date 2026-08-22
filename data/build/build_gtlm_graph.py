@@ -125,8 +125,9 @@ so the cost of flaw #2 can be measured rather than assumed.
      of the 1,307 collocation phrases in data/datasets/reference/ come back
      verbatim from this path alone, which also settles where that file's
      phrases came from (this export, not the DDDS API).
-     Controlled by --colloc-text {phrase,pair}; the skip condition stays on the
-     members, so structure is byte-identical to a v4 store of the same tokenizer.
+     Controlled by --colloc-text {phrase,pair}.  Through v6 the skip condition
+     stayed on the members, so structure was byte-identical to a v4 store of the
+     same tokenizer; flaw 10 breaks that tie deliberately, for phrase mode only.
 
   9. NOUN GENDER REACHES THE TEXT (v6 text convention).  Flaw 7c fixed the
      subject-type guard for aspect and clitic but left `gender` behind, and the
@@ -157,13 +158,40 @@ so the cost of flaw #2 can be measured rather than assumed.
      other POS has any -- so the two roles of the property never collide on one
      node.  Text-only change: structure stays byte-identical to v5.
 
+ 10. ONE COLLOCATION NODE PER PHRASE, NOT PER MEMBER SET (v7 convention).  Flaw 8
+     resolved the phrase but left the dedup key from flaw 2 untouched, and the two
+     do not agree.  Each pairing is reified once per participant, so the dump holds
+     several frac:Collocation IRIs over the same {sense_a, sense_b} member set;
+     _dedup_pairs_keyed() kept exactly one of them and its docstring asserted the
+     duplicates "all carry the same sense id in the other half".  That is FALSE.
+     Measured on the v6 store: 439,370 member sets (15.3%) name more than one
+     DEPENDENT sense, i.e. more than one curated phrase, and keeping one dropped
+     717,545 phrases (20.0% of the total).  `iziti` + `zbirka` has 8 curated
+     phrases -- `zbirka izide`, `iziti v zbirki`, ... -- and the store kept 1.
+     The loss was not random either: the survivor was the lowest IRI code, i.e.
+     the earliest-entered entry, so the store systematically preferred one end of
+     the editing history.
+     The fix keys the dedup on (member set, PHRASE) instead of on the member set
+     alone -- one node per distinct node TEXT, which is the only thing the model
+     can tell apart anyway.  Unresolved reifications render as the lemma pair,
+     which is a function of the member set alone, so they still collapse to one.
+     The phrase is folded first (_colloc_key: case, whitespace, one trailing
+     period), because two nodes that differ only there are indistinguishable to
+     the grader as well and would put the same item into a gold list twice;
+     keying on the raw surface gives 3,744,612 pairings against 3,569,711.
+     Effect, measured: 2,981,731 -> 3,569,711 collocation nodes (+19.7%), 36.7M ->
+     37.3M store nodes (+1.6%), phrases per anchor p50 4 -> 5 / p90 125 -> 143.
+     PHRASE MODE ONLY: under --colloc-text pair every duplicate renders the same
+     string, so keying on the text is exactly the old behaviour and a pair store
+     stays byte-identical to v4.
+
 Analysis: 2 (form_mode) x 2 (examples) x 2 (collocations) = 8 variants, reported
 with percentiles, split by seed kind (single word vs MWE).  Tokens = node-text
 tokens + prompt (no relation-label tokens: there are no relation labels).  For
 comparison with v2 we also report the induced edge count, so levi_nodes would be
 nodes + edges.
 """
-import os, re, sys, glob, json, time, argparse, hashlib
+import os, re, sys, glob, json, time, argparse, hashlib, unicodedata
 from collections import defaultdict
 import numpy as np
 from multiprocessing import Pool
@@ -587,12 +615,16 @@ def _dedup_pairs_keyed(a, b, key):
     Returns (pairs, keys) in the SAME row order as _dedup_pairs(a, b), so the
     minted node ids are unchanged by carrying the key through.
 
-    Used for collocations, where the key is the frac:Collocation IRI code.  The
-    same pairing is reified once per participant -- identical member set,
-    different frac:head -- and the duplicates differ only in the frac:head half
-    of the IRI, so they all carry the same sense id in the other half.  Which
-    representative survives therefore does not affect the verbalisation; the
-    lexsort makes the choice deterministic anyway.
+    Used for collocations in --colloc-text pair mode, where the key is the
+    frac:Collocation IRI code and every reification of one member set renders the
+    same lemma-pair string, so which representative survives cannot matter.
+
+    NOT usable in phrase mode.  An earlier version of this docstring claimed the
+    duplicates "all carry the same sense id in the other half" of the IRI and so
+    verbalise identically.  That is false -- 15.3% of member sets name several
+    dependent senses, i.e. several distinct curated phrases -- and acting on it
+    dropped 20.0% of the phrases from the v5/v6 stores.  See flaw 10 and
+    _dedup_colloc_by_phrase().
     """
     if len(a) == 0:
         return np.empty((0, 2), dtype=np.int64), np.empty(0, dtype=np.int64)
@@ -606,6 +638,93 @@ def _dedup_pairs_keyed(a, b, key):
     pairs = np.stack([lo, hi], axis=1)
     first = np.flatnonzero(np.r_[True, (pairs[1:] != pairs[:-1]).any(axis=1)])
     return pairs[first], key[first]
+
+
+def _colloc_key(s):
+    """Fold a phrase to what any reader of the node text can actually tell apart.
+
+    This is the QA grader's norm() (data/QA_TASKS.md 0.8) minus the casefold's
+    only purpose here -- case, runs of whitespace and one trailing period.  Two
+    phrases that agree under it are duplicates for every downstream purpose: the
+    grader matches collocations case-insensitively, so a member set carrying both
+    "Cvilece gume" and "cvilece gume" would produce a gold list that contains the
+    same item twice and fails its own dedup invariant.
+
+    Measured: keying on the raw surface instead yields 3,744,612 pairings against
+    3,569,711 here, i.e. 174,901 nodes (4.7%) that differ from a sibling only in
+    case or spacing.
+    """
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFC", s)).strip() \
+             .rstrip(".").casefold()
+
+
+def _dedup_colloc_by_phrase(a, b, iri, phrase_of):
+    """Dedup collocation reifications on (member set, PHRASE) -- flaw 10.
+
+    `a`, `b` are the two member senses of one frac:Collocation IRI and `iri` is
+    that IRI's node code; `phrase_of(iri_code) -> str` dereferences the naming
+    convention to the curated phrase (flaw 8), returning '' when it does not
+    resolve.
+
+    Returns (pairs, iri, phrases) with one row per distinct (pair, folded phrase),
+    in lexsort order (lo, hi, phrase, capitalisation, surface, iri) so the minted
+    node ids are a pure function of the parsed triple SET and not of file or
+    worker order.
+
+    Which SURFACE survives a fold is decided the same way build() decides between
+    several writtenRep values for one form: fewest capitals, then lexicographically
+    smallest, so the dictionary-style spelling wins over a sentence-initial or
+    all-caps variant, and the choice does not depend on IRI order.
+
+    Unresolved rows key on '' and therefore still collapse to one node per member
+    set, which is right: their text is the lemma pair, a function of the members
+    alone, so a second node would be a byte-identical duplicate.
+    """
+    if len(a) == 0:
+        return np.empty((0, 2), dtype=np.int64), np.empty(0, dtype=np.int64), []
+    lo = np.minimum(a, b); hi = np.maximum(a, b)
+    keep = lo != hi
+    lo = lo[keep]; hi = hi[keep]; iri = np.asarray(iri)[keep]
+    if len(lo) == 0:
+        return np.empty((0, 2), dtype=np.int64), np.empty(0, dtype=np.int64), []
+    # Intern the phrases: comparing 4.7M strings through numpy would mean an
+    # object array and an O(n log n) string sort; interning makes the sort keys
+    # int64 columns.  First-encounter order is deterministic because the caller
+    # feeds rows in sorted-IRI order -- and the tie-break below does not depend on
+    # it anyway.
+    kid = {}                      # folded phrase -> key id
+    sid = {}                      # surface       -> surface id
+    surfaces = []
+    pid = np.empty(len(lo), dtype=np.int64)     # folded-phrase id, the dedup key
+    rank = np.empty(len(lo), dtype=np.int64)    # capitals, for the tie-break
+    sur = np.empty(len(lo), dtype=np.int64)     # surface id, for the tie-break
+    for t in range(len(lo)):
+        s = phrase_of(int(iri[t]))
+        j = sid.get(s)
+        if j is None:
+            j = len(surfaces); sid[s] = j; surfaces.append(s)
+        sur[t] = j
+        rank[t] = sum(1 for ch in s if ch.isupper())
+        k = _colloc_key(s)
+        v = kid.get(k)
+        if v is None:
+            v = len(kid); kid[k] = v
+        pid[t] = v
+    del kid, sid
+    # Rank the surfaces lexicographically once, so the tie-break is a real
+    # alphabetical order and not first-encounter order.
+    srank = np.empty(len(surfaces), dtype=np.int64)
+    for r, i in enumerate(sorted(range(len(surfaces)), key=surfaces.__getitem__)):
+        srank[i] = r
+    # np.lexsort keys are LAST-primary: (lo, hi, pid) select the group and
+    # (rank, surface, iri) pick its representative.
+    order = np.lexsort((iri, srank[sur], rank, pid, hi, lo))
+    lo = lo[order]; hi = hi[order]; iri = iri[order]; pid = pid[order]
+    sur = sur[order]
+    pairs = np.stack([lo, hi], axis=1)
+    changed = ((pairs[1:] != pairs[:-1]).any(axis=1) | (pid[1:] != pid[:-1]))
+    first = np.flatnonzero(np.r_[True, changed])
+    return pairs[first], iri[first], [surfaces[int(j)] for j in sur[first]]
 
 
 # ---------------------------------------------------------------------------
@@ -734,11 +853,52 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
         lu = sense_lu.get(int(se))
         return lemma_of_lu(lu) if lu is not None else ""
 
-    # ---- FLAW 2: collocations from rdfs:member ----------------------------
-    # Each pairing is reified once per participant with an identical member set,
-    # so group members by collocation IRI and dedup by the member set itself.
+    # ---- FLAW 8: the collocation's surface string --------------------------
+    # A frac:Collocation node carries no text of its own -- rdfs:member, frac:head
+    # and rdf:type are the ONLY predicates it ever takes, in all 42 GB, and nothing
+    # in the dump ever points AT one (0 triples with a collocation in the object
+    # position).  But its IRI names the sense of the multi-word entry that spells
+    # the phrase out, and that entry does carry the text:
+    #
+    #     <dependent-sense-D-lexical-unit-H>  rdf:type  frac:Collocation
+    #     <sense-D>          ontolex:isSenseOf     <lexical-unit-M>
+    #     <lexical-unit-M>   rdf:type              ontolex:MultiWordExpression
+    #     <lexical-unit-M>   ontolex:canonicalForm <form-lexical-unit-M>
+    #     <form-lexical-unit-M> ontolex:writtenRep """kisova voda"""@sl
+    #
+    # so the phrase is three ordinary lookups away and sense_lu / canon_of / wr
+    # already hold every one of them.  The link exists only as a naming
+    # convention, never as a triple -- which is why v2/v3/v4 all missed it while
+    # code_of() was parsing D out of that very IRI to pack the node id.
+    #
+    # Measured on the raw dump: 4,717,090 of 4,717,090 collocation nodes resolve,
+    # 3,744,473 distinct phrases, and 75.3% of them differ from their constituent
+    # lemmas concatenated (agreement, word order, and the prepositions/copula the
+    # pair form drops entirely).  See data/README.md Finding 8.
+    COLLOC_ID_MASK = (1 << 28) - 1
+
+    def colloc_phrase_of_iri(iri):
+        """Curated phrase behind one frac:Collocation IRI code, or '' if unresolved."""
+        if (iri >> TYPE_SHIFT) != T_COLLOC:
+            return ""
+        # code_of() packs the IRI as (T_COLLOC << 56) | (D << 28) | H whenever both
+        # ids fit in 28 bits, which they do throughout this KG (max sense id ~1.0e7,
+        # max lexical-unit id ~1.2e7, vs 2^28 = 2.7e8).  On the _hash56 fallback the
+        # unpacked D is meaningless, but then it names no sense and we return ''.
+        d = (iri >> 28) & COLLOC_ID_MASK
+        return lemma_of_sense((T_SENSE << TYPE_SHIFT) | d)
+
+    # ---- FLAW 2 + FLAW 10: collocations from rdfs:member -------------------
+    # Each pairing is reified once per participant, so several frac:Collocation
+    # IRIs share one {sense_a, sense_b} member set.  Through v6 the dedup key was
+    # that member set, which was wrong in phrase mode: the duplicates name
+    # DIFFERENT dependent senses, i.e. different curated phrases, and 20.0% of the
+    # phrases were being thrown away.  Key on (member set, phrase) instead -- one
+    # node per distinct node text.  Pair mode keeps the old key, under which every
+    # duplicate renders identically anyway.
     colloc_pairs = np.empty((0, 2), dtype=np.int64)
     colloc_iri = np.empty(0, dtype=np.int64)        # parallel to colloc_pairs
+    colloc_phrases = None                           # parallel too, phrase mode only
     member_hist = {}
     if len(member):
         member = np.unique(member, axis=0)          # the dump repeats triples
@@ -754,14 +914,25 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
         # ms[starts] is the frac:Collocation IRI code itself.  v3/v4 discarded it
         # once the members were read; flaw 8 needs it, because the sense id it
         # encodes is the only route to the phrase's surface string.
-        colloc_pairs, colloc_iri = _dedup_pairs_keyed(a, b, ms[starts])
+        if colloc_text == "phrase":
+            colloc_pairs, colloc_iri, colloc_phrases = _dedup_colloc_by_phrase(
+                a, b, ms[starts], colloc_phrase_of_iri)
+            n_member_sets = len(_dedup_pairs(a, b))
+        else:
+            colloc_pairs, colloc_iri = _dedup_pairs_keyed(a, b, ms[starts])
+            n_member_sets = len(colloc_pairs)
         n_colloc_iris = len(bounds)
         print(f"[colloc] {n_colloc_iris:,} collocation IRIs, member-count hist={member_hist}, "
-              f"{int(two.sum()):,} binary -> {len(colloc_pairs):,} distinct pairings",
+              f"{int(two.sum()):,} binary -> {n_member_sets:,} member sets "
+              f"-> {len(colloc_pairs):,} distinct pairings (key={colloc_text})",
               flush=True)
         stats["collocations"] = {"iris": int(n_colloc_iris),
                                  "member_count_hist": member_hist,
                                  "binary_iris": int(two.sum()),
+                                 "member_sets": int(n_member_sets),
+                                 "dedup_key": ("member_set+phrase"
+                                               if colloc_text == "phrase"
+                                               else "member_set"),
                                  "distinct_pairings": int(len(colloc_pairs))}
     del member
 
@@ -943,43 +1114,9 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
           f"by type: {tl_by_type}", flush=True)
     stats["textless_by_type"] = tl_by_type
 
-    # ---- FLAW 8: the collocation's surface string --------------------------
-    # A frac:Collocation node carries no text of its own -- rdfs:member, frac:head
-    # and rdf:type are the ONLY predicates it ever takes, in all 42 GB, and nothing
-    # in the dump ever points AT one (0 triples with a collocation in the object
-    # position).  But its IRI names the sense of the multi-word entry that spells
-    # the phrase out, and that entry does carry the text:
-    #
-    #     <dependent-sense-D-lexical-unit-H>  rdf:type  frac:Collocation
-    #     <sense-D>          ontolex:isSenseOf     <lexical-unit-M>
-    #     <lexical-unit-M>   rdf:type              ontolex:MultiWordExpression
-    #     <lexical-unit-M>   ontolex:canonicalForm <form-lexical-unit-M>
-    #     <form-lexical-unit-M> ontolex:writtenRep """kisova voda"""@sl
-    #
-    # so the phrase is three ordinary lookups away and sense_lu / canon_of / wr
-    # already hold every one of them.  The link exists only as a naming
-    # convention, never as a triple -- which is why v2/v3/v4 all missed it while
-    # code_of() was parsing D out of that very IRI to pack the node id.
-    #
-    # Measured on the raw dump: 4,717,090 of 4,717,090 collocation nodes resolve,
-    # 3,744,473 distinct phrases, and 75.3% of them differ from their constituent
-    # lemmas concatenated (agreement, word order, and the prepositions/copula the
-    # pair form drops entirely).  See data/README.md Finding 8.
-    COLLOC_ID_MASK = (1 << 28) - 1
-
-    def colloc_phrase(t):
-        """Surface string for row t of colloc_pairs, or '' if it does not resolve."""
-        iri = int(colloc_iri[t])
-        if (iri >> TYPE_SHIFT) != T_COLLOC:
-            return ""
-        # code_of() packs the IRI as (T_COLLOC << 56) | (D << 28) | H whenever both
-        # ids fit in 28 bits, which they do throughout this KG (max sense id ~1.0e7,
-        # max lexical-unit id ~1.2e7, vs 2^28 = 2.7e8).  On the _hash56 fallback the
-        # unpacked D is meaningless, but then it names no sense and we return ''.
-        d = (iri >> 28) & COLLOC_ID_MASK
-        return lemma_of_sense((T_SENSE << TYPE_SHIFT) | d)
-
     # ---- mint the reified nodes (collocation / synonym / antonym) ----------
+    # The collocation phrases were resolved and deduped on above (flaws 8 and 10);
+    # row t of colloc_pairs carries its text in colloc_phrases[t].
     mint_src = []; mint_dst = []; mint_text = []; mint_kind = []
     next_id = n_real
     n_phrase = [0]
@@ -989,8 +1126,8 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
 
         With `phrase_of`, the node instead carries the phrase itself when one
         resolves, falling back to the pair form when it does not.  The SKIP
-        condition stays on the members either way, so the node count and order
-        are identical with and without it and the store's structure is unchanged.
+        condition stays on the members either way; what does change the node
+        count is the caller's dedup key (flaw 10), not this function.
         """
         nonlocal next_id
         if not len(pairs):
@@ -1022,7 +1159,8 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
     n_syn = mint(syn_pairs, TAG_SYN, "~", K_SYN, lemma_of_sense)
     n_ant = mint(ant_pairs, TAG_ANT, "~", K_ANT, lemma_of_sense)
     n_col = mint(colloc_pairs, TAG_COLLOC, "+", K_COLLOC, lemma_of_sense,
-                 phrase_of=colloc_phrase if colloc_text == "phrase" else None)
+                 phrase_of=((lambda t: colloc_phrases[t])
+                            if colloc_text == "phrase" else None))
     print(f"[mint] {n_syn:,} sopomenka + {n_ant:,} protipomenka + {n_col:,} kolokacija "
           f"nodes ({len(mint_src):,} edges)", flush=True)
     if colloc_text == "phrase":
@@ -1244,12 +1382,16 @@ def main():
                   # rendered no morphology and wrote collocations as lemma pairs;
                   # v4 added vform/person/definiteness on forms and aspect/clitic
                   # on anchors; v5 verbalises the collocation nodes (flaw 8);
-                  # v6 renders entry-level noun gender on the anchor (flaw M4).
+                  # v6 renders entry-level noun gender on the anchor (flaw M4);
+                  # v7 keys the collocation dedup on (member set, phrase) instead
+                  # of on the member set alone (flaw 10), which is the first
+                  # convention bump that changes STRUCTURE and not only text.
                   # The convention is read off UNIT_PROPS rather than hard-coded
                   # so a store built with gender switched back off cannot claim
-                  # to be a v6.
+                  # to be a v6.  v6 is no longer reachable from this builder in
+                  # phrase mode: the old dedup key was a defect, not an option.
                   "text_convention": (
-                      "v6" if ("gender" in UNIT_PROPS
+                      "v7" if ("gender" in UNIT_PROPS
                                and args.colloc_text == "phrase")
                       else "v5" if args.colloc_text == "phrase" else "v4"),
                   "feature_props": list(FEATURE_PROPS),

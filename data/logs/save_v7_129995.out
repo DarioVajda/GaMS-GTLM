@@ -1,0 +1,26 @@
+host: apl  cpus: 16  variant: gemma3  start: Fri Aug 21 23:06:30 UTC 2026
+store: /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3
+ref  : /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v6_gemma3
+env OK  /shared/workspace/povejmo/graph_model/.venv/bin/python 3.10.12 numpy 1.26.4 transformers 4.50.3
+KG dir: /shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB  (2594 .nt files)
+[parse] 2594 files x 16 workers
+[parse] 200/2594  6s
+[parse] 400/2594  10s
+[parse] 600/2594  14s
+[parse] 800/2594  19s
+[parse] 1000/2594  24s
+[parse] 1200/2594  29s
+[parse] 1400/2594  39s
+[parse] 1600/2594  50s
+[parse] 1800/2594  56s
+[parse] 2000/2594  60s
+[parse] 2200/2594  65s
+[parse] 2400/2594  75s
+[trans] dropped 155,140 translation-chain edges (collapsed onto translation-form)
+[parse] done 93s  canon=4,340,597 other=8,678,916 sense=8,468,227 usage=14,722,502 constit=10,265,230 corr=10,262,712 tsrc=77,570 member=9,645,845 syn=362,520 ant=6,898 wr=12,900,645 wrf=77,570 dfn=225,618 val=12,119,158 feat=8,956,733 unit=328,544 pos=400,180
+[feat] reachable on word entries: vform=452,782 person=253,497 definiteness=160,524 aspect=18,157 clitic=25 gender(form)=3,165,742 gender(entry)=310,362
+[collapse] 10,253,936 MWE->word constituent edges
+[colloc] 4,717,087 collocation IRIs, member-count hist={1: 8875, 2: 4707758, 3: 406, 4: 44, 5: 4}, 4,707,758 binary -> 2,981,731 member sets -> 3,744,612 distinct pairings (key=phrase)
+[reify] syn=181,260 ant=3,449 pairings
+[nodes] 33,569,351 IRI-backed nodes, 42,201,151 IRI-backed edges
+[2026-08-21T23:10:00.622] error: *** JOB 129995 ON apl CANCELLED AT 2026-08-21T23:10:00 DUE to SIGNAL Terminated ***

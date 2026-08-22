@@ -1,0 +1,117 @@
+host: apl  cpus: 16  variant: gemma3  start: Fri Aug 21 23:11:32 UTC 2026
+store: /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3
+ref  : /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v6_gemma3
+env OK  /shared/workspace/povejmo/graph_model/.venv/bin/python 3.10.12 numpy 1.26.4 transformers 4.50.3
+KG dir: /shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB  (2594 .nt files)
+[parse] 2594 files x 16 workers
+[parse] 200/2594  8s
+[parse] 400/2594  14s
+[parse] 600/2594  20s
+[parse] 800/2594  26s
+[parse] 1000/2594  32s
+[parse] 1200/2594  40s
+[parse] 1400/2594  54s
+[parse] 1600/2594  68s
+[parse] 1800/2594  75s
+[parse] 2000/2594  81s
+[parse] 2200/2594  87s
+[parse] 2400/2594  100s
+[trans] dropped 155,140 translation-chain edges (collapsed onto translation-form)
+[parse] done 123s  canon=4,340,597 other=8,678,916 sense=8,468,227 usage=14,722,502 constit=10,265,230 corr=10,262,712 tsrc=77,570 member=9,645,845 syn=362,520 ant=6,898 wr=12,900,645 wrf=77,570 dfn=225,618 val=12,119,158 feat=8,956,733 unit=328,544 pos=400,180
+[feat] reachable on word entries: vform=452,782 person=253,497 definiteness=160,524 aspect=18,157 clitic=25 gender(form)=3,165,742 gender(entry)=310,362
+[collapse] 10,253,936 MWE->word constituent edges
+[colloc] 4,717,087 collocation IRIs, member-count hist={1: 8875, 2: 4707758, 3: 406, 4: 44, 5: 4}, 4,707,758 binary -> 2,981,731 member sets -> 3,744,066 distinct pairings (key=phrase)
+[reify] syn=181,260 ant=3,449 pairings
+[nodes] 33,569,351 IRI-backed nodes, 42,201,151 IRI-backed edges
+[sense] 3,688,823 senses have a usable first example, 8,088,702 are in a polysemous entry
+[sense] 8,088,702 numbered, 3,662,840 carry an example snippet
+[text] 33,569,072 with text, 279 textless (0.00%) by type: {'word-form': 278, 'example': 1}
+[mint] 181,260 sopomenka + 3,449 protipomenka + 3,744,066 kolokacija nodes (7,857,550 edges)
+[colloc] 3,744,066 of 3,744,066 collocation nodes verbalised (100.00%), 0 fell back to the lemma pair
+[nodes] final 37,498,126 nodes / 50,058,701 directed edges  (279 textless, 0.00%)
+[csr] 100,117,402 half-edges  441s
+[tok] cjvt/GaMS3-12B-Instruct loaded (vocab 262,145)
+[tok] 36,817,874 unique node texts
+[save] text 10,000,000/37,498,126
+[save] text 20,000,000/37,498,126
+[save] text 30,000,000/37,498,126
+[save] text_blob.bin 2.57 GB (279 textless)  26s
+[save] node_codes.npy 256 MB
+[save] ntype.npy 143 MB
+[save] kind.npy 36 MB
+[save] mwe_set.npy 36 MB
+[save] indptr.npy 286 MB
+[save] indices.npy 382 MB
+[save] token_len.npy 143 MB
+[save] 4.10 GB to /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3  28s
+[done] --no-analysis: stopping after the build
+--- verifying the store ---
+[load] 37,498,126 nodes / 50,058,701 edges from /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3  0.0s
+{
+  "nodes": 37498126,
+  "edges": 50058701,
+  "half_edges": 100117402,
+  "half_edges_checked": 6174,
+  "sampled_textless": 0,
+  "manifest_textless": 279,
+  "token_len_zero": 279,
+  "token_len_mean": 24.69207797210986,
+  "total_GB": 4.1,
+  "problems": []
+}
+--- store contents ---
+total 4297848
+drwxr-s--- 1 dario.vajda povejmo          0 Aug 21 23:59 .
+drwxr-s--- 1 dario.vajda povejmo          0 Aug 21 23:59 ..
+-rw-r----- 1 dario.vajda povejmo  400469736 Aug 21 23:59 indices.npy
+-rw-r----- 1 dario.vajda povejmo  299985144 Aug 21 23:59 indptr.npy
+-rw-r----- 1 dario.vajda povejmo   37498254 Aug 21 23:59 kind.npy
+-rw-r----- 1 dario.vajda povejmo       3484 Aug 21 23:59 manifest.json
+-rw-r----- 1 dario.vajda povejmo   37498254 Aug 21 23:59 mwe_set.npy
+-rw-r----- 1 dario.vajda povejmo  268554936 Aug 21 23:59 node_codes.npy
+-rw-r----- 1 dario.vajda povejmo  149992632 Aug 21 23:59 ntype.npy
+-rw-r----- 1 dario.vajda povejmo 2756997742 Aug 21 23:59 text_blob.bin
+-rw-r----- 1 dario.vajda povejmo  299985144 Aug 21 23:59 text_off.npy
+-rw-r----- 1 dario.vajda povejmo  149992632 Aug 21 23:59 token_len.npy
+4.1G	/shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3
+--- acceptance: v7 vs v6 (same tokenizer) ---
+new: /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v7_gemma3
+old: /shared/workspace/povejmo/gams_gtlm/data/stores/kg_graph_v6_gemma3
+
+manifest text_convention = 'v7'  tokenizer = 'cjvt/GaMS3-12B-Instruct'
+manifest dedup_key       = 'member_set+phrase'  member_sets=2981731  pairings=3744066
+--- 1. the real (IRI-backed) layer is untouched ---
+    n_real 33,569,351 -> 33,569,351  identical=True
+    node_codes.npy   identical=True  f50b62aec05ba849506161a7d283283e
+    ntype[:n_real]   identical=True
+    kind[:n_real]    identical=True
+    mwe_set[:n_real] identical=True
+
+--- 2. the synonym / antonym layers are untouched ---
+    sopomenka      181,260 -> 181,260 nodes  same ids=True  text differs on 0
+    protipomenka   3,449 -> 3,449 nodes  same ids=True  text differs on 0
+
+--- 3/4. the collocation layer only grew, and holds no duplicate ---
+    collocation nodes 2,981,731 -> 3,744,066 (+25.6%)
+    distinct member sets 2,981,731 -> 2,981,731
+    !! phrase lost for (360287970189639770, 360287970189696399): 'kolokacija: Fotografiranje otrok' (v7 has ['kolokacija: fotografiranje otrok'])
+    !! phrase lost for (360287970189639770, 360287970189732745): 'kolokacija: Tepež otrok' (v7 has ['kolokacija: tepež otrok'])
+    !! phrase lost for (360287970189640085, 360287970189689416): 'kolokacija: bati se Boga' (v7 has ['kolokacija: bati se boga', 'kolokacija: ne bati se boga'])
+    !! phrase lost for (360287970189640123, 360287970189691561): 'kolokacija: Človek ne biva' (v7 has ['kolokacija: človek ne biva', 'kolokacija: bivati kot človek'])
+    !! phrase lost for (360287970189640662, 360287970189706321): 'kolokacija: Lastnica ne dovoli' (v7 has ['kolokacija: lastnica ne dovoli'])
+    member sets present in v6 but not v7: 0 (required 0)
+    v6 phrases missing from v7:           136 (required 0)
+    member sets carrying a repeated phrase: 0 (required 0)
+    phrases per member set: mean 1.26  max 48  >1 on 467,294 sets (15.7%)
+
+--- 5. non-collocation adjacency is unchanged ---
+    real nodes sampled: 300,000  differing: 0 (required 0)
+
+--- 6. verbalisation rate did not regress ---
+    verbalised: v6 100.000% (2,981,731)  v7 100.000% (3,744,066)
+
+--- 7. reference-file reproduction ---
+    reference phrases: 1307   v6 1082 (82.8%)   v7 1196 (91.5%)
+    distinct phrases in store: 2,972,221 -> 3,731,907
+
+ACCEPTANCE: FAIL
