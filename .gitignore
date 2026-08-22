@@ -43,4 +43,13 @@ data/stores/kg_graph_*/
 # (see README "Data").  Committing them would publish them via GitHub.
 data/datasets/reference/Lexical-QA-SLO*
 
+# generated QA corpora and extracted balls: 167 MB today, and REBUILT whenever a
+# policy changes -- balls/v2 alone is 73 MB, so every rebuild would leave another
+# permanent blob in history.  Same reasoning as the stores above: they are a pure
+# function of (store, qa/, seed), reproducible in ~1 h by
+# qa/run_generate.sbatch -> analysis/run_extract_sharded.sbatch ->
+# qa/run_relabel.sbatch -> qa/run_build_balls.sbatch.
+data/datasets/generated/
+data/datasets/balls/
+
 CLAUDE.md
