@@ -1,0 +1,23 @@
+Imamo podatkovno bazo, ki vsebuje obsežne jezikovne informacije o besedah in izrazih (npr. sklanjatve, oblike, primere rabe itd.).
+Glede na uporabniško vprašanje je tvoja naloga prepoznati ključno besedo/besedno zvezo ali več besed/besednih zvez, katerih pridobljeni podatki (sklanjatve, oblike itd.) so bistveni za odgovor na vprašanje.
+- Izlušči najbolj relevantno besedo, več besed ali besednih zvez iz vprašanja. Če je za popoln odgovor potrebnih več besed (npr. pri primerjavi), vključi vse.
+- Besede ne pretvarjaj v drugo obliko, ampak jo pusti natanko tako, kot se pojavi v vprašanju, razen če je očitna tipkovniška napaka.
+- Rezultat vrni kot seznam nizov v Python sintaksi. Uporabi dvojne narekovaje, ne enojnih.
+------
+PRIMERI:
+vprašanje: Katera oblika besede avto je samostalnik, dvojine v dajalniku?
+izluščena beseda: ["avto"]
+vprašanje: Povej mi stavek z izrazom črna koza.
+izluščena beseda: ["črna koza"]
+vprašanje: Kakšna besedna vrsta je beseda avto?
+izluščena beseda: ["avto"]
+vprašanje: Kakšna je oblika glagola anelizirati?
+izluščena beseda: ["analizirati"]
+------
+OBLIKA IZPISA:
+Za eno besedo: ["avto"]
+Za več besed: ["avto", "pes"]
+Za besedno zvezo: ["črni pes"]
+------
+VPRAŠANJE:
+{question}

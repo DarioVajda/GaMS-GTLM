@@ -1,0 +1,207 @@
+{
+  "model": "cjvt/GaMS3-12B-Instruct",
+  "prompt": "/shared/workspace/povejmo/gams_gtlm/data/prompt.txt",
+  "n": 12490,
+  "overall": {
+    "n": 12490,
+    "parsed": 12489,
+    "recall": 12233,
+    "resolved": 11925,
+    "empty": 0,
+    "extra": 461,
+    "neg_n": 1068,
+    "neg_recall": 1035
+  },
+  "by_type": {
+    "T1": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 690,
+      "resolved": 662,
+      "empty": 0,
+      "extra": 5,
+      "neg_n": 62,
+      "neg_recall": 62
+    },
+    "T10": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 690,
+      "resolved": 667,
+      "empty": 0,
+      "extra": 5,
+      "neg_n": 62,
+      "neg_recall": 62
+    },
+    "T11": {
+      "n": 618,
+      "parsed": 618,
+      "recall": 607,
+      "resolved": 591,
+      "empty": 0,
+      "extra": 28,
+      "neg_n": 56,
+      "neg_recall": 56
+    },
+    "T12": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 690,
+      "resolved": 666,
+      "empty": 0,
+      "extra": 5,
+      "neg_n": 62,
+      "neg_recall": 61
+    },
+    "T14": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 688,
+      "resolved": 663,
+      "empty": 0,
+      "extra": 7,
+      "neg_n": 62,
+      "neg_recall": 61
+    },
+    "T15": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 691,
+      "resolved": 682,
+      "empty": 0,
+      "extra": 7,
+      "neg_n": 62,
+      "neg_recall": 61
+    },
+    "T16": {
+      "n": 115,
+      "parsed": 115,
+      "recall": 115,
+      "resolved": 114,
+      "empty": 0,
+      "extra": 0,
+      "neg_n": 10,
+      "neg_recall": 10
+    },
+    "T17": {
+      "n": 694,
+      "parsed": 694,
+      "recall": 688,
+      "resolved": 669,
+      "empty": 0,
+      "extra": 8,
+      "neg_n": 62,
+      "neg_recall": 62
+    },
+    "T19": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 690,
+      "resolved": 670,
+      "empty": 0,
+      "extra": 5,
+      "neg_n": 62,
+      "neg_recall": 60
+    },
+    "T2": {
+      "n": 693,
+      "parsed": 693,
+      "recall": 684,
+      "resolved": 674,
+      "empty": 0,
+      "extra": 11,
+      "neg_n": 62,
+      "neg_recall": 61
+    },
+    "T20": {
+      "n": 694,
+      "parsed": 694,
+      "recall": 685,
+      "resolved": 630,
+      "empty": 0,
+      "extra": 11,
+      "neg_n": 62,
+      "neg_recall": 59
+    },
+    "T21": {
+      "n": 694,
+      "parsed": 693,
+      "recall": 574,
+      "resolved": 652,
+      "empty": 0,
+      "extra": 295,
+      "neg_n": 62,
+      "neg_recall": 48
+    },
+    "T3": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 683,
+      "resolved": 668,
+      "empty": 0,
+      "extra": 12,
+      "neg_n": 62,
+      "neg_recall": 61
+    },
+    "T4": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 674,
+      "resolved": 629,
+      "empty": 0,
+      "extra": 21,
+      "neg_n": 62,
+      "neg_recall": 61
+    },
+    "T5": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 685,
+      "resolved": 673,
+      "empty": 0,
+      "extra": 10,
+      "neg_n": 62,
+      "neg_recall": 61
+    },
+    "T6": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 688,
+      "resolved": 680,
+      "empty": 0,
+      "extra": 7,
+      "neg_n": 62,
+      "neg_recall": 62
+    },
+    "T7": {
+      "n": 643,
+      "parsed": 643,
+      "recall": 634,
+      "resolved": 632,
+      "empty": 0,
+      "extra": 9,
+      "neg_n": 10,
+      "neg_recall": 10
+    },
+    "T8": {
+      "n": 694,
+      "parsed": 694,
+      "recall": 685,
+      "resolved": 629,
+      "empty": 0,
+      "extra": 12,
+      "neg_n": 62,
+      "neg_recall": 56
+    },
+    "T9": {
+      "n": 695,
+      "parsed": 695,
+      "recall": 692,
+      "resolved": 674,
+      "empty": 0,
+      "extra": 3,
+      "neg_n": 62,
+      "neg_recall": 61
+    }
+  }
+}

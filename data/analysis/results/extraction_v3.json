@@ -1,0 +1,225 @@
+{
+  "model": "cjvt/GaMS3-12B-Instruct",
+  "prompt": "/shared/workspace/povejmo/gams_gtlm/data/prompt_v3.txt",
+  "n": 1520,
+  "overall": {
+    "n": 1520,
+    "parsed": 1520,
+    "recall": 1489,
+    "resolved": 1458,
+    "empty": 0,
+    "extra": 46,
+    "has_extra": 45,
+    "neg_n": 120,
+    "neg_recall": 112
+  },
+  "by_type": {
+    "T1": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 80,
+      "resolved": 77,
+      "empty": 0,
+      "extra": 0,
+      "has_extra": 0,
+      "neg_n": 6,
+      "neg_recall": 6
+    },
+    "T10": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 79,
+      "resolved": 79,
+      "empty": 0,
+      "extra": 1,
+      "has_extra": 1,
+      "neg_n": 5,
+      "neg_recall": 5
+    },
+    "T11": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 79,
+      "resolved": 78,
+      "empty": 0,
+      "extra": 1,
+      "has_extra": 1,
+      "neg_n": 10,
+      "neg_recall": 9
+    },
+    "T12": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 79,
+      "resolved": 76,
+      "empty": 0,
+      "extra": 1,
+      "has_extra": 1,
+      "neg_n": 6,
+      "neg_recall": 6
+    },
+    "T14": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 78,
+      "resolved": 77,
+      "empty": 0,
+      "extra": 2,
+      "has_extra": 2,
+      "neg_n": 6,
+      "neg_recall": 6
+    },
+    "T15": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 80,
+      "resolved": 78,
+      "empty": 0,
+      "extra": 0,
+      "has_extra": 0,
+      "neg_n": 8,
+      "neg_recall": 8
+    },
+    "T16": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 78,
+      "resolved": 79,
+      "empty": 0,
+      "extra": 2,
+      "has_extra": 2,
+      "neg_n": 6,
+      "neg_recall": 6
+    },
+    "T17": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 79,
+      "resolved": 78,
+      "empty": 0,
+      "extra": 1,
+      "has_extra": 1,
+      "neg_n": 3,
+      "neg_recall": 3
+    },
+    "T19": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 79,
+      "resolved": 77,
+      "empty": 0,
+      "extra": 1,
+      "has_extra": 1,
+      "neg_n": 9,
+      "neg_recall": 9
+    },
+    "T2": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 79,
+      "resolved": 77,
+      "empty": 0,
+      "extra": 1,
+      "has_extra": 1,
+      "neg_n": 7,
+      "neg_recall": 7
+    },
+    "T20": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 80,
+      "resolved": 72,
+      "empty": 0,
+      "extra": 0,
+      "has_extra": 0,
+      "neg_n": 8,
+      "neg_recall": 8
+    },
+    "T21": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 69,
+      "resolved": 72,
+      "empty": 0,
+      "extra": 26,
+      "has_extra": 25,
+      "neg_n": 10,
+      "neg_recall": 5
+    },
+    "T3": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 76,
+      "resolved": 79,
+      "empty": 0,
+      "extra": 4,
+      "has_extra": 4,
+      "neg_n": 6,
+      "neg_recall": 5
+    },
+    "T4": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 80,
+      "resolved": 71,
+      "empty": 0,
+      "extra": 0,
+      "has_extra": 0,
+      "neg_n": 9,
+      "neg_recall": 9
+    },
+    "T5": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 79,
+      "resolved": 78,
+      "empty": 0,
+      "extra": 1,
+      "has_extra": 1,
+      "neg_n": 4,
+      "neg_recall": 4
+    },
+    "T6": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 80,
+      "resolved": 79,
+      "empty": 0,
+      "extra": 0,
+      "has_extra": 0,
+      "neg_n": 6,
+      "neg_recall": 6
+    },
+    "T7": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 80,
+      "resolved": 80,
+      "empty": 0,
+      "extra": 0,
+      "has_extra": 0
+    },
+    "T8": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 77,
+      "resolved": 73,
+      "empty": 0,
+      "extra": 3,
+      "has_extra": 3,
+      "neg_n": 5,
+      "neg_recall": 4
+    },
+    "T9": {
+      "n": 80,
+      "parsed": 80,
+      "recall": 78,
+      "resolved": 78,
+      "empty": 0,
+      "extra": 2,
+      "has_extra": 2,
+      "neg_n": 6,
+      "neg_recall": 6
+    }
+  }
+}
