@@ -45,6 +45,8 @@ import glob
 import argparse
 import collections
 
+from qa import grade, sl, spec
+
 # The 16 `biti` forms M2 composes with -- present and future, all persons and
 # numbers.  Listed rather than read from the store because this script must run
 # without opening 37 M nodes.
@@ -94,12 +96,25 @@ def membership_need(r):
 
         none / vague_small   2      vague_large   5      exact   n_asked (2..10)
     """
-    g = r["grading"]
+    g = grade.contract(r)
     n_all = int(g["n_all"])
     band = g["quantity_band"]
     if band == "exact":
         return min(int(g["n_asked"]), n_all)
     return min(5 if band == "vague_large" else 2, n_all)
+
+
+def member_nodes(r, b):
+    """Normalised member-set candidates the ball holds, for r's type.
+
+    The prefix comes from `spec.MEMBER_KIND` rather than a literal, so adding a
+    membership type does not silently skip this check.
+    """
+    kind = spec.MEMBER_KIND.get(r["type"])
+    if not kind:
+        return set()
+    pre = kind + ": "
+    return {sl.norm(t[len(pre):]) for t in b["nodes"] if t.startswith(pre)}
 
 
 def membership_have(r, b):
@@ -109,15 +124,23 @@ def membership_have(r, b):
     and deduplicated -- an anchor can carry one phrase on two sense pairs
     (`Gadova Peč` / `Gadova peč`), which is two nodes and one gradeable answer.
     """
-    from qa import sl
-    allow = set(r["grading"]["all_items"])
-    have = set()
-    for text in b["nodes"]:
-        if text.startswith("kolokacija: "):
-            p = sl.norm(text[len("kolokacija: "):])
-            if p in allow:
-                have.add(p)
-    return len(have)
+    return len(member_nodes(r, b) & set(grade.contract(r)["all_items"]))
+
+
+def contract_gap(r, b):
+    """Member candidates the ball SHOWS but the contract does not ALLOW.
+
+    Must be empty.  If it is not, the model is being shown evidence it will be
+    marked wrong for using -- the T17 defect of 2026-08-23, where `all_items`
+    came from one anchor and D3 had unioned several into the ball.  Stage 4's
+    `build_balls.member_contract` derives the allow-list FROM the ball, so this
+    should now be empty by construction; it stays as a guard against a dataset
+    built by an older pipeline.  See the set rule in `qa/spec.py`.
+    """
+    g = grade.contract(r)
+    if r.get("negative") or g["mode"] != "membership":
+        return set()
+    return member_nodes(r, b) - set(g.get("all_items") or [])
 
 
 def load(d):
@@ -147,16 +170,24 @@ def main():
     items_n = collections.Counter()
     empty = collections.Counter()
     misses = []
+    gaps = []
+
+    # Cheap, and it fails the whole check rather than one type: a set-valued
+    # type graded `sequence` makes every number below meaningless.
+    spec.check_set_rule()
 
     for iid, b in balls.items():
         r = gen.get(iid)
         if r is None or r["negative"]:
             continue
+        gap = contract_gap(r, b)
+        if gap:
+            gaps.append((iid, r["type"], sorted(gap)[:3], len(gap)))
         gold = [g for g in (r.get("gold_items") or []) if isinstance(g, str) and g]
         if not gold:
             continue
         t = r["type"]
-        if (r.get("grading") or {}).get("mode") == "membership":
+        if grade.contract(r)["mode"] == "membership":
             need, have = membership_need(r), membership_have(r, b)
             tot[t] += 1
             items_n[t] += 1
@@ -202,6 +233,18 @@ def main():
             print(f"  {iid} ({t}, {ng} gold)  missing {m}")
     else:
         print("\nevery gold item of every positive is in its own ball")
+
+    if gaps:
+        n_g = sum(x[3] for x in gaps)
+        print(f"\n*** CONTRACT GAP: {len(gaps):,} membership items show "
+              f"{n_g:,} member node(s) their `all_items` does not allow.")
+        print("    The model would be marked wrong for using evidence it was "
+              "shown. Run stage 4 so `finalise_contract` widens the allow-list "
+              "to the ball (qa/build_balls.py); see the set rule in qa/spec.py.")
+        for iid, t, ex, k in gaps[:args.show]:
+            print(f"  {iid} ({t}) {k} not allowed, e.g. {ex}")
+        sys.exit(1)
+    print("every membership item's contract covers every member node in its ball")
 
 
 if __name__ == "__main__":

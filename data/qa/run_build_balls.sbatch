@@ -2,9 +2,15 @@
 #
 # Extract one text graph per QA item -- the input a GTLM reads.
 #
-#     sbatch run_build_balls.sbatch [TYPES] [DATASET] [OUT]
+#     sbatch run_build_balls.sbatch [TYPES] [DATASET] [OUT] [DATASET_OUT]
 #     sbatch run_build_balls.sbatch "" datasets/generated/v2_relabelled \
-#                                      datasets/balls/v2
+#                                      datasets/balls/v2 \
+#                                      datasets/generated/v2_final
+#
+# TWO outputs.  OUT is the ball per item; DATASET_OUT is the same dataset with
+# the membership (T17) target re-verbalised from the ball -- see build_balls.py's
+# `reverbalise`.  The two must be built in one pass or they disagree about what
+# is being supervised.
 #
 # The DATASET must be relabelled (qa/relabel.py): the builder reads each item's
 # `targets` -- the anchors a real extractor run resolved to -- and refuses an
@@ -32,9 +38,11 @@ PY=$("$ROOT/data/lib/pick_python.sh")
 TYPES="${1:-}"
 DATASET="${2:-$ROOT/data/datasets/generated/v2_relabelled}"
 OUT="${3:-$ROOT/data/datasets/balls/v2}"
+DATASET_OUT="${4:-$ROOT/data/datasets/generated/v2_final}"
 
 echo "host: $(hostname)  start: $(date)"
 echo "types: ${TYPES:-<all>}"
 cd "$ROOT/data"
-"$PY" -m qa.build_balls "$DATASET" "$OUT" --types "$TYPES"
+"$PY" -m qa.build_balls "$DATASET" "$OUT" --types "$TYPES" \
+      --dataset-out "$DATASET_OUT"
 echo "end: $(date)"

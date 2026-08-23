@@ -668,11 +668,17 @@ def count_slots(n):
 
 
 def all_phrases(ctx, e):
-    """ALL(anchor): every collocation phrase the store holds, normalized.
+    """Every collocation phrase the store holds for ONE anchor, normalized.
 
-    Shipped inside the item so the grader never opens the store (0.8.3).
+    Used for `n_all` at sampling time -- how many the store has, which is what
+    the quantity band is drawn against.  It is NOT the grader's allow-list and
+    must not be used as one: D3 unions several anchors into a ball, so this is
+    neither a superset nor a subset of what the model is shown.  The allow-list
+    is `build_balls.member_pool`, derived from the ball itself.
     """
     return sorted({sl.norm(p) for _v, p in ctx.store.collocations(e.a)})
+
+
 
 
 # --------------------------------------------------------------------------

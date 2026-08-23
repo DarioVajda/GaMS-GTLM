@@ -241,13 +241,18 @@ def make_item(ctx, type_key, e, slots, items, *, split, rng, negative=False,
         else:
             answer = spec.PREFIX + sep.join(items)
         gold = items
-    grading = {"mode": sp["mode"], "sep": sp["sep"], "arity": sp["arity"],
-               "regex": sp["regex"]}
-    if type_key == "T17":
+    # ITEM-level facts only.  `mode`, `sep`, `arity` and `regex` are per-TYPE
+    # constants and are read from `qa/spec.py` at grading time (`grade.contract`)
+    # -- writing them here would put 12,490 stale copies on disk, which is how
+    # T19 kept being graded `sequence` after the spec said `membership`.
+    grading = {}
+    # `all_items` is deliberately NOT set here.  It is the set of members the
+    # model will be SHOWN, and no ball exists yet at generation time; deriving it
+    # from one anchor is what made D3's union balls ungradeable.  Stage 4 owns
+    # it (`build_balls.member_contract`).
+    if sp["mode"] == "membership":
         grading.update(quantity_band=slots.get("band"),
-                       n_asked=slots.get("N"),
-                       n_all=int(slots.get("n_all") or 0),
-                       all_items=gen.all_phrases(ctx, e) if not negative else [])
+                       n_asked=slots.get("N"))
     return {
         "id": f"{type_key}-{idx:06d}",
         "type": type_key,

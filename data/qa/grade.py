@@ -25,9 +25,45 @@ import json
 import argparse
 import collections
 
+from . import spec
 from .sl import norm
 
 PREFIX = "ODGOVOR:"
+
+# The contract has two layers, and confusing them is what produced the T19 and
+# T17 defects of 2026-08-23.
+#
+#   TYPE level   `mode`, `sep`, `arity`, `regex` -- one constant per type, the
+#                same for all 12,490 items.  These live in `qa/spec.py` and are
+#                read from there, NEVER from the row.  Copying them into every
+#                row is how T19 went on being graded `sequence` for a whole run
+#                after the spec said otherwise: a dataset on disk is a snapshot
+#                of what the spec said the day it was written, and there is no
+#                mechanism by which it learns otherwise.
+#
+#   ITEM level   `all_items`, `n_all`, `quantity_band`, `n_asked` -- facts about
+#                THIS item that the type cannot know.  These live in the row,
+#                because that is the only place they can live.
+#
+# `spec` may supply a DEFAULT for an item-level field when the type fixes it for
+# every item (T19 asks for exactly one example), and the row always wins.
+TYPE_LEVEL = ("mode", "sep", "arity", "regex")
+ITEM_DEFAULTS = {"quantity_band": "band", "n_asked": "n_asked"}
+
+
+def contract(item):
+    """The grading contract for `item`: type constants + this item's facts.
+
+    The single accessor.  Nothing should read `item["grading"]` directly -- that
+    is what lets a stale row override the spec.
+    """
+    sp = spec.SPEC[item["type"]]
+    g = dict(item.get("grading") or {})
+    g.update({k: sp[k] for k in TYPE_LEVEL})
+    for field, key in ITEM_DEFAULTS.items():
+        if g.get(field) is None and sp.get(key) is not None:
+            g[field] = sp[key]
+    return g
 
 
 def parse(answer, sep=" | ", arity=None):
@@ -89,7 +125,7 @@ def grade(item, prediction):
     `reason` is a short machine-readable tag for the failure, so a failure
     breakdown is a Counter and not a regex over prose.
     """
-    g = item["grading"]
+    g = contract(item)
     sep, mode, arity = g.get("sep"), g["mode"], g.get("arity")
     pred = parse(prediction, sep=sep, arity=arity)
     gold = parse(item["answer"], sep=sep, arity=arity)
@@ -107,15 +143,25 @@ def grade(item, prediction):
                 "reason": "ok" if ok else "mismatch"}
 
     if mode == "membership":
-        allow = set(g["all_items"])
         f1 = _f1(pred, gold)
         deduped = list(dict.fromkeys(pred))
         if len(deduped) != len(pred):
             return {"success": False, "f1": f1, "reason": "repeated_item"}
+        # A negative is graded on the sentinel alone and never touches the
+        # allow-list, so it is settled BEFORE the allow-list is required -- a
+        # negative legitimately has no member set to draw from.
         if item.get("negative"):
             ok = pred == gold                    # the sentinel, exactly
             return {"success": ok, "f1": f1,
                     "reason": "ok" if ok else "mismatch"}
+        if g.get("all_items") is None:
+            raise ValueError(
+                f"{item.get('id', '?')} ({item['type']}) is graded "
+                f"`membership` but its row carries no `all_items`. The "
+                f"allow-list is per-ITEM data derived from the ball, so it "
+                f"cannot come from `qa/spec.py` -- rebuild the dataset with "
+                f"`qa/build_balls.py` (stage 4), which writes it.")
+        allow = set(g["all_items"])
         outside = [p for p in pred if p not in allow]
         if outside:
             return {"success": False, "f1": f1, "reason": "not_in_all"}

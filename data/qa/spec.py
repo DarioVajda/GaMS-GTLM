@@ -69,9 +69,14 @@ SPEC = {
                 sep=", ", mode="multiset",
                 regex=r"^ODGOVOR: [^,]+(?:, [^,]+){0,9}$"),
     "T17": dict(name="kolokacije/navedi_kolokacije", arity=None,
-                sep=" | ", mode="membership", regex=r"^ODGOVOR: .+(?: \| .+)*$"),
+                sep=" | ", mode="membership", regex=r"^ODGOVOR: .+(?: \| .+)*$",
+                member_kind="kolokacija"),
+    # `membership`, NOT `sequence` -- see MEMBER_KIND below.  The question asks
+    # "in what sentence does L appear?" and a lemma commonly has several recorded
+    # examples, every one of which answers it; the band pins the count at one.
     "T19": dict(name="primeri_uporabe/povedi_z_besedo", arity=1,
-                sep=None, mode="sequence", regex=r"^ODGOVOR: \S.*$"),
+                sep=None, mode="membership", regex=r"^ODGOVOR: \S.*$",
+                member_kind="zgled", band="exact", n_asked=1),
     "T20": dict(name="primeri_uporabe/analiza_oblike_v_povedi", arity=None,
                 sep=" ali ", mode="multiset",
                 regex=(r"^ODGOVOR: \w+ (ednine|dvojine|množine)"
@@ -81,6 +86,43 @@ SPEC = {
                 regex=(r"^ODGOVOR: \w+ (ednine|dvojine|množine)"
                        r"(?: ali \w+ (?:ednine|dvojine|množine))*$")),
 }
+
+# ── The set rule ───────────────────────────────────────────────────────────
+# ORDER IS NOT A PROPERTY OF THIS DATA.  The KG stores the examples of a sense,
+# the collocations of a lemma and the synonyms of a word as SETS; the order they
+# come out in is an artefact of serialisation (node id, then insertion).
+#
+# So a type whose answer is DRAWN FROM a set must be graded `membership` (pick
+# some of them) or `multiset` (name all of them, order-blind) -- never
+# `sequence`.  Grading such a type on order rewards an architecture for
+# preserving an accident of file layout and penalises one for discarding it, and
+# discarding it is *permutation equivariance*, which a graph model is supposed to
+# have.  `sequence` is correct only where position carries meaning the data
+# itself defines: a paradigm cell, a tense, a dictionary sense ordinal.
+#
+# T19 violated this until 2026-08-23 -- it was `sequence`/arity-1 against
+# whichever example had the lowest node id, which cost the GTLM arm 2.44 points
+# of a 4-arm comparison before anyone noticed (see train/README.md).
+#
+# `member_kind` names the ball node prefix holding the candidate set, so stage 4
+# can finalise `all_items` from the ball the model is ACTUALLY shown.  That
+# matters because D3 unions several anchors into one ball: an allow-list built
+# from a single anchor omits phrases the model can see, which is the same defect
+# wearing different clothes.  `qa/check_balls.py` asserts the invariant.
+MEMBER_KIND = {k: v["member_kind"] for k, v in SPEC.items() if v.get("member_kind")}
+SET_VALUED = frozenset(MEMBER_KIND)
+
+
+def check_set_rule():
+    """Raise if a set-valued type is graded on order.  Called by the checkers."""
+    bad = [k for k in SET_VALUED if SPEC[k]["mode"] == "sequence"]
+    if bad:
+        raise AssertionError(
+            f"types {sorted(bad)} draw their answer from a SET but are graded "
+            f"`sequence`, i.e. on an arbitrary tie-break. Use `membership` or "
+            f"`multiset` -- see the set rule in qa/spec.py.")
+    return True
+
 
 # Tier C: held out of training entirely (D12).  Every item of these types is a
 # test item, and no training item anywhere may contain their tag words (C6).

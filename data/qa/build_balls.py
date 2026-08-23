@@ -2,6 +2,14 @@
 """Turn relabelled QA items into the small text graphs a GTLM actually reads.
 
     sbatch qa/run_build_balls.sbatch                 # -> datasets/balls/v2
+                                                     #  + datasets/generated/v2_final
+
+**Two outputs, one target.**  `reverbalise()` re-draws a membership item's answer
+from the ball it will actually see, so the answer the ball ships and the answer
+the dataset ships must be the same string.  `--dataset-out` writes the second
+one.  `datasets/generated/v2_final` is then the authority for `answer` and
+`gold_items`; `v2_relabelled` (stage 3) stays immutable, and the rewrite is
+auditable as a diff between the two directories.
 
 **This builder consumes `targets`, never `node_code`.**  D3 fixes the production
 pipeline as extractor -> verbatim surface lookup -> union of every match, and
@@ -68,13 +76,14 @@ import os
 import sys
 import json
 import argparse
+import contextlib
 import collections
 
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qa.store import open_store, K_ANCHOR, K_SENSE, K_COLLOC       # noqa: E402
-from qa import d5b, gen, sl, spec                                  # noqa: E402
+from qa import d5b, gen, grade, sl, spec                           # noqa: E402
 
 K_MWE = 10          # D5, upward `sestavina`
 K_COLLOC_CAP = 10   # D5b, `sense -> kolokacija`
@@ -168,36 +177,106 @@ def induced_edges(store, order):
     return edges
 
 
-def reverbalise(r, texts):
+#: membership type -> the store accessor for everything it may legitimately name.
+MEMBER_SOURCE = {"T17": "collocations", "T19": "examples"}
+
+
+def member_pool(r, texts):
+    """The member nodes of `r`'s BALL -- what the target is drawn from.
+
+    Distinct from the allow-list: this is what the model can *see*, so it is what
+    we supervise on (`reverbalise`), and it is a subset of what we *accept*.
+    """
+    kind = spec.MEMBER_KIND.get(r["type"])
+    if not kind:
+        return []
+    pre = kind + ": "
+    return gen.dedup_by_norm(t[len(pre):] for t in texts if t.startswith(pre))
+
+
+def member_allow(store, r, targets):
+    """Everything `r` may legitimately name: the store's set over ALL its anchors.
+
+    Deliberately WIDER than the ball.  An answer is correct when it is true, and
+    a phrase the store records for this lemma is true whether the model read it
+    off the graph or already knew it -- rewarding recall of real Slovene is not a
+    failure mode we want to grade against.  The ball's members are a subset of
+    this (they are drawn from the same store, under the K cap), so a model that
+    only ever reads its input is fully covered.
+
+    Over ALL anchors, which is the bug this replaces: `gen.all_phrases` used one
+    anchor while D3 unions several into a ball, so the model was shown members
+    the allow-list had never heard of and was scored `not_in_all` for naming them
+    -- 14 of the 16 union balls in v2's test split, 0 of the 88 single-anchor
+    ones, i.e. invisible unless the lemma is a homograph.
+    """
+    attr = MEMBER_SOURCE.get(r["type"])
+    if not attr:
+        return []
+    get = getattr(store, attr)
+    return sorted({sl.norm(p) for a in targets for _v, p in get(a) if p})
+
+
+def member_contract(store, r, texts, targets, stats):
+    """Set a membership item's `all_items`/`n_all`, and return its target pool.
+
+    Two different sets, and conflating them is what produced the T17 defect:
+
+        ALLOW (`all_items`)   everything true of this item's anchors -- what the
+                              grader accepts.  Wider than the ball on purpose.
+        POOL  (return value)  the members of the ball -- what the model can see,
+                              so what we supervise on.
+
+    Stage 4 is the first stage holding both the item and its resolved anchors,
+    so it is the only place either can be computed correctly.
+    """
+    # Drop the per-TYPE constants an older pipeline copied into the row.  They
+    # are read from `qa/spec.py` now (`grade.contract`), and leaving stale
+    # copies on disk is the thing that made T19 gradeable as `sequence` long
+    # after the spec said otherwise.
+    row = r.setdefault("grading", {})
+    for key in grade.TYPE_LEVEL:
+        if row.pop(key, None) is not None:
+            stats["stale_type_fields_dropped"] += 1
+
+    g = grade.contract(r)
+    if g["mode"] != "membership" or r["negative"]:
+        return None
+    pool = member_pool(r, texts)
+    # The ball is drawn from the store under a K cap, so it is a subset -- but
+    # union rather than assume, so a policy change upstream can never make a
+    # visible member unnameable.
+    allow = sorted({*member_allow(store, r, targets),
+                    *(sl.norm(p) for p in pool)})
+    if set(row.get("all_items") or []) != set(allow):
+        stats["contract_rebuilt"] += 1
+        stats["contract_items_delta"] += len(allow) - len(row.get("all_items") or [])
+    # Written even when empty: an empty allow-list is a real, gradeable state
+    # (nothing this item may name), and leaving the key absent would instead
+    # make the item silently ungradeable.
+    row["all_items"], row["n_all"] = allow, len(allow)
+    return pool or None
+
+
+def reverbalise(r, pool):
     """Re-draw a membership item's TARGET from the ball it will actually see.
 
-    Only T17 is membership mode today.  Its answer string was verbalised at
-    generation time from `d5b.sample(K=15)` -- before any ball existed -- while
-    the ball holds K=10, so 26.5 % of its target phrases named collocations the
-    model cannot see, across 62.6 % of its positives.  Training on that teaches
-    exactly the failure the graph exists to prevent: emit a plausible-sounding
-    collocation whether or not the evidence is in front of you.
-
-    Grading is untouched and needs no change -- `membership` accepts any subset
-    of `all_items` of the right size (`qa/grade.py` count_ok), and the ball was
-    verified to hold enough of them for every item (`qa/check_balls.py`).  What
-    moves is only which of the acceptable answers we supervise on: the ones that
-    are visible.
+    T17's answer was verbalised at generation time from `d5b.sample(K=15)` --
+    before any ball existed -- while the ball holds K=10, so 26.5 % of its target
+    phrases named collocations the model cannot see, across 62.6 % of its
+    positives.  Training on that teaches exactly the failure the graph exists to
+    prevent: emit a plausible-sounding collocation whether or not the evidence is
+    in front of you.  T19 is the same story with one example instead of many.
 
     The band's count logic is the generator's, unchanged, applied to the ball's
     pool instead of the sampler's -- so an `exact` item still answers with
     exactly `n_asked` phrases and a `vague_large` item still answers long.
     """
-    g = r.get("grading") or {}
-    if g.get("mode") != "membership" or r["negative"]:
-        return None
-    allow = set(g["all_items"])
-    pool = gen.dedup_by_norm(
-        t[len("kolokacija: "):] for t in texts
-        if t.startswith("kolokacija: ") and sl.norm(t[len("kolokacija: "):]) in allow)
     if not pool:
         return None
-    band, n_all = g["quantity_band"], int(g["n_all"])
+    g = grade.contract(r)
+    n_all = int(g["n_all"])
+    band = g["quantity_band"]
     if band == "exact":
         want = min(int(g["n_asked"]), n_all)
     else:
@@ -206,6 +285,8 @@ def reverbalise(r, texts):
     if want < 1:
         return None
     items = pool[:want]
+    if g.get("arity") == 1 or not g.get("sep"):
+        return spec.PREFIX + items[0], items
     return spec.PREFIX + g["sep"].join(items), items
 
 
@@ -233,6 +314,14 @@ def main():
     ap.add_argument("--k-mwe", type=int, default=K_MWE)
     ap.add_argument("--k-colloc", type=int, default=K_COLLOC_CAP)
     ap.add_argument("--types", default="", help="comma-separated subset")
+    ap.add_argument("--dataset-out", default=None,
+                    help="also rewrite the DATASET rows here, carrying the "
+                         "re-verbalised membership target (see `reverbalise`). "
+                         "Without it the corrected answer would live only in the "
+                         "ball and every consumer reading the dataset's `answer` "
+                         "for T17 would get a target naming phrases the model "
+                         "cannot see.  Pass a NEW directory: the stage-3 artefact "
+                         "stays immutable and the rewrite is auditable as a diff.")
     args = ap.parse_args()
 
     store = open_store(args.store)
@@ -240,6 +329,8 @@ def main():
     tok_len = np.asarray(store.G["token_len"])
     want = {t.strip() for t in args.types.split(",") if t.strip()}
     os.makedirs(args.out, exist_ok=True)
+    if args.dataset_out:
+        os.makedirs(args.dataset_out, exist_ok=True)
 
     cache, stats = {}, collections.Counter()
     print(f"policy: hop 2, K_mwe={args.k_mwe}, K_colloc={args.k_colloc}\n",
@@ -250,9 +341,12 @@ def main():
         if not os.path.exists(src):
             continue
         n, sizes, toks, nanch = 0, [], [], []
+        ds_sink = (open(os.path.join(args.dataset_out, f"{split}.jsonl"), "w",
+                        encoding="utf-8")
+                   if args.dataset_out else contextlib.nullcontext())
         with open(src, encoding="utf-8") as f, \
                 open(os.path.join(args.out, f"{split}.jsonl"), "w",
-                     encoding="utf-8") as g:
+                     encoding="utf-8") as g, ds_sink as d:
             for line in f:
                 r = json.loads(line)
                 if want and r["type"] not in want:
@@ -282,11 +376,20 @@ def main():
                     stats["empty_ball"] += 1
 
                 answer, gold = r["answer"], r.get("gold_items")
-                rv = reverbalise(r, texts)
+                # The allow-list comes from the ball, and the target is drawn
+                # from that same pool -- so the contract, the input and the
+                # supervision cannot disagree about what this item is.
+                rv = reverbalise(
+                    r, member_contract(store, r, texts, targets, stats))
                 if rv is not None:
                     if rv[0] != answer:
                         stats["reverbalised"] += 1
                     answer, gold = rv
+                    # The dataset row carries the SAME target, so the ball and
+                    # the dataset cannot disagree about what is being supervised.
+                    r["answer"], r["gold_items"] = answer, gold
+                if d is not None:
+                    d.write(json.dumps(r, ensure_ascii=False) + "\n")
 
                 sizes.append(len(texts))
                 toks.append(t)
@@ -320,10 +423,18 @@ def main():
     print(f"single-node `ni v bazi`:    {stats['empty_ball']:,}")
     print(f"targets re-verbalised:      {stats['reverbalised']:,} "
           f"(membership items whose answer named a phrase outside their ball)")
+    print(f"allow-lists rebuilt:        {stats['contract_rebuilt']:,} changed "
+          f"({stats['contract_items_delta']:+,} member items vs what the row "
+          f"carried -- the store over ALL anchors, not just the first)")
+    print(f"stale type fields dropped:  {stats['stale_type_fields_dropped']:,} "
+          f"(mode/sep/arity/regex copies; qa/spec.py owns these)")
     if stats["mwe_scan_capped"]:
         print(f"MWE scan cap hit on {stats['mwe_scan_capped']} anchors "
               f"(ranked a {MWE_SCAN_CAP:,}-candidate prefix by node id)")
     print(f"\n[wrote] {args.out}")
+    if args.dataset_out:
+        print(f"[wrote] {args.dataset_out}  (dataset rows, membership targets "
+              f"re-verbalised -- THIS is the authority for `answer`)")
 
 
 if __name__ == "__main__":
