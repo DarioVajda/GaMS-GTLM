@@ -52,4 +52,19 @@ data/datasets/reference/Lexical-QA-SLO*
 data/datasets/generated/
 data/datasets/balls/
 
+# sweep output: generated per-config job scripts, slurm logs, the runs record and
+# the per-item prediction dumps.  One 12-run sweep is 16 MB and ~49,500 lines,
+# and every sweep writes another.  The FINDINGS belong in train/README.md, which
+# is the thing worth reading and reviewing; this tree is the scratch it came from.
+# (train/results/train_runs.jsonl predates this rule and stays tracked.)
+train/results/
+
+# slurm logs from GPU training jobs.  tqdm writes a progress bar per step, so
+# these run 80 KB - 700 KB each while the informative part is a few dozen lines.
+# The CPU pipeline logs -- qa_balls_*, qa_variants_* -- stay tracked: they are
+# ~20 lines apiece and are the record of how a dataset was actually built.
+data/logs/sl_qa_smoke_*.out
+data/logs/sl_qa_timing_*.out
+data/logs/len_stats_*.out
+
 CLAUDE.md
