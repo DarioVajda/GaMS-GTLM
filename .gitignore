@@ -59,6 +59,11 @@ data/datasets/balls/
 # (train/results/train_runs.jsonl predates this rule and stays tracked.)
 train/results/
 
+# intermediate shards from analysis/run_extract_sharded.sbatch.  The scorer
+# merges `PREFIX_items.part*.jsonl` into `PREFIX_items.jsonl`, which IS tracked,
+# so keeping the parts would commit the same 12,490 rows twice.
+data/analysis/results/*_items.part*.jsonl
+
 # slurm logs from GPU training jobs.  tqdm writes a progress bar per step, so
 # these run 80 KB - 700 KB each while the informative part is a few dozen lines.
 # The CPU pipeline logs -- qa_balls_*, qa_variants_* -- stay tracked: they are
