@@ -4,13 +4,14 @@
 # generated QA types.
 #
 #     sbatch train/run_train.sbatch [EXTRA ARGS ...]
-#     sbatch train/run_train.sbatch --max-items 24 --max-steps 3   # smoke test
 #     sbatch train/run_train.sbatch --no-spd --no-magnetic         # control arm
 #
-# For a grid rather than one run, use the sweep runner instead -- it takes the
-# same flags from a JSONC file and submits one job per configuration:
+# For the plumbing checks and the evaluator's acceptance test, use
+# train/run_smoke.sbatch instead.  For a grid rather than one run, use the sweep
+# runner -- it takes the same flags from a JSONC file and submits one job per
+# configuration:
 #
-#     .venv/bin/python -m sweep train train/configs/spd_magnetic.jsonc
+#     .venv/bin/python -m sweep train train/configs/arms_v2.jsonc
 #
 # ana/aga are the A100 nodes running Ubuntu 22.04 / python3.10, which is what the
 # venv is built against -- so this needs no container, unlike the B200/B300 hosts.
@@ -36,8 +37,9 @@ echo "host: $(hostname)  start: $(date)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
 cd "$ROOT"
 
+# No --types: the run is over all 19 of them.  The four-type subset this job used
+# to pin was a v1 convenience, and a score over four types is not the corpus's.
 python -m train \
-    --types T3,T4,T9,T10 \
     --model-name google/gemma-3-1b-it \
     "$@"
 

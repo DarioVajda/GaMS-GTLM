@@ -13,16 +13,23 @@ a real backbone.  Two things differ, both deliberate:
   * **the backbone is chosen by name** (`BACKBONES` below, the same dispatch
     `graphqa` uses), because the point of the run is a *gemma-3-1b-it* baseline
     and `our_tests` imports the Llama classes at module scope;
-  * **no data_prep mode.**  These graphs are ~32 nodes, so SPD is a BFS over 32
-    nodes and the magnetic Laplacian a 32x32 eigendecomposition -- both faster to
-    recompute than to cache, and a cache key is one more thing that can silently
-    go stale against a rebuilt store.
+  * **no data_prep mode.**  Features are recomputed at load rather than cached,
+    and a cache key is one more thing that can silently go stale against a
+    rebuilt store.
 
-    **Revisit this for balls/v2.**  v1's ~32 nodes came from a hand-capped
-    hop-1.5 ball; the D4 policy gives p50 = 77, p90 = 154, p99 = 293 and max 705.
-    The eigendecomposition is cubic, so the p99 item is ~750x v1's and the max
-    ~10,500x.  It may still be cheaper than a cache -- but the "~32 nodes"
-    premise no longer holds and the trade has not been re-measured.
+    The original argument for this was that "these graphs are ~32 nodes", which
+    died with balls/v2: the D4 policy gives p50 = 77, p90 = 154, p99 = 293 and
+    max 705, and the magnetic eigendecomposition is cubic.  Re-measured on
+    balls/v2 (2026-08-22, `train/run_smoke.sbatch` stage 4): the whole corpus's
+    features -- SPD and magnetic for 12,490 graphs, plus the generation copies of
+    dev and test -- are built once per run in a few minutes on the GPU, against
+    hours of training.  So the trade still holds, for a different reason: it is
+    now small relative to the run, rather than small in absolute terms.
+
+  * **the loss is computed on the answer-span tail of the logits.**  Not an
+    optimisation of taste -- see `GradeTrainer.compute_loss` in run.py.  At a
+    262 k vocabulary, full-sequence logits for a p99 ball cost tens of gigabytes
+    and the 14,055-token maximum ball cannot be trained at all.
 """
 import os
 
@@ -66,6 +73,24 @@ MODEL_NAME = "google/gemma-3-1b-it"
 # even though the package moved.
 EXPERIMENT_NAME = "sl_qa"
 DATA_ROOT = os.path.join(REPO_ROOT, "data", "datasets", "balls", "v2")
+# The GRADING contract lives only in the dataset, never in the ball: `mode`,
+# `sep`, `arity`, and for T17 the quantity band and the full `all_items` set.
+# `v2_final` is stage 4's second output -- the same rows as `v2_relabelled` with
+# the membership target re-verbalised from the ball, so the answer it ships and
+# the answer the ball ships are the same string.  It is the authority
+# for the target; nothing downstream should read `v2_relabelled`.
+#
+# `v2_graded` is `v2_final` with two grading contracts repaired (2026-08-23,
+# `data/qa/repair_grading.py`): T19 no longer grades on an arbitrary tie-break
+# among the recorded examples of a sense, and T17's `all_items` allow-list no
+# longer omits collocations the ball actually shows the model.  **Only the
+# `grading` block differs** -- every `answer` is byte-identical, so this changes
+# scoring and checkpoint selection, never the training target.
+#
+# It is the default because a run should be selected on the contract we believe
+# is correct.  Point `--items-root` at `v2_final` to reproduce the numbers in the
+# "as graded" column of train/README.md.
+ITEMS_ROOT = os.path.join(REPO_ROOT, "data", "datasets", "generated", "v2_graded")
 # Checkpoints are large (~500 MB per run) and belong to this repo, next to the
 # results record rather than wherever the job happened to cd to.
 CHECKPOINT_ROOT = os.path.join(REPO_ROOT, "checkpoints")
@@ -111,6 +136,7 @@ class RunConfig:
 
     # ── data ───────────────────────────────────────────────────────────────
     data_root: str = DATA_ROOT
+    items_root: str = ITEMS_ROOT
     types: str = ""            # "" = every type present in data_root
     max_items: int = 0         # >0 caps each split (smoke tests)
     max_length: int = 2048     # per-node tokenization cap
@@ -129,6 +155,26 @@ class RunConfig:
     gradient_checkpointing: bool = True
     include_f1: bool = False
     wandb_project: str = None
+
+    # ── evaluation ─────────────────────────────────────────────────────────
+    # Evaluation batches are formed by TOKEN budget, not by item count: the
+    # corpus runs from ~300 to 14,055 packed tokens, so a fixed batch size is
+    # either wasteful at the bottom or an OOM at the top.  See
+    # `evaluate.token_budget_batches`.
+    eval_token_budget: int = 16_384
+    gen_token_budget: int = 8_192
+    # Training batches too -- `batch_size` is IGNORED unless this is 0.  Attention
+    # is quadratic in the PADDED length, so a shuffled fixed-size batch over a
+    # 300..14,055-token corpus spends most of its compute padding short items up
+    # to the longest one, and its logits slice up with them.  Measured: 3-8 s per
+    # item at batch 4 shuffled, against 0.55 s at batch 1 where nothing is padded
+    # (and an OOM at step 11).  See train/batching.py.
+    train_token_budget: int = 8_192
+    max_batch: int = 16
+    # The final dev+test evaluations run pass 2 on EVERY pass-1 miss, which on an
+    # untrained model is nearly the whole split.  Off for timing probes, which
+    # only want the training step and the in-training eval measured.
+    final_eval: bool = True
 
     # ── derived ────────────────────────────────────────────────────────────
     def torch_dtype(self):
@@ -180,10 +226,22 @@ class RunConfig:
     def type_list(self):
         return tuple(t.strip() for t in self.types.split(",") if t.strip())
 
+    def input_tag(self):
+        """Which INPUT this arm reads, from the ball directory's own name.
+
+        Three of the four arms in the run matrix share a backbone, a schedule and
+        a seed and differ only in what they are shown, so the bias arm name alone
+        does not identify a run -- `balls/v2_serialised` with SPD off and
+        `balls/v2_noretrieval` with SPD off would otherwise write to the same
+        checkpoint directory.
+        """
+        return os.path.basename(self.data_root.rstrip("/")) or "balls"
+
     def run_name(self):
         tag = "-".join(self.type_list()) or "all"
         model = self.model_name.split("/")[-1]
-        return f"{EXPERIMENT_NAME}_{model}_{tag}_{self.arm()}_s{self.seed}"
+        return (f"{EXPERIMENT_NAME}_{model}_{tag}_{self.input_tag()}"
+                f"_{self.arm()}_s{self.seed}")
 
     def validate(self):
         if self.mode != "train":

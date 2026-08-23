@@ -46,6 +46,9 @@ def build_parser():
     p.add_argument("--k-hop", type=int, default=d.k_hop)
 
     p.add_argument("--data-root", default=d.data_root)
+    p.add_argument("--items-root", default=d.items_root,
+                   help="the dataset directory carrying the GRADING contract "
+                        "(datasets/generated/v2_final)")
     p.add_argument("--types", default=d.types,
                    help="comma-separated subset, e.g. T3,T4,T9,T10 ('' = all)")
     p.add_argument("--max-items", type=int, default=d.max_items,
@@ -67,6 +70,16 @@ def build_parser():
     p.add_argument("--include-f1", action=B, default=d.include_f1)
     p.add_argument("--wandb-project", default=d.wandb_project)
 
+    p.add_argument("--eval-token-budget", type=int, default=d.eval_token_budget)
+    p.add_argument("--gen-token-budget", type=int, default=d.gen_token_budget)
+    p.add_argument("--train-token-budget", type=int, default=d.train_token_budget,
+                   help="0 falls back to a fixed --batch-size (which pads badly "
+                        "on this corpus -- see train/batching.py)")
+    p.add_argument("--max-batch", type=int, default=d.max_batch)
+    p.add_argument("--final-eval", action=B, default=d.final_eval,
+                   help="--no-final-eval skips the slow graded dev/test pass "
+                        "(timing probes only -- a run without it has no result)")
+
     # sweep-runner bookkeeping
     p.add_argument("--runs-jsonl", default=None)
     p.add_argument("--run-name", default=None)
@@ -84,7 +97,8 @@ def config_from_args(a):
         magnetic=a.magnetic, magnetic_dim=a.magnetic_dim,
         magnetic_q=a.magnetic_q, magnetic_m=a.magnetic_m,
         k_hop=a.k_hop,
-        data_root=a.data_root, types=a.types, max_items=a.max_items,
+        data_root=a.data_root, items_root=a.items_root,
+        types=a.types, max_items=a.max_items,
         max_length=a.max_length, data_seed=a.data_seed,
         num_epochs=a.num_epochs, batch_size=a.batch_size,
         accumulation_steps=a.accumulation_steps,
@@ -92,6 +106,10 @@ def config_from_args(a):
         max_steps=a.max_steps, seed=a.seed, num_workers=a.num_workers,
         gradient_checkpointing=a.gradient_checkpointing,
         include_f1=a.include_f1, wandb_project=a.wandb_project,
+        eval_token_budget=a.eval_token_budget,
+        gen_token_budget=a.gen_token_budget,
+        train_token_budget=a.train_token_budget, max_batch=a.max_batch,
+        final_eval=a.final_eval,
     ).validate()
 
 
