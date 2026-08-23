@@ -1,0 +1,133 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // The four arms of the encoding/retrieval comparison, over three seeds each.
+  //
+  //   arm                 input                     biases
+  //   GTLM                balls/v2                  spd + magnetic
+  //   GTLM, no bias       balls/v2                  none
+  //   serialised graph    balls/v2_serialised       n/a (single prompt node)
+  //   no retrieval        balls/v2_noretrieval      n/a (single prompt node)
+  //
+  // Every arm shares the data, the schedule, the backbone and the seed, so the
+  // ONLY difference between any two is the one named in the table.  The three
+  // baselines are what make the GTLM number readable at all: no-retrieval is the
+  // floor a 1B model reaches from its own Slovene with no graph, the serialised
+  // arm receives the identical subgraph as text (so a gap to GTLM is about the
+  // ENCODING, not the information), and the no-bias control keeps the graph and
+  // the encoder and switches only the structural attention bias off.
+  //
+  // > The previously recorded +13.0-point bias gap was measured on balls/v1 -- a
+  // > hand-capped ~32-node ball built by a different and methodologically flawed
+  // > policy.  Re-measured on balls/v2 (array 130369, 2026-08-23): the gap is
+  // > +34.7 points, and the bias-off arm is indistinguishable from no retrieval
+  // > at all.  See train/README.md; do not cite the +13.0 figure.
+  //
+  // CAVEAT, measured after the fact: dev accuracy is still RISING in every arm
+  // at 3 epochs (+0.041 GTLM, +0.023 serialised, +0.049 no-bias over the final
+  // eval interval), so nothing here has converged and the comparison is partly
+  // about learning SPEED.  Raise num_epochs before treating these as final.
+  //
+  //   .venv/bin/python -m sweep train train/configs/arms_v2.jsonc
+  //
+  // The scoring is `qa/grade.py`'s own contract, reported as `accuracy` overall
+  // and per type (train/evaluate.py); `METRIC` selects the best checkpoint on
+  // that same number, so no run trains against one objective and selects against
+  // another.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "arms_v2",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      // Measured on ana, 2026-08-22: 8.2 s per optimizer step of ~16 items with
+      // the bias on, 4.6 s without, so a 3-epoch run is ~3.9 h (GTLM) or ~2.2 h
+      // (the three bias-off arms), plus roughly half an hour of evaluation.
+      // Twelve runs is ~42 GPU-hours; five at a time fits ana's free cards and
+      // brings the whole matrix in under a day.
+      "max_concurrent": 5,
+      "partition": "frida",
+      "account": "povejmo",
+      // ── Why A100-80GB and not Blackwell ──────────────────────────────────
+      // The GPU ladder prefers B300/B200, and `sweep`'s pyxis wrap exists
+      // for exactly that.  Both were re-tested on 2026-08-22 and neither works
+      // for THIS repo:
+      //   * ixb7 still fails to start any container -- its enroot mellanox hook
+      //     exits 1 on a missing /dev/infiniband/rdma_cm (job 130345, unchanged
+      //     since the 09:36 reboot);
+      //   * ixb1 starts the container and then cannot run our interpreter (job
+      //     130347): .venv/bin/python is an absolute symlink to
+      //     /opt/deepops/venv/bin/python, which does not exist inside the image.
+      //     graph_model's venv points at /usr/bin/python3, which is why the
+      //     stage-2 extraction job works there and this would not.
+      // The same symlink is why BARE jobs on ixh and axa die with "No module
+      // named 'torch'" (jobs 130349, 130350).  ana resolves it.
+      //
+      // This is not just a speed trade.  Every arm has to run on the same node
+      // type with the same software, or a gap between two arms is partly a gap
+      // between two stacks -- so ONE working environment for all twelve runs is
+      // the requirement, and ana is the one that exists.
+      "nodelist": "ana",
+      "gpus": "A100_80GB:1",
+      "cpus": 6,
+      "mem": "96G",
+      "time": "12:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "google/gemma-3-1b-it",
+  "types": "",                       // "" = all 19 types
+
+  // The arm axis, as a BUNDLE (a list of objects) rather than four lists: four
+  // lists would be four independent axes and expand to their product, adding
+  // arms nobody asked for (a serialised prompt WITH the magnetic bias over a
+  // one-node graph is not a thing).  A bundle is one axis whose values are
+  // coherent settings.
+  //
+  // `max_length` is a PER-NODE tokenization cap.  The graph arms' longest node
+  // text is 670 characters, so 2048 never binds; the serialised arm packs the
+  // whole flattened ball into its single prompt node, which `qa/build_variants`
+  // bounds at 16,384 tokens (12 rows of 12,490 keep a prefix of the node list).
+  "arm": [
+    {"data_root": "data/datasets/balls/v2",
+     "spd": true,  "magnetic": true,  "max_length": 2048},
+    {"data_root": "data/datasets/balls/v2",
+     "spd": false, "magnetic": false, "max_length": 2048},
+    {"data_root": "data/datasets/balls/v2_serialised",
+     "spd": false, "magnetic": false, "max_length": 17408},
+    {"data_root": "data/datasets/balls/v2_noretrieval",
+     "spd": false, "magnetic": false, "max_length": 2048}
+  ],
+  "rrwp": false,
+
+  "seed": [0, 1, 2],
+
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-eager",
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 5e-4,
+  "bias_lr": 3e-2,
+  // Batches are formed by TOKEN budget, so `batch_size` is unused (see
+  // train/batching.py).  8,192 tokens gives ~4.1 items per batch on balls/v2 and
+  // 2.4 % padding waste, against the 1,000 %-plus a shuffled fixed-size batch
+  // produces on a corpus that spans 300 to 14,055 packed tokens.
+  //
+  // 2,281 batches/epoch / 4 accumulation steps = 570 optimizer steps per epoch,
+  // ~16 items per step -- the same effective batch the bias_ablation runs used,
+  // so the schedule is comparable to the recorded v1 numbers.
+  "train_token_budget": 8192,
+  "max_batch": 16,
+  "accumulation_steps": 4,
+  "num_epochs": 3,
+  "eval_steps": 300,
+  "num_workers": 4
+}
