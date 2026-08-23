@@ -1,0 +1,20 @@
+host: apl  start: Sat Aug 22 22:48:04 UTC 2026
+[train] 9,266 items   serialised prompt tokens p50 2,163 p90 4,371 p99 9,268 max 16,380
+         truncated at 16,384: 8 items (0.09 %), 1,243 nodes dropped in total
+[dev] 1,040 items   serialised prompt tokens p50 2,156 p90 4,214 p99 10,643 max 16,152
+         truncated at 16,384: 1 items (0.10 %), 206 nodes dropped in total
+[test] 2,184 items   serialised prompt tokens p50 2,175 p90 4,984 p99 10,014 max 16,381
+         truncated at 16,384: 3 items (0.14 %), 399 nodes dropped in total
+[wrote] /shared/workspace/povejmo/gams_gtlm/data/datasets/balls/v2_noretrieval
+[wrote] /shared/workspace/povejmo/gams_gtlm/data/datasets/balls/v2_serialised
+  ok v2_noretrieval/train: 9,266 items match the reference
+  ok v2_serialised/train: 9,266 items match the reference
+  ok v2_noretrieval/dev: 1,040 items match the reference
+  ok v2_serialised/dev: 1,040 items match the reference
+  ok v2_noretrieval/test: 2,184 items match the reference
+  ok v2_serialised/test: 2,184 items match the reference
+
+v2_serialised: 12 row(s) keep only a prefix of the node list (above the serialised prompt's token budget)
+
+ALL VARIANTS MATCH
+end: Sat Aug 22 22:49:09 UTC 2026
