@@ -5,7 +5,7 @@ one token early or late, nothing would fail -- the run would train on a slightly
 wrong span and report a slightly wrong number, which is the worst kind of bug to
 have in a benchmark.  So the span is printed, decoded, for a person to check.
 
-    .venv/bin/python -m train.check_labels --n 10
+    .venv/bin/python -m train.checks.check_labels --n 10
 """
 import os
 import json
@@ -16,8 +16,8 @@ from transformers import AutoTokenizer
 
 from gtlm.utils import TextGraphDataset
 
-from .config import RunConfig
-from .data import _graph, OffsetLabelMasker
+from ..config import RunConfig
+from ..data import _graph, OffsetLabelMasker
 
 
 def main(argv=None):

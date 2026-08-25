@@ -11,5 +11,5 @@
 # it is the node whose python this repo's .venv actually resolves against.
 set -uo pipefail
 cd /shared/workspace/povejmo/gams_gtlm || exit 1
-.venv/bin/python -m train.length_stats "$@"
+.venv/bin/python -m train.analysis.length_stats "$@"
 echo "exit: $?"

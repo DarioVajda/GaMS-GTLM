@@ -41,7 +41,7 @@ allow-list is widened to every `kolokacija:` node actually present in the ball.
 Both repairs are **monotone**: the allow-list only grows and the gold is always
 inside it, so every answer that passed before still passes.  Nothing that was
 counted correct becomes incorrect, which is what makes re-scoring the existing
-prediction dumps sound (`train/rescore.py`) rather than requiring a retrain.
+prediction dumps sound (`train/analysis/rescore.py`) rather than requiring a retrain.
 
 Candidates come from `balls/v2`, which is the same ball every arm was built from
 (`v2_serialised` re-encodes it, `v2_noretrieval` blanks the nodes but keeps the
