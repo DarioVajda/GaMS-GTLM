@@ -1,0 +1,89 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // T10's pre-flight: ONE 1-epoch run per arm, no final evaluation.
+  //
+  //     .venv/bin/python -m sweep train train/configs/arms_v3_timing.jsonc
+  //
+  // Six runs, seed 0, on the same B200 + container stack the real sweep uses.
+  // What it is for:
+  //
+  //   * project the wall clock before committing 18 runs (one epoch is 579
+  //     optimizer steps, so the whole run is 8x this plus the two final evals);
+  //   * price EVALUATION.  `eval_steps: 400` fires one in-training eval inside a
+  //     579-step epoch, and `eval_pass1_s` / `eval_pass2_s` are now in the
+  //     metrics, so the T5 acceptance ("evaluation < 25 % of run time") is
+  //     answerable from these logs;
+  //   * fix each arm's `batch_size x accumulation_steps` factorisation.  Only
+  //     the PRODUCT (16) is scientifically binding -- gradient accumulation
+  //     normalised by `num_items_in_batch` gives the same average gradient
+  //     however the 16 items are split -- so the split is a pure throughput
+  //     knob.  Arms 5/6 are ~35-token sequences and would be almost entirely
+  //     kernel-launch overhead at 2x8, hence 16x1 there.
+  //
+  // `final_eval: false` because a run without a trained model generates for
+  // nearly every one of the 3,224 dev+test items and that would dominate the
+  // measurement it exists to make.  A run from this config has NO result and
+  // must never be read as one -- it writes to its own results dir.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "arms_v3_timing",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 3,
+      "partition": "frida",
+      "account": "povejmo",
+      // B200 only, and for the same reason the real sweep gives: of the four
+      // B300 hosts ixb5 is draining and ixb7's enroot mellanox hook still fails
+      // on a missing /dev/infiniband/rdma_cm, so a B300 slot can be one the
+      // container cannot start in.  ixb1-ixb4 are healthy.
+      "gpus": ["B200"],
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 8,
+      "mem": "128G",
+      "time": "04:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "google/gemma-3-1b-it",
+  "types": "",
+  "items_root": "data/datasets/generated/v2_clean",
+
+  "arm": [
+    {"data_root": "data/datasets/balls/v2_clean",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls/v2_clean",             "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls/v2_clean_serialised",  "plain_llm": false, "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls/v2_clean_serialised",  "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls/v2_clean_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1},
+    {"data_root": "data/datasets/balls/v2_clean_noretrieval", "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1}
+  ],
+  "seed": 0,
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 5e-4,
+  "bias_lr": 1e-2,
+
+  "train_token_budget": 0,
+  "num_epochs": 1,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4,
+  "final_eval": false
+}

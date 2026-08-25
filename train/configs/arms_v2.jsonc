@@ -1,5 +1,24 @@
 {
   // ─────────────────────────────────────────────────────────────────────────
+  // HISTORICAL RECORD — superseded by arms_v3.jsonc, and NO LONGER RUNNABLE.
+  //
+  // Kept as the provenance of the runs in train/results/arms_v2/, not as a
+  // config to re-submit.  Two of its settings are now refused outright, both
+  // deliberately:
+  //
+  //   * `train_token_budget: 8192` — the token-budget training sampler is
+  //     retired (train/config.py raises on a non-zero value).  It made the
+  //     effective batch and the update count a function of sequence length, so
+  //     the four arms below ran four different optimisations: 16.5 items x 4,480
+  //     steps, 10.9 x 6,824, 63.9 x 1,160.  That is the single largest reason
+  //     these numbers were replaced.
+  //   * `max_batch` — split into `eval_max_batch`; the flag no longer exists.
+  //
+  // The data it names (`balls/v2`, and `generated/v2_graded` via the old
+  // defaults) is also not the data arms_v3 uses: 76 of 2,184 test ANSWERS
+  // differ.  See train/config.py's ITEMS_ROOT note.
+  // ─────────────────────────────────────────────────────────────────────────
+  //
   // The four arms of the encoding/retrieval comparison, over three seeds each.
   //
   //   arm                 input                     biases

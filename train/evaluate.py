@@ -53,69 +53,202 @@ the test) runs pass 2 on every pass-1 miss and is the number that gets reported.
 """
 import os
 import json
+import time
 import collections
 
 import torch
+from torch.nn.attention import sdpa_kernel, SDPBackend
 from transformers import GenerationConfig
 
 from .config import ANSWER_PREFIX
 from .qa_contract import grade
 from ._log import quiet_repeated_sliding_window_warning
+from .batching import packed_lengths
 
 # The band that decides how many items share one forward pass.  Padding is per
 # batch, so a token budget (not a fixed batch size) is what actually bounds the
-# activation memory when the corpus runs from 300 to 14,055 packed tokens.
+# activation memory when the corpus runs from 300 to 16,384 packed tokens.
+#
+# These are the values chosen for and measured on **A100-80GB**; `scaled_budgets`
+# rescales them by the device's own memory so the same config is correct on a
+# bigger or smaller card.  See there.
 EVAL_TOKEN_BUDGET = 16_384
 GEN_TOKEN_BUDGET = 8_192
 MAX_BATCH = 16
+
+# The card the two budgets above were chosen on, in GiB as `torch` reports it
+# (`get_device_properties(0).total_memory`), which for an "80 GB" A100 is ~79.
+REFERENCE_TOTAL_GIB = 79.0
+EVAL_BUDGET_CLAMP = (8_192, 131_072)
+GEN_BUDGET_CLAMP = (4_096, 65_536)
 
 # Longest gold answer in the corpus is well under this (T5's 27 conjugated forms).
 # A generation that runs past it is a failure anyway -- but it is counted and
 # reported, so "the cap was too low" cannot hide inside the accuracy.
 MAX_NEW_TOKENS = 320
 
+# `torch.OutOfMemoryError` is the modern spelling and `torch.cuda.OutOfMemoryError`
+# its alias; both subclass RuntimeError.  Some kernels (and cuBLAS) still raise a
+# plain RuntimeError whose message is the only evidence, so the guard catches
+# RuntimeError and re-raises anything `_is_oom` does not recognise -- retrying a
+# real bug at half the batch size would just hide it.
+_TORCH_OOM = tuple({e for e in (getattr(torch, "OutOfMemoryError", None),
+                                getattr(torch.cuda, "OutOfMemoryError", None))
+                    if e is not None})
 
-def token_budget_batches(lengths, budget=EVAL_TOKEN_BUDGET, max_batch=MAX_BATCH):
+
+def _is_oom(exc):
+    if _TORCH_OOM and isinstance(exc, _TORCH_OOM):
+        return True
+    text = str(exc).lower()
+    return "out of memory" in text or "cuda error: out of memory" in text
+
+
+# SDPA backends allowed during pass-2 GENERATION.  `EFFICIENT_ATTENTION` (the
+# cutlass kernel) requires the attention-bias pointer to be 16-byte aligned, and
+# stock Gemma-3's sliding layers hand it a non-contiguous VIEW:
+# `attention_mask[:, :, :, offset : offset + 512]` with
+# `offset = max(0, kv_len - sliding_window)`.  During decode `offset` grows by one
+# per step, so seven steps in eight the pointer is misaligned and the kernel
+# raises `p.attn_bias_ptr is not correctly aligned`.
+#
+# Prefill is safe (there `offset == 0`), so this is a decode-only kernel-dispatch
+# problem, and at decode `q_len == 1` — the math backend materialises a
+# `(B, H, 1, kv)` score matrix, i.e. costs nothing.  Restricting the backend
+# changes which kernel computes the attention, never what it computes, and it
+# touches the plain stack only: the GTLM path does not go through SDPA at all.
+# TRAINING is untouched and keeps the fused kernels, which is what arm 4's
+# "what a standard LLM actually does" claim rests on.
+_GEN_SDPA_BACKENDS = [SDPBackend.FLASH_ATTENTION, SDPBackend.MATH]
+
+
+def _round_down(value, multiple=1024):
+    return max(multiple, (int(value) // multiple) * multiple)
+
+
+def scaled_budgets(eval_budget=EVAL_TOKEN_BUDGET, gen_budget=GEN_TOKEN_BUDGET,
+                   device_index=0):
+    """Rescale the A100-80GB reference budgets by THIS device's memory.
+
+    `(eval_budget, gen_budget, note)`.  A constant token budget is a constant
+    only in tokens: the activation memory it buys is a fixed fraction of an
+    80 GiB card and less than half of that on a 178 GiB B200, which is a
+    silent 2x throughput loss on the bigger machine and an OOM on a smaller one.
+    Scaling linearly from the reference keeps the code GPU-agnostic instead of
+    B200-specific -- an A100-80GB reproduces today's 16,384 / 8,192 exactly.
+
+    Clamped at both ends, because the linear model is an approximation: the
+    weights, the optimizer state and the KV cache do not scale with the budget,
+    so the floor keeps a small card able to run at all and the ceiling stops a
+    very large one from asking for a batch whose *logits* would not fit.
+    """
+    if not torch.cuda.is_available():
+        return eval_budget, gen_budget, "cpu: budgets unscaled"
+    total_gib = torch.cuda.get_device_properties(device_index).total_memory / 2 ** 30
+    scale = total_gib / REFERENCE_TOTAL_GIB
+    ev = _round_down(min(max(eval_budget * scale, EVAL_BUDGET_CLAMP[0]),
+                         EVAL_BUDGET_CLAMP[1]))
+    gen = _round_down(min(max(gen_budget * scale, GEN_BUDGET_CLAMP[0]),
+                          GEN_BUDGET_CLAMP[1]))
+    note = (f"{torch.cuda.get_device_name(device_index)} {total_gib:.0f} GiB "
+            f"-> x{scale:.2f}: eval {eval_budget}->{ev}, gen {gen_budget}->{gen}")
+    return ev, gen, note
+
+
+def token_budget_batches(lengths, budget=EVAL_TOKEN_BUDGET, max_batch=MAX_BATCH,
+                         group_keys=None):
     """Group indices into batches of `sum -> padded` cost at most `budget`.
 
     Sorted by length first, so a batch is homogeneous.  That matters twice over:
-    it stops one 14k-token ball from padding three 300-token balls up to its own
+    it stops one 16k-token ball from padding three 300-token balls up to its own
     length, and it keeps `logits_to_keep` (below) tight -- with mixed lengths the
     slice needed to cover the earliest answer span in the batch is nearly the
     whole sequence, which is the memory blow-up this exists to avoid.
+
+    `group_keys` (one hashable per item) adds a HARD partition: no batch spans
+    two keys.  Pass 2 uses it to group by gold-answer length as well as by input
+    length, because `max_new_tokens` is a batch-level bound and generation runs
+    until every row stops -- one long-gold item otherwise makes the whole batch
+    decode long.
     """
-    order = sorted(range(len(lengths)), key=lambda i: lengths[i])
-    batches, cur, cur_max = [], [], 0
+    if group_keys is None:
+        group_keys = [0] * len(lengths)
+    order = sorted(range(len(lengths)),
+                   key=lambda i: (group_keys[i], lengths[i]))
+    batches, cur, cur_max, cur_key = [], [], 0, None
     for i in order:
         nxt = max(cur_max, lengths[i])
-        if cur and (nxt * (len(cur) + 1) > budget or len(cur) >= max_batch):
+        if cur and (group_keys[i] != cur_key
+                    or nxt * (len(cur) + 1) > budget
+                    or len(cur) >= max_batch):
             batches.append(cur)
-            cur, cur_max = [i], lengths[i]
+            cur, cur_max, cur_key = [i], lengths[i], group_keys[i]
         else:
             cur.append(i)
-            cur_max = nxt
+            cur_max, cur_key = nxt, group_keys[i]
     if cur:
         batches.append(cur)
     return batches
 
 
-def to_left_padding(batch):
-    """Turn the collator's RIGHT padding into LEFT padding, in place.
+def gold_length_key(n):
+    """Coarse band for a gold-answer token count: the next power of two.
 
-    `generate` appends to the END of the sequence, so every row has to *end* at
-    its own last real token; with right padding a short row would grow its
-    continuation on the far side of its pads.  Rolling each row by its pad width
-    moves the trailing pads to the front and changes nothing else: the packed
-    node order is preserved, `attention_mask` still marks the pads (nothing
-    attends to them), and `position_ids[:, -1]` is still the prompt node's last
-    local position, which is what `prepare_inputs_for_generation` continues from.
+    `max_new_tokens = min(320, 2 * max(gold in batch) + 16)`, so grouping golds
+    into power-of-two bands bounds the decode waste inside a batch at ~2x while
+    keeping the number of groups small enough not to fragment the batching.
+    """
+    return 1 << max(0, int(n) - 1).bit_length()
+
+
+def to_left_padding(batch):
+    """Move each row's padding to the FRONT, in place.  Idempotent.
+
+    Two callers, one reason each.
+
+    **Generation** appends to the END of the sequence, so every row has to *end*
+    at its own last real token; with right padding a short row would grow its
+    continuation on the far side of its pads.
+
+    **Training** (`run.LeftPadCollator`) needs it because
+    `GradeTrainer.compute_loss` slices the logits to the answer tail using the
+    EARLIEST supervised position in the batch.  Right-padded, a shorter row's
+    answer span sits earlier in the padded sequence and drags that slice back for
+    everyone -- measured, the worst GTLM batch at packed L=16,384 needed
+    `logits_to_keep=6,880` and peaked at 100.5 GiB, ~43 GB of which was logits
+    for answer spans a few hundred tokens long.  Left-padded, every row ends at
+    `L-1`, so the same `min` collapses on its own to `longest answer + 1`.
+
+    The roll changes nothing else: the packed node order is preserved,
+    `attention_mask` still marks the pads (nothing attends to them, and the
+    structural mask reads padding from that mask alone), `node_ids` travels with
+    `input_ids` so the token->node->bias mapping is unchanged, and the leading
+    pads keep `node_ids = prompt_node`, which is not a prefix node and therefore
+    gains nothing from the bidirectional-prefix relaxation.  `position_ids` are
+    per-node LOCAL positions under `node_position_mode='reset'`, and the value
+    travels with its token.  `pad_to_block` bucketises the total `L`, which a
+    roll does not change.
+
+    The shift is the number of TRAILING pads, not the total pad count, which is
+    what makes this idempotent: a row that is already left-padded has none and is
+    left alone.  (`generate`'s own left-padding path calls this on batches the
+    training collator may already have rolled.)
     """
     am = batch["attention_mask"]
-    shift = (am.shape[1] - am.sum(dim=1)).tolist()
+    if am.shape[1] == 0:
+        return batch
+    # Trailing zeros per row = how far right the last real token has to move.
+    # `argmax` on the flipped mask is the index of the last real token counted
+    # from the end, i.e. exactly that count.
+    shift = (am.flip(1) != 0).float().argmax(dim=1).tolist()
     for i, s in enumerate(shift):
         if not s:
             continue
-        for key in ("input_ids", "position_ids", "node_ids", "attention_mask"):
+        # `node_ids`/`position_ids` are absent on the plain-LLM baselines, whose
+        # collator ships only what a stock causal model reads; `labels` is absent
+        # on the generation path, which pops it.
+        for key in [k for k in ("input_ids", "position_ids", "node_ids",
+                                "attention_mask", "labels") if k in batch]:
             batch[key][i] = torch.roll(batch[key][i], int(s), dims=0)
     return batch
 
@@ -141,6 +274,15 @@ class GradeEvaluator:
         self.max_batch = max_batch
         self._lengths = {}
         self._gold_lens = {}
+        # OOM fallbacks, reset per `score()` call.  Reported in the metrics dict
+        # so a final eval that needed one is visible in the run record: splitting
+        # a batch changes its padding, and a bf16 near-tie can flip an argmax
+        # between two groupings, so the affected number is not reproducible from
+        # the config alone.
+        self.oom_splits = 0
+        # Always True in a real run; `probe_eval.py` flips it to time the
+        # difference.  See `pass2`.
+        self.use_cache = True
         quiet_repeated_sliding_window_warning()
         # Greedy, spelled out, and **pinned against the model's own defaults**.
         #
@@ -159,8 +301,26 @@ class GradeEvaluator:
         # without generating it, on the argument that GREEDY decoding would have
         # emitted the gold string.  Under sampling that argument is simply false,
         # and every number the evaluator reports would be unsound.
+        #
+        # The cost of turning that back-fill off, and why it is paid explicitly:
+        # `use_model_defaults=False` suppresses EVERY field, including
+        # `cache_implementation`, which is not a decoding policy but an
+        # architectural fact.  gemma-3-1b-it ships `cache_implementation:
+        # "hybrid"`; without it `generate` builds a plain `DynamicCache`, whose
+        # sliding layers keep growing while Gemma-3's sliding-layer mask is
+        # sliced to `max(1, sliding_window) = 512` -- so the first decode step
+        # past a ~512-token prompt dies with "The expanded size of the tensor
+        # (594) must match the existing size (512) at non-singleton dimension 3".
+        # That is invisible on the GTLM stack (which drops the window) and on
+        # short prompts, and fatal on the plain serialised arm, whose prompts are
+        # p50 2,166 tokens.  Caught by `run_preflight.sbatch` stage 4b.
+        #
+        # So the field is copied from the model itself in `gen_cfg_for` rather
+        # than the blanket back-fill being re-enabled -- re-enabling it would
+        # bring `do_sample=True` back with it and make every number unsound.
         self.greedy_kwargs = dict(do_sample=False, num_beams=1,
                                   use_model_defaults=False)
+        self._gen_cfg_cache = {}
         self.gen_cfg = GenerationConfig(
             do_sample=False, num_beams=1,
             repetition_penalty=1.0, length_penalty=1.0,
@@ -171,6 +331,38 @@ class GradeEvaluator:
         )
 
     # ── plumbing ───────────────────────────────────────────────────────────
+    def gen_cfg_for(self, model):
+        """`self.gen_cfg` plus the ARCHITECTURAL fields the model itself names.
+
+        Only `cache_implementation` today, and only because it is a property of
+        the architecture rather than a decoding choice -- see the note in
+        `__init__` for the failure it prevents.  Everything that decides *how*
+        the model decodes stays pinned here, because pass 1's correctness
+        argument depends on decoding being greedy.
+
+        Read from `model.config`, and NOT from `model.generation_config`, because
+        the model config is where both stacks state their requirement
+        deliberately: stock Gemma-3 ships `"cache_implementation": "hybrid"` in
+        `config.json`, and `GTLMGemma3ForCausalLM._sanitize_attn_config` sets it
+        to `None` on purpose — a HybridCache's sliding layers would truncate the
+        KV span the adapter's attention still expects to see, and would fix the
+        cache length at the prefill size, which its decode path cannot work
+        against.  The hub's `generation_config.json` says `"hybrid"` for both, so
+        reading that would hand the GTLM path a cache it must not have.
+        """
+        key = id(model)
+        if key in self._gen_cfg_cache:
+            return self._gen_cfg_cache[key]
+        cfg = self.gen_cfg
+        impl = getattr(getattr(model, "config", None), "cache_implementation", None)
+        if impl and impl != cfg.cache_implementation:
+            cfg = GenerationConfig(**{**cfg.to_dict(), "cache_implementation": impl})
+            print(f"[eval] generation cache_implementation={impl!r} "
+                  f"(from the model; `use_model_defaults=False` suppresses it)",
+                  flush=True)
+        self._gen_cfg_cache[key] = cfg
+        return cfg
+
     def split_of(self, ds):
         s = self._by_ds.get(id(ds))
         if s is None:
@@ -200,15 +392,39 @@ class GradeEvaluator:
     def lengths(self, split, which="ds"):
         key = (split.name, which)
         if key not in self._lengths:
-            ds = getattr(split, which)
-            col = ds._hf_dataset.select_columns("input_ids")["input_ids"]
-            self._lengths[key] = [sum(len(x) for x in r) for r in col]
+            self._lengths[key] = packed_lengths(getattr(split, which))
         return self._lengths[key]
 
     @staticmethod
     def _move(batch, device):
         return {k: (v.to(device) if torch.is_tensor(v) else v)
                 for k, v in batch.items() if v is not None}
+
+    def _with_oom_retry(self, rows, work, what):
+        """Run `work(rows)`; on CUDA OOM, halve the batch and retry, down to 1.
+
+        A token budget sized from the device (`scaled_budgets`) is an estimate,
+        and an estimate that is occasionally wrong must not kill an eight-epoch
+        run at hour nine.  Bounded (log2 of the batch size), and every fallback
+        is logged and counted -- re-grouping changes the padding, and a bf16
+        near-tie can flip an argmax between two groupings, so a fallback during a
+        FINAL eval means the reported number depends on a grouping that was not
+        pre-declared.
+        """
+        try:
+            return work(rows)
+        except RuntimeError as exc:
+            if not _is_oom(exc) or len(rows) <= 1:
+                raise
+            torch.cuda.empty_cache()
+            half = len(rows) // 2
+            self.oom_splits += 1
+            print(f"[eval] OOM in {what} at batch {len(rows)}; splitting into "
+                  f"{half} + {len(rows) - half} and retrying ({exc.__class__.__name__})",
+                  flush=True)
+            self._with_oom_retry(rows[:half], work, what)
+            self._with_oom_retry(rows[half:], work, what)
+            return None
 
     # ── pass 1: teacher forcing ────────────────────────────────────────────
     def pass1(self, model, split):
@@ -222,11 +438,10 @@ class GradeEvaluator:
         """
         device = next(model.parameters()).device
         ds = split.ds
-        n = len(ds)
-        ok = [False] * n
-        loss_sum, loss_n = 0.0, 0
-        for idxs in token_budget_batches(self.lengths(split, "ds"), self.eval_budget,
-                                         self.max_batch):
+        ok = [False] * len(ds)
+        acc = {"loss_sum": 0.0, "loss_n": 0}
+
+        def run(idxs):
             batch = self.collator([ds[i] for i in idxs])
             labels = batch.pop("labels")
             L = labels.shape[1]
@@ -257,10 +472,14 @@ class GradeEvaluator:
                 sel = out.logits.reshape(-1, out.logits.shape[-1])[flat]
                 ce = torch.nn.functional.cross_entropy(
                     sel.float(), gold.reshape(-1)[flat], reduction="sum")
-                loss_sum += float(ce)
-                loss_n += int(flat.sum())
+                acc["loss_sum"] += float(ce)
+                acc["loss_n"] += int(flat.sum())
             del out
-        return ok, (loss_sum / loss_n if loss_n else float("nan"))
+
+        for idxs in token_budget_batches(self.lengths(split, "ds"), self.eval_budget,
+                                         self.max_batch):
+            self._with_oom_retry(idxs, run, "pass 1")
+        return ok, (acc["loss_sum"] / acc["loss_n"] if acc["loss_n"] else float("nan"))
 
     # ── pass 2: greedy generation ──────────────────────────────────────────
     def pass2(self, model, split, idxs):
@@ -272,27 +491,41 @@ class GradeEvaluator:
         all_lengths = self.lengths(split, "gen_ds")
         lengths = [all_lengths[i] for i in idxs]
         gold = self.gold_lens(split)
-        preds, truncated = {}, 0
-        for group in token_budget_batches(lengths, self.gen_budget, self.max_batch):
-            rows = [idxs[g] for g in group]
+        # Group by gold-answer band as well as by input length: `max_new_tokens`
+        # below is a batch-level bound and generation runs until EVERY row stops,
+        # so one long-gold item makes the whole batch decode long.
+        keys = [gold_length_key(gold[i]) for i in idxs]
+        gen_cfg = self.gen_cfg_for(model)
+        preds, state = {}, {"truncated": 0}
+
+        def run(rows):
             batch = to_left_padding(self.collator([ds[i] for i in rows]))
             batch.pop("labels", None)
             inputs = self._move(batch, device)
             prompt_len = inputs["input_ids"].shape[1]
             budget = min(self.max_new_tokens, 2 * max(gold[i] for i in rows) + 16)
-            out = model.generate(**inputs, generation_config=self.gen_cfg,
-                                 **self.greedy_kwargs,
-                                 max_new_tokens=budget, use_cache=True)
+            # `use_cache` is an attribute rather than a literal so
+            # `train/checks/probe_eval.py` can time the same call with it off -- HF sets
+            # `config.use_cache = False` under gradient checkpointing and the
+            # per-call override is exactly the thing that needs measuring.
+            with sdpa_kernel(_GEN_SDPA_BACKENDS):
+                out = model.generate(**inputs, generation_config=gen_cfg,
+                                     **self.greedy_kwargs, max_new_tokens=budget,
+                                     use_cache=self.use_cache)
             new = out[:, prompt_len:]
             for j, i in enumerate(rows):
                 seq = new[j].tolist()
                 if self.tok.eos_token_id not in seq:
-                    truncated += 1
+                    state["truncated"] += 1
                 text = self.tok.decode(seq, skip_special_tokens=True)
                 # The marker itself was the last thing the model was shown, so it
                 # is not in the continuation; the grader parses a full line.
                 preds[i] = ANSWER_PREFIX.lstrip("\n") + text
-        return preds, truncated
+
+        for group in token_budget_batches(lengths, self.gen_budget, self.max_batch,
+                                          group_keys=keys):
+            self._with_oom_retry([idxs[g] for g in group], run, "pass 2")
+        return preds, state["truncated"]
 
     # ── the join, and the report ───────────────────────────────────────────
     def score(self, model, ds, fast=True, generate_all=False):
@@ -301,20 +534,26 @@ class GradeEvaluator:
         `generate_all=True` bypasses the fast path entirely: every item is
         decoded and graded, with pass 1 still run so its verdict can be compared
         against generation's.  It is the reference implementation the two-pass
-        one is verified against (`train/test_two_pass.py`) and is far too slow to
+        one is verified against (`train/checks/test_two_pass.py`) and is far too slow to
         use for anything else."""
         split = self.split_of(ds)
         was_training = model.training
         model.eval()
+        self.oom_splits = 0
+        timing = {}
         try:
             with torch.no_grad():
+                t0 = time.perf_counter()
                 ok, loss = self.pass1(model, split)
+                timing["pass1_s"] = time.perf_counter() - t0
                 if generate_all:
                     need = list(range(len(split.items)))
                 else:
                     need = [i for i, good in enumerate(ok)
                             if not good and (not fast or split.needs_generation[i])]
+                t1 = time.perf_counter()
                 preds, truncated = self.pass2(model, split, need)
+                timing["pass2_s"] = time.perf_counter() - t1
         finally:
             if was_training:
                 model.train()
@@ -333,16 +572,22 @@ class GradeEvaluator:
             r.update(id=item["id"], type=item["type"], band=item["band"],
                      negative=bool(item.get("negative")), gold=item["answer"])
             rows.append(r)
-        return rows, loss, len(need), truncated
+        timing["oom_splits"] = self.oom_splits
+        print(f"[eval] {split.name}: pass1 {timing['pass1_s']:.1f} s, "
+              f"pass2 {timing['pass2_s']:.1f} s over {len(need)} items"
+              + (f", {self.oom_splits} OOM fallback(s)" if self.oom_splits else ""),
+              flush=True)
+        return rows, loss, len(need), truncated, timing
 
     def evaluate(self, model, ds, prefix="eval", fast=True, dump_tag=None,
                  generate_all=False):
         """`score`, reported as a metrics dict the Trainer can log and select on."""
-        rows, loss, n_generated, truncated = self.score(
+        rows, loss, n_generated, truncated, timing = self.score(
             model, ds, fast=fast, generate_all=generate_all)
         if self.dump_dir and dump_tag:
             self._dump(rows, dump_tag)
-        return self._metrics(rows, prefix, loss, n_generated, truncated, fast)
+        return self._metrics(rows, prefix, loss, n_generated, truncated, fast,
+                             timing)
 
     def _dump(self, rows, tag):
         os.makedirs(self.dump_dir, exist_ok=True)
@@ -353,11 +598,12 @@ class GradeEvaluator:
         print(f"[eval] per-item predictions -> {path}", flush=True)
 
     @staticmethod
-    def _metrics(rows, prefix, loss, n_generated, truncated, fast):
+    def _metrics(rows, prefix, loss, n_generated, truncated, fast, timing=None):
         def pct(sel):
             sel = list(sel)
             return sum(r["success"] for r in sel) / len(sel) if sel else float("nan")
 
+        timing = timing or {}
         m = {f"{prefix}_loss": loss,
              f"{prefix}_accuracy": pct(rows),
              f"{prefix}_f1": (sum(r["f1"] for r in rows) / len(rows)) if rows else 0.0,
@@ -366,6 +612,12 @@ class GradeEvaluator:
              f"{prefix}_pass1_share": (sum(r["pass1"] for r in rows) / len(rows)) if rows else 0.0,
              f"{prefix}_generated": n_generated,
              f"{prefix}_gen_truncated": truncated,
+             # The three below are what makes the next round of eval tuning
+             # data-driven instead of a guess (T5f), and `oom_splits` is the
+             # audit trail for the batch-splitting fallback.
+             f"{prefix}_pass1_s": round(timing.get("pass1_s", float("nan")), 2),
+             f"{prefix}_pass2_s": round(timing.get("pass2_s", float("nan")), 2),
+             f"{prefix}_oom_splits": timing.get("oom_splits", 0),
              f"{prefix}_fast": int(fast)}
         for t in sorted({r["type"] for r in rows}):
             m[f"{prefix}_accuracy_{t}"] = pct(r for r in rows if r["type"] == t)

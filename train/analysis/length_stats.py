@@ -12,7 +12,7 @@ arm that sum is one node; for GTLM it is `n_nodes` of them.
 Structural features are switched off: SPD and the magnetic Laplacian do not
 change tokenization, and computing them here would cost minutes for nothing.
 
-    .venv/bin/python -m train.length_stats
+    .venv/bin/python -m train.analysis.length_stats
 """
 import argparse
 import json
@@ -20,13 +20,14 @@ import os
 
 from transformers import AutoTokenizer
 
-from train.batching import packed_lengths
-from train.config import RunConfig
-from train.data import load_split
+from ..batching import packed_lengths
+from ..config import RunConfig
+from ..data import load_split
 
 ARMS = [
-    ("GTLM (graph ball)", "data/datasets/balls/v2", 2048),
-    ("serialised graph", "data/datasets/balls/v2_serialised", 17408),
+    ("GTLM (graph ball)", "data/datasets/balls/v2_clean", 2048),
+    ("serialised graph", "data/datasets/balls/v2_clean_serialised", 17408),
+    ("no retrieval", "data/datasets/balls/v2_clean_noretrieval", 2048),
 ]
 PCTS = [50, 75, 90, 95, 99, 100]
 
@@ -57,7 +58,7 @@ def main():
     ap.add_argument("--model-name", default="google/gemma-3-1b-it")
     ap.add_argument("--splits", default="train,dev,test")
     ap.add_argument("--max-items", type=int, default=0)
-    ap.add_argument("--out", default="train/results/arms_v2/length_stats.json")
+    ap.add_argument("--out", default="train/results/arms_v3/length_stats.json")
     a = ap.parse_args()
 
     tok = AutoTokenizer.from_pretrained(a.model_name)

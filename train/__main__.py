@@ -30,6 +30,16 @@ def build_parser():
 
     p.add_argument("--model-name", default=d.model_name)
     p.add_argument("--impl", choices=IMPLS, default=d.impl)
+    p.add_argument("--flex-compile-mode", default=d.flex_compile_mode,
+                   help="torch.compile mode for the flex kernel (v2-flex only)")
+    p.add_argument("--flex-cache-size-limit", type=int, default=d.flex_cache_size_limit,
+                   help="torch._dynamo recompile budget for the flex kernel")
+    # BooleanOptionalAction, not store_true: the sweep runner renders a false
+    # bool as `--no-<key>`, and a store_true flag would make every GTLM arm in
+    # the sweep die at argparse.
+    p.add_argument("--plain-llm", action=B, default=d.plain_llm,
+                   help="run on stock Gemma-3 + SDPA instead of the GTLM stack "
+                        "(baseline arms only: their balls have no graph nodes)")
     p.add_argument("--dtype", choices=("fp32", "bf16"), default=d.dtype)
     p.add_argument("--lora", action=B, default=d.lora)
     p.add_argument("--lora-r", type=int, default=d.lora_r)
@@ -48,7 +58,7 @@ def build_parser():
     p.add_argument("--data-root", default=d.data_root)
     p.add_argument("--items-root", default=d.items_root,
                    help="the dataset directory carrying the GRADING contract "
-                        "(datasets/generated/v2_final)")
+                        "(datasets/generated/v2_clean)")
     p.add_argument("--types", default=d.types,
                    help="comma-separated subset, e.g. T3,T4,T9,T10 ('' = all)")
     p.add_argument("--max-items", type=int, default=d.max_items,
@@ -70,12 +80,24 @@ def build_parser():
     p.add_argument("--include-f1", action=B, default=d.include_f1)
     p.add_argument("--wandb-project", default=d.wandb_project)
 
-    p.add_argument("--eval-token-budget", type=int, default=d.eval_token_budget)
-    p.add_argument("--gen-token-budget", type=int, default=d.gen_token_budget)
+    p.add_argument("--eval-token-budget", type=int, default=d.eval_token_budget,
+                   help="A100-80GB reference budget; rescaled by the device's "
+                        "own memory at run time (train/evaluate.scaled_budgets)")
+    p.add_argument("--gen-token-budget", type=int, default=d.gen_token_budget,
+                   help="as --eval-token-budget, for the generation pass")
     p.add_argument("--train-token-budget", type=int, default=d.train_token_budget,
-                   help="0 falls back to a fixed --batch-size (which pads badly "
-                        "on this corpus -- see train/batching.py)")
-    p.add_argument("--max-batch", type=int, default=d.max_batch)
+                   help="RETIRED: must be 0.  The training sampler is gone; use "
+                        "--batch-size x --accumulation-steps (see "
+                        "train/batching.py)")
+    p.add_argument("--eval-max-batch", type=int, default=d.eval_max_batch,
+                   help="items per evaluation batch, independent of --batch-size")
+    p.add_argument("--dev-subsample", type=float, default=d.dev_subsample,
+                   help="fraction of dev used for the in-training evals and "
+                        "checkpoint selection (0 or 1 = the whole split); the "
+                        "final dev/test evals always run on everything")
+    p.add_argument("--dev-subsample-seed", type=int, default=d.dev_subsample_seed,
+                   help="CONSTANT across arms and seeds, so every run selects "
+                        "on the identical subset -- do not tie it to --seed")
     p.add_argument("--final-eval", action=B, default=d.final_eval,
                    help="--no-final-eval skips the slow graded dev/test pass "
                         "(timing probes only -- a run without it has no result)")
@@ -91,6 +113,9 @@ def config_from_args(a):
     return RunConfig(
         mode=a.mode,
         model_name=a.model_name, impl=a.impl, dtype=a.dtype,
+        flex_compile_mode=a.flex_compile_mode,
+        flex_cache_size_limit=a.flex_cache_size_limit,
+        plain_llm=a.plain_llm,
         lora=a.lora, lora_r=a.lora_r, lora_dropout=a.lora_dropout,
         spd=a.spd, max_spd=a.max_spd,
         rrwp=a.rrwp, max_rw_steps=a.max_rw_steps,
@@ -108,7 +133,9 @@ def config_from_args(a):
         include_f1=a.include_f1, wandb_project=a.wandb_project,
         eval_token_budget=a.eval_token_budget,
         gen_token_budget=a.gen_token_budget,
-        train_token_budget=a.train_token_budget, max_batch=a.max_batch,
+        train_token_budget=a.train_token_budget,
+        eval_max_batch=a.eval_max_batch,
+        dev_subsample=a.dev_subsample, dev_subsample_seed=a.dev_subsample_seed,
         final_eval=a.final_eval,
     ).validate()
 

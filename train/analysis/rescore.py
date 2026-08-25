@@ -1,5 +1,12 @@
 """Re-grade the four arms' prediction dumps under a repaired grading contract.
 
+> **Historical — `arms_v2` only.** Both repairs are now applied at SOURCE
+> (`qa/spec.py`, `qa/grade.py`, `qa/build_balls.py`) and `generated/v2_clean` is
+> what the defaults read, so an `arms_v3` run is already graded under the
+> repaired contract and there is nothing here to re-apply. This module stays
+> because it is the record of what the repair moved in the `arms_v2` numbers;
+> do not point it at `arms_v3` output.
+
 `data/qa/repair_grading.py` fixes two contracts that rejected answers which
 satisfy the question as asked (T19's arbitrary tie-break over a set of recorded
 examples; T17's incomplete `all_items` allow-list).  Both repairs only ever widen
@@ -14,7 +21,7 @@ Monotonicity is asserted, not assumed: if any item that passed under the origina
 contract fails under the repaired one, the run aborts.  That is what licenses
 re-using the pass-1 rows, whose dumped prediction is the teacher-forced argmax.
 
-    .venv/bin/python -m train.rescore
+    .venv/bin/python -m train.analysis.rescore
 """
 import argparse
 import collections
@@ -22,7 +29,7 @@ import json
 import os
 import statistics as st
 
-from train.qa_contract import grade
+from ..qa_contract import grade
 
 ARM_NAMES = {
     ("v2", True): "GTLM (spd + magnetic)",

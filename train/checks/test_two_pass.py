@@ -1,7 +1,7 @@
 """The licence for the fast path: two-pass == generate-everything, item by item.
 
-    .venv/bin/python -m train.test_two_pass --max-items 32
-    .venv/bin/python -m train.test_two_pass --max-items 32 --checkpoint <dir>
+    .venv/bin/python -m train.checks.test_two_pass --max-items 32
+    .venv/bin/python -m train.checks.test_two_pass --max-items 32 --checkpoint <dir>
 
 Pass 1 declares an item correct without generating anything, on the grounds that
 a teacher-forced forward whose argmax equals the gold token at every answer
@@ -35,10 +35,11 @@ from transformers import AutoTokenizer, set_seed
 
 from gtlm.utils import GraphCollatorV2
 
-from .config import RunConfig
-from .data import load_split
-from .evaluate import GradeEvaluator
-from .qa_contract import contract
+from ..config import RunConfig
+from ..data import load_split
+from ..evaluate import GradeEvaluator
+from ..run import LeftPadCollator
+from ..qa_contract import contract
 
 
 def build_parser():
@@ -94,10 +95,12 @@ def main(argv=None):
             torch_dtype=cfg.torch_dtype())
     model.to("cuda" if torch.cuda.is_available() else "cpu").eval()
 
-    collator = GraphCollatorV2(
+    # The same wrapper the training path uses, so what is verified here is what
+    # actually runs (`to_left_padding` is idempotent, so pass 2 is unaffected).
+    collator = LeftPadCollator(GraphCollatorV2(
         tokenizer=tokenizer, k_hop=cfg.k_hop,
         magnetic_m=cfg.magnetic_m if cfg.magnetic else 0,
-        pad_to_block=(cfg.backend() == "flex"), max_spd=cfg.max_spd)
+        pad_to_block=(cfg.backend() == "flex"), max_spd=cfg.max_spd))
     ev = GradeEvaluator(tokenizer, collator, [split], max_batch=1)
 
     probe = list(range(min(8, len(split))))
@@ -115,10 +118,10 @@ def main(argv=None):
     print("    identical -- decoding is deterministic")
 
     print(f"\n[test] {len(split)} items from {a.split}; two-pass ...", flush=True)
-    two_pass, _loss, n_gen, _tr = ev.score(model, split.ds, fast=False)
+    two_pass, _loss, n_gen, _tr, _t = ev.score(model, split.ds, fast=False)
     print(f"[test] generated {n_gen}/{len(two_pass)}; generate-everything ...",
           flush=True)
-    every, _l2, _g2, _t2 = ev.score(model, split.ds, generate_all=True)
+    every, _l2, _g2, _t2, _tm2 = ev.score(model, split.ds, generate_all=True)
 
     mismatches = [(t["id"], t["success"], e["success"], t["prediction"],
                    e["prediction"])

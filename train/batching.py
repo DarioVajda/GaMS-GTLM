@@ -1,35 +1,38 @@
-"""Batch by TOKEN BUDGET, not by item count.
+"""Packed token counts per graph — and why the training-side batcher is gone.
 
-`balls/v2` runs from 300 to 14,055 packed tokens (p50 1,314, p99 5,605).  A fixed
-`per_device_train_batch_size` over that distribution is not a batch size, it is a
-lottery: every row in a batch is padded up to the batch's longest, and attention
-is quadratic in that length.
+`packed_lengths` is the one thing left here: the number of tokens a graph
+occupies once its node texts are concatenated.  `train/evaluate.py` groups
+evaluation batches by it (attention is quadratic in the PADDED length, and this
+corpus runs from ~300 to 16,384 packed tokens, so a fixed eval batch is either
+wasteful at the bottom or an OOM at the top).
 
-Measured on `ana` (A100-80GB, 2026-08-22, `run_smoke.sbatch` stage 4), batch 4 in
-the shuffled order the stock sampler produces:
+**The `TokenBudgetBatchSampler` that used to live here has been retired from the
+training path** (2026-08-23).  Its entire justification was the answer-tail
+blow-up in `GradeTrainer.compute_loss` — its own docstring said so: *"the loss
+slice is set by the EARLIEST answer position in the batch"*, so one 90-token
+`ni v bazi` ball next to a 6,000-token one forced a 6,000-wide logits slice, 26 GB
+in fp32 at a 262 k vocabulary.  Left-padding the training batches removes that
+at the source (the slice collapses to the longest ANSWER in the batch, a few
+hundred tokens), and once the slice is tight, length-sorting only buys attention
+padding.
 
-    48 - 131 s per optimizer step of 16 items  ==  3 - 8 s per item
+Two reasons not to keep it anyway:
 
-against **0.55 s per item** at batch 1, where nothing is padded at all.  The gap
-is the padding: a batch whose longest member is 6,000 tokens costs 4 x 6000^2 of
-attention no matter how short the other three are.  The same shuffle also OOMs --
-the loss slice `GradeTrainer.compute_loss` computes is set by the EARLIEST answer
-position in the batch, so one 90-token `ni v bazi` ball next to a 6,000-token one
-forces a 6,000-wide logits slice: 26 GB in fp32 at a 262 k vocabulary.
+  * **it made the arms run different optimisations.**  Under a token budget the
+    item count per batch falls out of sequence length, so `arms_v2` gave the GTLM
+    arm 16.5 items x 4,480 steps, the serialised arm 10.9 x 6,824 and the
+    no-retrieval arm 63.9 x 1,160 — a 6x spread on both axes.  A gap between two
+    arms was partly a gap between two schedules.  A fixed
+    `batch_size x accumulation_steps` is identical in every arm by construction.
+  * **length correlates with task type** (full paradigms and high-polysemy words
+    are the long tail), so deterministic length-sorted batches make whole
+    gradient steps out of one kind of item.  Random shuffling is the cleaner
+    choice for a study whose output is a per-type table.
 
-Sorting by length before batching fixes both at once.  Padding nearly vanishes,
-and the answer spans line up so the logits slice is the longest answer in the
-batch (a few hundred tokens) rather than the longest ball.
-
-**Batch composition is deterministic; only the ORDER is shuffled**, per epoch.
-That keeps `__len__` exact -- the Trainer computes the LR schedule from it before
-the first epoch runs -- and makes a run reproducible from its seed.  Items are
-bucketed by length before the tie-break, so which items share a batch is still a
-function of the seed rather than of file order.
+The evaluator keeps its own length-sorted grouping, and that is correct and
+unaffected: no gradients are taken there, so batch composition carries no
+statistical cost.
 """
-import random
-
-import torch
 
 
 def packed_lengths(ds):
@@ -41,61 +44,3 @@ def packed_lengths(ds):
     """
     col = ds._hf_dataset.select_columns("input_ids")["input_ids"]
     return [sum(len(x) for x in row) for row in col]
-
-
-class TokenBudgetBatchSampler(torch.utils.data.Sampler):
-    """Yields lists of indices whose padded cost stays under `budget` tokens.
-
-    `budget` bounds `len(batch) * max_length_in_batch` -- the padded token count,
-    which is what actually gets allocated. An item longer than the budget on its
-    own still gets its own batch: dropping it would silently shrink the corpus.
-    """
-
-    def __init__(self, lengths, budget=8192, max_batch=16, seed=0, bucket=128):
-        self.lengths = list(lengths)
-        self.budget = int(budget)
-        self.max_batch = int(max_batch)
-        self.seed = int(seed)
-        self.bucket = int(bucket)
-        self.epoch = 0
-        self._batches = self._build()
-
-    def _build(self):
-        rng = random.Random(self.seed)
-        order = list(range(len(self.lengths)))
-        rng.shuffle(order)                       # tie-break inside a length bucket
-        order.sort(key=lambda i: self.lengths[i] // self.bucket)
-        batches, cur, cur_max = [], [], 0
-        for i in order:
-            nxt = max(cur_max, self.lengths[i])
-            if cur and (nxt * (len(cur) + 1) > self.budget
-                        or len(cur) >= self.max_batch):
-                batches.append(cur)
-                cur, cur_max = [i], self.lengths[i]
-            else:
-                cur.append(i)
-                cur_max = nxt
-        if cur:
-            batches.append(cur)
-        return batches
-
-    def set_epoch(self, epoch):
-        self.epoch = int(epoch)
-
-    def __iter__(self):
-        order = list(range(len(self._batches)))
-        random.Random(self.seed * 1000 + self.epoch).shuffle(order)
-        for j in order:
-            yield self._batches[j]
-
-    def __len__(self):
-        return len(self._batches)
-
-    def describe(self):
-        sizes = [len(b) for b in self._batches]
-        padded = [len(b) * max(self.lengths[i] for i in b) for b in self._batches]
-        real = sum(self.lengths)
-        return (f"{len(self._batches):,} batches, "
-                f"items/batch min {min(sizes)} mean {sum(sizes) / len(sizes):.1f} "
-                f"max {max(sizes)}; padding waste "
-                f"{100 * (sum(padded) - real) / real:.1f} %")

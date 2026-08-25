@@ -1,0 +1,177 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // arms_v3 — the encoding/retrieval ablation, six configurations x three seeds.
+  //
+  //     .venv/bin/python -m sweep train train/configs/arms_v3.jsonc
+  //
+  // ONE file, ONE sweep call, ONE Slurm array, ONE runs.jsonl.  The four split
+  // `arms_v3fc_*` / `arms_v3p_*` drafts this replaces existed only because the
+  // GPU tiers differed; everything is on B200 now, so the split has no reason to
+  // exist and a single file removes the "change it in three places or the arms
+  // stop being comparable" hazard.
+  //
+  //   #  configuration              input                       stack  biases
+  //   1  GTLM (spd + magnetic)      balls/v2_clean              gtlm   spd+magnetic
+  //   2  GTLM, no bias              balls/v2_clean              gtlm   none
+  //   3  serialised — GTLM stack    balls/v2_clean_serialised   gtlm   none
+  //   4  serialised — plain stack   balls/v2_clean_serialised   plain  n/a
+  //   5  no retrieval — plain stack balls/v2_clean_noretrieval  plain  n/a
+  //   6  no retrieval — GTLM stack  balls/v2_clean_noretrieval  gtlm   none
+  //
+  // Arms 3-6 ship balls with ZERO graph nodes -- the subgraph is flattened into
+  // the prompt (3, 4) or absent entirely (5, 6) -- so arms 4 and 5 differ in
+  // exactly one thing: whether the graph's text is in the prompt.
+  //
+  // The contrasts this design answers (train/analysis/report_arms.py reports each of them
+  // PAIRED BY SEED):
+  //
+  //   Retrieval        4 vs 5   is the subgraph worth anything at all
+  //   Structural bias  1 vs 2   does the bias make the graph usable
+  //   Graph encoding   1 vs 3   THE HEADLINE — encoding, stack held fixed
+  //   Stack cost       3 vs 4   what SDPA + sliding_window=512 buys on a long input
+  //   Stack control    5 vs 6   the same stack difference where it CANNOT act (~0)
+  //
+  // Why the stack is worth three runs: serialised prompts are p50 2,166 / p99
+  // 10,014 tokens and stock Gemma-3 applies `sliding_window=512` in 22 of its 26
+  // layers, which `GTLMGemma3ForCausalLM` drops.  That is a large capability
+  // difference sitting directly on top of the encoding claim, and without arm 3
+  // there is no way to tell the two apart.  Arm 6 is a negative CONTROL, not a
+  // fifth measurement: the no-retrieval input is p50 ~35 tokens and max well
+  // under 512, so the window cannot bite -- if arms 5 and 6 do not land on top of
+  // each other, contrast 4 is not measuring the window and the reading of
+  // contrast 3 has to change.
+  //
+  // What this replaces (arms_v2, and why its numbers are unusable):
+  //   1. nothing converged -- 3 epochs, dev accuracy still rising in every arm,
+  //      best checkpoint the LAST one in all 12 runs;
+  //   2. the arms were not running the same optimisation -- under token-budget
+  //      batching the item count per batch fell out of sequence length, giving a
+  //      6x spread in both effective batch and update count across arms;
+  //   3. two grading contracts were wrong and were repaired post hoc.
+  // All three are fixed here; see TODO.md and train/README.md.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "arms_v3",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 4,
+      "partition": "frida",
+      "account": "povejmo",
+      // ── B200 only, not B200|B300 ────────────────────────────────────────
+      // Of the four B300 hosts, ixb5 is drained (GPU7 unrecoverable memory
+      // error) and ixb7's enroot mellanox hook still fails on a missing
+      // /dev/infiniband/rdma_cm -- a host-config fault no user can fix.
+      // Including B300 would let part of the array land on a node where the
+      // container cannot start.  ixb1-ixb4 are healthy.  Re-add B300 once ixb7
+      // is repaired.
+      //
+      // ONE tier for all 18 runs is not a preference: a gap measured across two
+      // hardware or software stacks is not a measurement of the thing being
+      // compared.
+      "gpus": ["B200"],
+      // Blackwell hosts are Ubuntu 24.04 / python3.12 and this repo's venv is
+      // 3.10, so a BARE job there dies on imports.  The pyxis container is a
+      // py3.10 base and the venv resolves inside it.  The one thing that used to
+      // block it -- `.venv/bin/python` being an absolute symlink to
+      // /opt/deepops/venv/bin/python, a host path with no counterpart in the
+      // image -- is fixed: it now points at /usr/bin/python3 (same 3.10.12).
+      // Do NOT substitute PYTHONPATH for running the venv interpreter directly;
+      // that leaves the image's dist-packages on the path and its torchvision
+      // loads against our torch (`operator torchvision::nms does not exist`).
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 8,
+      "mem": "128G",
+      // One limit covers every arm and has to fit the slowest.  Measured on
+      // A100 the serialised arm on the GTLM stack took 4.16 h for 3 epochs, so
+      // ~11 h for 8; B200 is faster, but a killed run loses everything, so the
+      // headroom is deliberate.
+      "time": "16:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "google/gemma-3-1b-it",
+  "types": "",                       // "" = every type present in data_root
+  // The GRADING contract and the training targets.  v2_clean is NOT a
+  // re-spelling of v2_graded: 76 of 2,184 test ANSWERS differ (T19 x62,
+  // T17 x14) and the grading block was restructured.  See train/config.py.
+  "items_root": "data/datasets/generated/v2_clean",
+
+  // The arm axis as a BUNDLE (a list of objects) rather than six lists: six
+  // lists would be six independent axes and expand to their product, adding
+  // configurations nobody asked for (a serialised prompt WITH the magnetic bias
+  // over a one-node graph is not a thing).  A bundle is one axis whose values
+  // are coherent settings.
+  //
+  // `max_length` is a PER-NODE tokenization cap.  The graph arms' longest node
+  // text is 670 characters, so 2048 never binds; the serialised arm packs the
+  // whole flattened ball into its single prompt node, which qa/build_variants
+  // bounds at 16,384 tokens.
+  //
+  // `batch_size` x `accumulation_steps` = 16 in EVERY arm.  Only the PRODUCT is
+  // scientifically binding -- gradient accumulation normalised by
+  // `num_items_in_batch` yields the same average gradient however the 16 items
+  // are split, so the factorisation is a pure memory/throughput knob.  It is set
+  // per arm from the arms_v3_timing runs, and `run.py` derives `max_steps` from
+  // the product so every arm runs exactly the same number of optimizer steps
+  // whatever factorisation it uses.  Arms 5/6 are ~35-token sequences and would
+  // be almost entirely kernel-launch overhead at a small micro-batch.
+  "arm": [
+    {"data_root": "data/datasets/balls/v2_clean",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls/v2_clean",             "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls/v2_clean_serialised",  "plain_llm": false, "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls/v2_clean_serialised",  "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls/v2_clean_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1},
+    {"data_root": "data/datasets/balls/v2_clean_noretrieval", "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1}
+  ],
+  "seed": [0, 1, 2],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 5e-4,
+  // Binds on arm 1 ONLY -- it is the sole configuration with `graph_bias`
+  // parameters (every other arm reports `Custom Graph Biases: 0`).  That is
+  // legitimate, since it is a hyperparameter *of* the thing being ablated, but
+  // it is disclosed in train/README.md, and `lr` (LoRA) stays shared and untuned
+  // across arms so the study is not two tuned knobs against zero.
+  "bias_lr": 1e-2,
+
+  // The token-budget TRAINING sampler is retired; 0 is the only accepted value
+  // and a non-zero one raises (train/config.py).  Stated explicitly rather than
+  // left to the default so the provenance file records the decision.
+  "train_token_budget": 0,
+  "num_epochs": 8,
+  // 400 gives evals at 400 … 4,400; `run.py`'s EvaluateOnFinalStep callback adds
+  // one at step 4,632, because 400 does not divide 4,632 and HF's Trainer does
+  // not evaluate or save at the end of training -- as configured without it the
+  // last 232 steps would be trained and silently discarded.  Total: 12 evals.
+  "eval_steps": 400,
+  // Items per EVALUATION batch, independent of the training micro-batch: they
+  // used to share one knob, so lowering the training batch for memory quartered
+  // evaluation throughput as a side effect.
+  "eval_max_batch": 16,
+  // In-training evals and checkpoint selection run on a fixed, stratified 50 %
+  // of dev (527 of 1,040 items, all 18 dev types intact), chosen from a CONSTANT
+  // seed so every arm and every seed selects on the identical subset.  The final
+  // dev (1,040) and test (2,184) evaluations run over everything.  Disclosed in
+  // train/README.md: selecting on ~527 items and taking the best of 12
+  // evaluations gives the reported DEV figure a mild optimistic bias; the TEST
+  // figure is untouched by this and is the number to quote.
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

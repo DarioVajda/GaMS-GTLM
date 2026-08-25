@@ -22,12 +22,16 @@ exact offsets, so the boundary is read off the string itself.
 
 Two things travel alongside the training dataset:
 
-  * **the grading contract**, joined on `id` from `datasets/generated/v2_final`.
-    The ball carries the answer; only the dataset carries `grading` (`mode`,
-    `sep`, `arity`, and for T17 `quantity_band`, `n_asked`, `n_all`,
-    `all_items`), and `qa.grade.grade` needs both.  The join asserts the two
-    answers agree — the ball and the dataset must not disagree about what is
-    being supervised, enforced on every run rather than checked once.
+  * **the grading contract**, joined on `id` from `datasets/generated/v2_clean`.
+    The ball carries the answer; only the dataset carries the item-level
+    `grading` facts (for T17 and T19: `quantity_band`, `n_asked`, `n_all`,
+    `all_items`), and `qa.grade.grade` needs both.  The TYPE-level fields
+    (`mode`, `sep`, `arity`, `regex`) come from `qa/spec.py`, not from the row —
+    an in-row constant is how T19 kept being graded `sequence` for a whole run
+    after the spec said otherwise.  The join asserts the two answers agree — the
+    ball and the dataset must not disagree about what is being supervised,
+    enforced on every run rather than checked once.  See `train/config.py`'s
+    `ITEMS_ROOT` for why `v2_clean` and `v2_graded` are not interchangeable.
   * **a generation copy** of each eval split, identical in every way except that
     its prompt node stops at `ODGOVOR:`.  Pass 2 of the evaluator decodes from
     it; building it here means the structural features are computed with the
@@ -35,6 +39,9 @@ Two things travel alongside the training dataset:
 """
 import os
 import json
+import random
+import hashlib
+import collections
 from dataclasses import dataclass, field
 
 import networkx as nx
@@ -58,7 +65,38 @@ class Split:
         return len(self.rows)
 
 
-def _read(path, types=(), cap=0, spread=False):
+def stratified_subset(rows, frac, seed):
+    """A fixed ~`frac` subsample of `rows`, stratified by task type.
+
+    Used for the in-training dev evaluations and for checkpoint selection (T6):
+    the full 1,040-item dev split is evaluated twelve times per run and eighteen
+    runs pay for it, and half of it selects the same checkpoint at half the cost.
+
+    Stratified so all 19 types survive with their share intact -- an unstratified
+    half would thin the small types to single digits and make the per-type dev
+    column unreadable.  `seed` is a CONSTANT, never `cfg.seed`: every arm and
+    every seed must select on the *identical* subset, or the comparison between
+    two arms includes a difference in which items they were selected on.
+
+    Returns `(kept_ids, descriptor)`.  The descriptor goes in the run record so
+    the subset is recoverable from the results file alone.
+    """
+    by_type = collections.defaultdict(list)
+    for r in rows:
+        by_type[r["type"]].append(r["id"])
+    rng = random.Random(seed)
+    keep = []
+    for t in sorted(by_type):
+        ids = sorted(by_type[t])
+        k = max(1, round(len(ids) * frac))
+        keep.extend(rng.sample(ids, min(k, len(ids))))
+    keep = sorted(keep)
+    digest = hashlib.sha256("\n".join(keep).encode("utf-8")).hexdigest()[:16]
+    return keep, {"n": len(keep), "n_full": len(rows), "frac": frac,
+                  "seed": seed, "sha256_16": digest}
+
+
+def _read(path, types=(), cap=0, spread=False, keep_ids=None):
     """`cap` takes the first N; `spread` takes N evenly across the whole file.
 
     The items are written type by type, so the first 24 rows are 24 T1 items --
@@ -67,11 +105,14 @@ def _read(path, types=(), cap=0, spread=False):
     it never sees a `multiset` or `membership` item and checks nothing about the
     modes the fast path actually exists for.
     """
+    keep_ids = set(keep_ids) if keep_ids is not None else None
     rows = []
     with open(path, encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
             if types and r["type"] not in types:
+                continue
+            if keep_ids is not None and r["id"] not in keep_ids:
                 continue
             rows.append(r)
             if cap and not spread and len(rows) >= cap:
@@ -99,7 +140,7 @@ def _read_items(path, rows):
             raise ValueError(
                 f"item {row['id']}: the ball and the dataset disagree about the "
                 f"answer.  Rebuild both in one pass (qa/run_build_balls.sbatch "
-                f"writes datasets/balls/... and datasets/generated/v2_final "
+                f"writes datasets/balls/... and datasets/generated/v2_clean "
                 f"together); ONE artefact has to be the authority for the target.\n"
                 f"  ball:    {row['answer']!r}\n  dataset: {src['answer']!r}")
         items.append({"id": src["id"], "type": src["type"], "band": src["band"],
@@ -203,9 +244,10 @@ def _features(ds, cfg):
     return ds
 
 
-def load_split(cfg, tokenizer, split, with_generation, spread=False):
+def load_split(cfg, tokenizer, split, with_generation, spread=False,
+               keep_ids=None, name=None):
     path = os.path.join(cfg.data_root, f"{split}.jsonl")
-    rows = _read(path, cfg.type_list(), cfg.max_items, spread)
+    rows = _read(path, cfg.type_list(), cfg.max_items, spread, keep_ids)
     if not rows:
         raise FileNotFoundError(
             f"no items for types={cfg.type_list() or 'ALL'} in {path} -- build the "
@@ -224,10 +266,34 @@ def load_split(cfg, tokenizer, split, with_generation, spread=False):
         gen_ds.tokenize(tokenizer, max_length=cfg.max_length, add_eos=False)
         gen_ds.cast_float_features_to_fp32()
 
-    print(f"[data] {split}: {len(ds)} graphs"
+    name = name or split
+    print(f"[data] {name}: {len(ds)} graphs"
           f"{' (+ generation copy)' if gen_ds is not None else ''}", flush=True)
-    return Split(name=split, rows=rows, items=items, ds=ds, gen_ds=gen_ds,
+    return Split(name=name, rows=rows, items=items, ds=ds, gen_ds=gen_ds,
                  needs_generation=[needs_generation(it) for it in items])
+
+
+def load_dev_subsample(cfg, tokenizer):
+    """The `dev_fast` split the in-training evals and checkpoint selection use.
+
+    `(Split, descriptor)`, or `(None, None)` when `cfg.dev_subsample` is off.
+    A second, independently built dataset over a subset of the same rows -- not a
+    view -- so the structural features and the tokenisation come from the same
+    code path as the full split's.
+    """
+    if not cfg.dev_subsample or cfg.dev_subsample >= 1.0:
+        return None, None
+    path = os.path.join(cfg.data_root, "dev.jsonl")
+    rows = _read(path, cfg.type_list(), cfg.max_items)
+    keep, descriptor = stratified_subset(rows, cfg.dev_subsample,
+                                         cfg.dev_subsample_seed)
+    split = load_split(cfg, tokenizer, "dev", with_generation=True,
+                       keep_ids=keep, name="dev_fast")
+    print(f"[data] dev_fast: {descriptor['n']}/{descriptor['n_full']} items, "
+          f"stratified over {len({r['type'] for r in rows})} types, "
+          f"seed {descriptor['seed']}, sha256:{descriptor['sha256_16']}",
+          flush=True)
+    return split, descriptor
 
 
 def load_data(cfg, tokenizer, generation_splits=("dev", "test")):
