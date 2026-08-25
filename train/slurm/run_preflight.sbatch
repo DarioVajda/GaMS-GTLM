@@ -105,6 +105,24 @@ step "2e. left padding in FP32 -- the sharp version of 2a"
 step "2f. left padding in FP32 -- PLAIN stack (where RoPE angles also move)"
 "$PY" -m train.checks.test_left_pad --data-root "$BALLS/v2_clean_noretrieval" \
       --plain-llm --dtype fp32 --batch-size 16 --max-length 2048 || rc=1
+
+# 2f alone does NOT cover the plain stack's real hazard.  Its sequences are
+# L = 27..270 and Gemma-3's `sliding_window=512` never engages below that, so it
+# checks left padding where the window CANNOT act.  The serialised arm is p50
+# 2,166 / max ~14 k tokens, where 22 of 26 layers are windowed and the leading
+# pads occupy part of that window -- a genuinely different computation from the
+# right-padded one if anything is wrong.  2c (the bf16 version) is where the only
+# preflight failure has ever landed, and bf16 cannot tell a real difference from
+# its own rounding there; this stage can.
+#
+# The widest right-padded batches are the expensive part -- 113 GiB for the
+# 13,973-token `mixed` one, measured -- which fits a B200's 183 GiB but would not
+# fit a smaller card.  `test_left_pad` catches an OOM there, reports the row as
+# `OOM` and carries on, so this stage still answers its question on a smaller
+# GPU: the batches that decide it are the `long` ones at ~10 GiB.
+step "2g. left padding in FP32 -- PLAIN stack, SERIALISED (the windowed case)"
+"$PY" -m train.checks.test_left_pad --data-root "$BALLS/v2_clean_serialised" \
+      --plain-llm --dtype fp32 --batch-size 4 --max-length 17408 || rc=1
 fi
 
 if want 3; then

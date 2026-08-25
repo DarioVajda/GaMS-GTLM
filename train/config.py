@@ -109,6 +109,11 @@ UNWIRED_FEATURES = ("laplacian", "rwse")
 # never contain, or the mask would cut at the wrong place; every generated question
 # is Slovene prose and every answer line starts `ODGOVOR:` (QA_TASKS.md 0.1), so
 # the prefix below is the one token sequence guaranteed to appear exactly once.
+#
+# The chat template leaves it intact rather than competing with it: gemma writes
+# `<start_of_turn>model\nODGOVOR: …`, so the marker is still preceded by exactly
+# the newline this constant carries, and cutting the wrapped text here yields the
+# template's own generation prompt.  See `train/chat.py`.
 ANSWER_PREFIX = "\nODGOVOR:"
 
 
@@ -148,6 +153,13 @@ class RunConfig:
     # This also restores Gemma-3's sliding_window=512 (22 of 26 layers), which
     # GTLMGemma3ForCausalLM drops -- see train/README.md.  That is the
     # pretrained configuration, so the baseline runs on-distribution.
+    #
+    # "On-distribution" is a claim about the INPUT as much as the kernels, and it
+    # used to be false on the half that matters more: the prompt was a bare
+    # `"{question}\nODGOVOR: {answer}"` with no `<bos>` and no turn markers, fed
+    # to an instruction-tuned checkpoint.  It is now written by the model's own
+    # chat template (`train/chat.py`), which is what makes this arm a floor the
+    # GTLM numbers have to clear rather than an understatement of the backbone.
     plain_llm: bool = False
     dtype: str = "bf16"
     lora: bool = True

@@ -34,8 +34,10 @@ Four conditions make the equivalence exact; all four are enforced here:
 
   * **greedy only** -- `do_sample=False`, no beams, no repetition/length penalty;
   * **the stop token is checked** -- the label span produced by
-    `train/data.py`'s masker ends with the appended EOS, so "every answer
-    position is argmax" already includes "and then it stops";
+    `train/data.py`'s masker ends with the `<end_of_turn>` the chat template
+    closes the model turn with, so "every answer position is argmax" already
+    includes "and then it stops".  Generation stops on that token too (and on
+    `<eos>`, which gemma-3 also lists as a terminator);
   * **tokenisation false negatives are safe** -- pass 1 compares against ONE
     tokenisation of the gold string, so a model that would emit a different token
     sequence decoding to the same text is a pass-1 *miss*; it falls through to
@@ -61,6 +63,7 @@ from torch.nn.attention import sdpa_kernel, SDPBackend
 from transformers import GenerationConfig
 
 from .config import ANSWER_PREFIX
+from .chat import stop_token_ids
 from .qa_contract import grade
 from ._log import quiet_repeated_sliding_window_warning
 from .batching import packed_lengths
@@ -321,13 +324,20 @@ class GradeEvaluator:
         self.greedy_kwargs = dict(do_sample=False, num_beams=1,
                                   use_model_defaults=False)
         self._gen_cfg_cache = {}
+        # `<end_of_turn>` first, `<eos>` behind it -- NOT `tokenizer.eos_token_id`
+        # alone.  The prompt is a chat turn now (`train/chat.py`) and the answer
+        # the model is trained to produce ends by closing that turn; stopping only
+        # on `<eos>` would let every generation run past its own ending to the
+        # `max_new_tokens` cap, and pass 2 would grade a trailing hallucination
+        # that pass 1 declared a clean stop.
+        self.stop_ids = stop_token_ids(tokenizer)
         self.gen_cfg = GenerationConfig(
             do_sample=False, num_beams=1,
             repetition_penalty=1.0, length_penalty=1.0,
             max_new_tokens=self.max_new_tokens,
             pad_token_id=(tokenizer.pad_token_id if tokenizer.pad_token_id is not None
-                          else tokenizer.eos_token_id),
-            eos_token_id=tokenizer.eos_token_id,
+                          else self.stop_ids[0]),
+            eos_token_id=self.stop_ids,
         )
 
     # ── plumbing ───────────────────────────────────────────────────────────
@@ -515,7 +525,7 @@ class GradeEvaluator:
             new = out[:, prompt_len:]
             for j, i in enumerate(rows):
                 seq = new[j].tolist()
-                if self.tok.eos_token_id not in seq:
+                if not any(t in seq for t in self.stop_ids):
                     state["truncated"] += 1
                 text = self.tok.decode(seq, skip_special_tokens=True)
                 # The marker itself was the last thing the model was shown, so it

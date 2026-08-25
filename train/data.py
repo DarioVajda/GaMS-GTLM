@@ -10,8 +10,16 @@ Graph layout, one item:
 
     node 0 .. N-1   the ball, texts verbatim from the KG
                     (`iztočnica: gora (…)`, `oblika: gore (…)`, `pomen: …`, …)
-    node N          the PROMPT node, `"{question}\\nODGOVOR: {answer}"`
+    node N          the PROMPT node, the item as ONE CHAT TURN PAIR in the
+                    backbone's own format (`train/chat.py`):
+                    `<bos><start_of_turn>user\\n{question}<end_of_turn>\\n`
+                    `<start_of_turn>model\\nODGOVOR: {answer}<end_of_turn>`
     edges           the ball's own induced edges, plus prompt -> every anchor
+
+The template goes on the prompt node ONLY -- the ball's nodes are retrieved KG
+text, not dialogue, and stay verbatim.  See `train/chat.py` for why this is the
+default rather than an option, and why `<bos>` belongs there even though on the
+GTLM stack that puts it mid-sequence.
 
 Label masking is done on **character offsets**, not on a token-id subsequence.
 The usual trick — encode the delimiter alone and search for that id sequence — is
@@ -49,6 +57,7 @@ import networkx as nx
 from gtlm.utils import TextGraphDataset
 
 from .config import ANSWER_PREFIX
+from .chat import chat_prompt, stop_token_ids
 from .qa_contract import needs_generation
 
 
@@ -150,26 +159,28 @@ def _read_items(path, rows):
     return items
 
 
-def _prompt_text(row, with_answer=True):
-    """The prompt node's text.  `answer` already carries the `ODGOVOR: ` tag
-    (QA_TASKS.md 0.1), so the marker is never re-added -- it is joined with the
-    newline the label mask keys on.  Without the answer the text stops at exactly
-    that marker, which is what generation continues from."""
-    text = f"{row['question']}\n{row['answer']}"
-    if with_answer:
-        return text
-    cut = text.rfind(ANSWER_PREFIX)
-    return text[:cut + len(ANSWER_PREFIX)]
+def _prompt_text(row, tokenizer, with_answer=True):
+    """The prompt node's text: the item written as the backbone's own chat turns.
+
+    The tokenizer is a parameter because the FORMAT is the tokenizer's -- it ships
+    the jinja template, and reproducing its output here by hand is how the
+    trainer would end up with a second opinion about what a turn looks like.
+    `train/chat.py` holds the one call and the reasoning.
+    """
+    return chat_prompt(tokenizer, row["question"], row["answer"],
+                       with_answer=with_answer)
 
 
-def _graph(row, with_answer=True):
+def _graph(row, tokenizer, with_answer=True):
     g = nx.DiGraph()
+    # The ball's own nodes are NOT wrapped: verbatim KG text is the context the
+    # model retrieves through, not a conversation it had.
     for i, t in enumerate(row["nodes"]):
         g.add_node(i, text=t)
     for u, v in row["edges"]:
         g.add_edge(u, v)
     prompt = len(row["nodes"])
-    g.add_node(prompt, text=_prompt_text(row, with_answer))
+    g.add_node(prompt, text=_prompt_text(row, tokenizer, with_answer))
     # One edge per matched lexical unit.  D3's lookup returns a UNION when a
     # surface string owns several units (9.3 % of items), and choosing between
     # them is the model's job -- attaching the prompt to only the first would
@@ -195,7 +206,13 @@ class OffsetLabelMasker:
 
     Uses the LAST occurrence: a question could in principle quote the marker (a
     corpus sentence in a T20 question is arbitrary text), and the delimiter that
-    matters is the one the answer follows.
+    matters is the one the answer follows.  The chat markers do not disturb this
+    -- the template writes `<start_of_turn>model\\nODGOVOR: …`, so the marker is
+    still preceded by exactly the newline `ANSWER_PREFIX` carries.
+
+    The supervised span therefore runs from the first answer character through
+    the `<end_of_turn>` the template closes the model turn with, which is what
+    teaches the model to stop.
     """
 
     def __init__(self, tokenizer, max_length, marker=ANSWER_PREFIX):
@@ -206,6 +223,7 @@ class OffsetLabelMasker:
         self.tok = tokenizer
         self.max_length = max_length
         self.marker = marker
+        self.stop_id = stop_token_ids(tokenizer)[0]
 
     def __call__(self, example):
         p = example["prompt_node"]
@@ -226,11 +244,24 @@ class OffsetLabelMasker:
                 labels[i] = -100
             else:
                 supervised += 1
-        # `tokenize(add_eos=True)` appends one id past the offsets, and it must
-        # stay supervised or the model is never taught to stop.
-        if not supervised and len(labels) <= len(enc["offset_mapping"]):
+        if not supervised:
             raise ValueError(
                 f"The answer span is empty after masking: {text[:200]!r}")
+        # The stop token is no longer appended after tokenization -- it is part
+        # of the text, written by the chat template -- so `max_length` can now
+        # truncate it away.  That would train an item whose answer never ends,
+        # silently, and pass 1's "and then it stops" would be false for it.  So
+        # it is checked on every item instead of assumed.
+        if ids[-1] != self.stop_id:
+            raise ValueError(
+                f"the prompt node does not end on the stop token "
+                f"(id {self.stop_id}): it needs "
+                f"{len(self.tok(text, add_special_tokens=False)['input_ids'])} "
+                f"tokens and max_length={self.max_length} cut it short, so the "
+                f"model would never be taught to stop on this item.  Raise "
+                f"`max_length` for this data_root, or lower "
+                f"qa/build_variants.py's prompt budget.  Answer: "
+                f"{text[cut:cut + 120]!r}")
         return labels
 
 
@@ -254,15 +285,21 @@ def load_split(cfg, tokenizer, split, with_generation, spread=False,
             f"balls first (gams_gtlm/data/qa/run_build_balls.sbatch)")
     items = _read_items(os.path.join(cfg.items_root, f"{split}.jsonl"), rows)
 
-    ds = _features(TextGraphDataset([_graph(r) for r in rows]), cfg)
-    ds.tokenize(tokenizer, max_length=cfg.max_length, add_eos=True)
+    # `add_eos=False` on BOTH copies.  The teacher-forced copy carries its own
+    # terminator -- the `<end_of_turn>` the chat template closes the model turn
+    # with -- and appending `<eos>` after it would teach the model to emit a
+    # two-token ending its own checkpoint never produces.  `OffsetLabelMasker`
+    # verifies the turn end survived tokenization on every item.
+    ds = _features(TextGraphDataset([_graph(r, tokenizer) for r in rows]), cfg)
+    ds.tokenize(tokenizer, max_length=cfg.max_length, add_eos=False)
     ds.compute_labels(OffsetLabelMasker(tokenizer, cfg.max_length), num_proc=1)
     ds.cast_float_features_to_fp32()
 
     gen_ds = None
     if with_generation:
         gen_ds = _features(
-            TextGraphDataset([_graph(r, with_answer=False) for r in rows]), cfg)
+            TextGraphDataset([_graph(r, tokenizer, with_answer=False)
+                              for r in rows]), cfg)
         gen_ds.tokenize(tokenizer, max_length=cfg.max_length, add_eos=False)
         gen_ds.cast_float_features_to_fp32()
 

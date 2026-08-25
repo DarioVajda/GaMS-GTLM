@@ -52,6 +52,16 @@ EDGES_HEADER = "POVEZAVE:"
 # costs **8 of 9,266 train items** (0.09 %) some trailing nodes.  Every truncated
 # row is flagged `serialised_truncated` and counted in this script's output, so
 # the caveat is auditable rather than implicit.
+#
+# What this budget does NOT count: the trainer wraps the prompt in the backbone's
+# chat turns (`train/chat.py`), which adds exactly 9 tokens per item -- `<bos>`,
+# the two `<start_of_turn>` headers with their newlines, and the two
+# `<end_of_turn>`s.  Left uncounted deliberately: the balls on disk were fitted
+# against the bare string, and re-measuring here would move `serialised_nodes`
+# for the handful of items sitting exactly on the boundary, i.e. change the
+# dataset without changing what it is for.  The 9 tokens are absorbed by the
+# arm's own `max_length` (17,408, so 1,024 of slack), and `train/data.py`'s label
+# masker raises if a prompt node ever does lose its turn end to truncation.
 MAX_PROMPT_TOKENS = 16_384
 
 

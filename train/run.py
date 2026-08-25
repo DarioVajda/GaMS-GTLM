@@ -277,6 +277,12 @@ def _save_train_record(cfg, run_name, sizes, results, runs_jsonl, sweep_meta=Non
         # differing ONLY in which stack they run on.  Without `stack` two of the
         # four contrasts the study is built around are unreadable from this file.
         "stack": cfg.stack(), "plain_llm": cfg.plain_llm,
+        # Stamped so a run trained on the backbone's chat template cannot be read
+        # next to one trained on the bare `"{question}\nODGOVOR: {answer}"` string
+        # and mistaken for a comparable measurement.  Every record written before
+        # 2026-08-25 lacks this key; that absence IS the old format.  See
+        # `train/chat.py`.
+        "prompt_format": "chat_template",
         "flex_compile_mode": cfg.flex_compile_mode,
         "flex_cache_size_limit": cfg.flex_cache_size_limit,
         "spd": cfg.spd, "rrwp": cfg.rrwp, "magnetic": cfg.magnetic,

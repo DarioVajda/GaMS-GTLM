@@ -38,7 +38,7 @@ merely *runs against* it sits one level down.
 ```
 train/
   config.py  data.py  run.py  evaluate.py    the training path
-  batching.py  qa_contract.py                 shared by it
+  batching.py  chat.py  qa_contract.py        shared by it
   _io.py  _log.py                             helpers
   __main__.py                                 one run: python -m train
   checks/     check_labels  test_left_pad  test_two_pass  probe_eval
@@ -116,7 +116,7 @@ Graph layout per item:
 
 ```
 node 0 .. N-1   the ball  (iztočnica: gora (…) / oblika: gore (…) / pomen: … / …)
-node N          the PROMPT node,  "{question}\nODGOVOR: {answer}"
+node N          the PROMPT node, the item as one chat turn pair (see below)
 edges           the ball's parent->child edges, plus prompt -> EVERY anchor
 ```
 
@@ -132,6 +132,76 @@ The caps in `build_balls.py` are a token budget, not a relevance judgement.
 Sizes (`balls/v2`, packed tokens): p50 1,314, p90 2,610, p99 5,605, max 14,055 —
 **not** v1's ~32 nodes / 550–780 tokens. Two things follow, and both are handled
 rather than assumed: see "Cost" below.
+
+## Prompt format: the backbone's own chat turns
+
+The backbone is `google/gemma-3-1b-it` — an **instruction-tuned** checkpoint. The
+prompt node is written in its own turn format, by its own template
+(`train/chat.py` → `tokenizer.apply_chat_template`):
+
+```
+<bos><start_of_turn>user
+{question}<end_of_turn>
+<start_of_turn>model
+ODGOVOR: {answer}<end_of_turn>
+```
+
+Until 2026-08-25 it was the bare string `"{question}\nODGOVOR: {answer}"`. That
+was not a stylistic choice, it was the wrong input, in three ways:
+
+* **no `<bos>`.** Gemma-3 is trained with one on every sequence
+  (`add_bos_token: true`), and `TextGraphDataset.tokenize` passes
+  `add_special_tokens=False` — so it was dropped on every arm.
+* **no turn markers.** The `-it` weights were tuned entirely inside
+  `<start_of_turn>…<end_of_turn>`; without them the adapter spends its capacity
+  relearning a format the checkpoint already knows.
+* **the wrong terminator.** Training appended `<eos>` where this checkpoint's own
+  answers end with `<end_of_turn>`.
+
+It is the **default and the only behaviour** — no flag. There is no arm for which
+the old spelling is right, and a flag would only preserve the ability to
+reproduce a mistake.
+
+Where it is applied differs by stack, and that difference is the point:
+
+| stack | what gets the template |
+|---|---|
+| plain (arms 4, 5) | the whole sequence — the ball has zero graph nodes, so the prompt node *is* the input, and the model reads exactly what `apply_chat_template` writes |
+| GTLM (arms 1, 2, 3, 6) | **the prompt node only.** The ball's nodes stay verbatim KG text |
+
+The graph nodes are not wrapped because they are not dialogue: they are retrieved
+context the adapter reaches through the structural bias, and wrapping each of
+them in a user turn would assert hundreds of turns of a conversation that never
+happened.
+
+That puts `<bos>` at the start of the prompt node, which on the GTLM stack sits
+*mid-sequence*. Deliberate: `node_position_mode='reset'` gives every node its own
+positions from 0, so the prompt node genuinely is a sequence start as the model
+sees it — and the alternative, dropping it, would leave the GTLM arms as the only
+ones with no `<bos>` anywhere, which is one of the three defects above.
+
+Two consequences downstream, both handled:
+
+* **the stop token is `<end_of_turn>`, not `<eos>`.** It comes from the template,
+  so it is part of the *text* rather than appended after tokenization — which
+  means `max_length` can now truncate it away. `OffsetLabelMasker` checks the
+  prompt node's last id on every item and raises rather than silently training an
+  answer that never ends. Generation stops on `<end_of_turn>` **and** `<eos>`
+  (gemma-3 lists both), so a checkpoint emitting either is graded on what it
+  produced instead of decoding to the cap.
+* **the generation copy is a truncation, not a second template call.** Cutting
+  the full text at the last `\nODGOVOR:` yields exactly
+  `apply_chat_template(…, add_generation_prompt=True) + "ODGOVOR:"`, and
+  guarantees the teacher-forced and generation copies share a byte-identical
+  prefix — which is what pass 1's equivalence argument rests on.
+
+The turn markers cost **exactly 9 tokens** per item (measured, constant across
+200 dev items: `<bos>`, the two `<start_of_turn>` headers with their newlines,
+and the two `<end_of_turn>`s, less the trailing newline that is stripped). The
+serialised arm's prompt budget (`qa/build_variants.py`, 16,384) is measured on
+the unwrapped string, so its balls on disk are 9 tokens under-counted;
+`max_length=17408` leaves 1,024 of slack, so nothing truncates and no rebuild is
+needed.
 
 ## The join: ball + contract
 
@@ -266,8 +336,9 @@ Four conditions make the equivalence exact, and all four bit during development:
   `use_model_defaults=False` plus the flags as `generate()` kwargs pins it, and
   `test_two_pass.py` decodes a slice twice and compares, so a regression here
   fails loudly instead of quietly invalidating every number.
-* **the stop token is checked** — the supervised span ends with the appended EOS,
-  so "every answer position is argmax" already includes "and then it stops".
+* **the stop token is checked** — the supervised span ends with the
+  `<end_of_turn>` the chat template closes the model turn with, so "every answer
+  position is argmax" already includes "and then it stops".
 * **tokenisation false negatives are safe** — pass 1 compares one tokenisation of
   the gold string, so a model emitting a different token sequence for the same
   text is a pass-1 *miss*; it falls through to pass 2 and is graded properly.
@@ -599,9 +670,23 @@ decoder.
 ### `arms_v3` (the study)
 
 <!-- ARMS_V3_RESULTS -->
-*Not yet filled in — the sweep is running. `report_arms.py` writes
+*Not yet filled in. `report_arms.py` writes
 `train/results/arms_v3/report_arms.md`; this section carries its tables plus the
 convergence verdict.*
+
+> **The 18 records already in `train/results/arms_v3/runs.jsonl` predate the
+> prompt-format fix (2026-08-25) and have to be re-run before they can be
+> quoted.** Every one of them was trained *and* evaluated on the bare
+> `"{question}\nODGOVOR: {answer}"` string — no `<bos>`, no turn markers, `<eos>`
+> as the terminator — against an instruction-tuned checkpoint (see "Prompt
+> format" above). The defect is shared by all six arms, so it does not obviously
+> favour one over another, but it is not neutral either: it costs every arm some
+> adapter capacity relearning a format the weights already have, and it costs the
+> plain baselines most, since for them the prompt node *is* the whole input. New
+> records carry `"prompt_format": "chat_template"`; the absence of that key is
+> what marks the old ones. The checkpoints under `checkpoints/sl_qa/arms_v3_*`
+> are adapters trained on the old format and must not be evaluated with the new
+> one.
 
 ### `arms_v2` — SUPERSEDED (2026-08-23)
 

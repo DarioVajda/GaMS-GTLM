@@ -36,8 +36,8 @@ def main(argv=None):
     step = max(1, len(all_rows) // max(a.n, 1))
     rows = all_rows[::step][:a.n]              # spread the sample over the file
 
-    ds = TextGraphDataset([_graph(r) for r in rows])
-    ds.tokenize(tok, max_length=a.max_length, add_eos=True)
+    ds = TextGraphDataset([_graph(r, tok) for r in rows])
+    ds.tokenize(tok, max_length=a.max_length, add_eos=False)
     ds.compute_labels(OffsetLabelMasker(tok, a.max_length), num_proc=1)
 
     bad = 0
@@ -49,8 +49,9 @@ def main(argv=None):
         sup = [t for t, l in zip(ids, labels) if l != -100]
         masked = [t for t, l in zip(ids, labels) if l == -100]
         got = tok.decode(sup)
-        # what SHOULD be supervised: everything after "ODGOVOR:" plus the EOS.
-        # The EOS is dropped with skip_special_tokens rather than rstrip -- rstrip
+        # what SHOULD be supervised: everything after "ODGOVOR:" plus the
+        # `<end_of_turn>` the chat template closes the model turn with.  The stop
+        # token is dropped with skip_special_tokens rather than rstrip -- rstrip
         # strips a CHARACTER SET, so `rstrip("<eos>")` also ate the final `e` of
         # `svetnice` and reported a mismatch that was not one.
         want = r["answer"].split("ODGOVOR:", 1)[1]
