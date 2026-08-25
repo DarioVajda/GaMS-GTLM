@@ -1,5 +1,0 @@
-host: ixh
-Traceback (most recent call last):
-  File "<string>", line 2, in <module>
-ModuleNotFoundError: No module named 'torch'
-exit: 1

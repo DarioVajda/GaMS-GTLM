@@ -1,6 +1,0 @@
-host: ixb7
-NVIDIA B300 SXM6 AC, 580.178.04, 275040 MiB
-no usable Python 3.10 on ixb7
-  /usr/bin/python3 -> /usr/bin/python3.12 (Python 3.12.3)
-  available: /usr/bin/python3.12 /usr/bin/python3.12-config 
-pick_python FAILED

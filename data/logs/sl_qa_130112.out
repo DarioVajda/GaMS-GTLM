@@ -1,696 +1,0 @@
-host: ana  start: Sat Aug 22 12:59:08 UTC 2026
-NVIDIA A100 80GB PCIe, 81920 MiB
-Initializing dataset storage from graphs...
-Reading Graphs:   0%|          | 0/24 [00:00<?, ?it/s]Reading Graphs: 100%|██████████| 24/24 [00:00<00:00, 103883.69it/s]
-Computing Shortest Paths on: cuda
-Vectorized APSP (Torch):   0%|          | 0/24 [00:00<?, ? examples/s]Vectorized APSP (Torch): 100%|██████████| 24/24 [00:00<00:00, 50.65 examples/s]Vectorized APSP (Torch): 100%|██████████| 24/24 [00:00<00:00, 50.51 examples/s]
-GPU Magnetic Spectral Decomposition (q=0.25):   0%|          | 0/24 [00:00<?, ? examples/s]GPU Magnetic Spectral Decomposition (q=0.25):   4%|▍         | 1/24 [00:00<00:05,  4.11 examples/s]GPU Magnetic Spectral Decomposition (q=0.25): 100%|██████████| 24/24 [00:00<00:00, 84.48 examples/s]
-Tokenizing:   0%|          | 0/24 [00:00<?, ? examples/s]Tokenizing: 100%|██████████| 24/24 [00:00<00:00, 770.24 examples/s]
-Parallelizing label generation across 1 cores...
-Generating Labels (Parallel CPU) (num_proc=1):   0%|          | 0/24 [00:00<?, ? examples/s]Generating Labels (Parallel CPU) (num_proc=1): 100%|██████████| 24/24 [00:01<00:00, 15.55 examples/s]Generating Labels (Parallel CPU) (num_proc=1): 100%|██████████| 24/24 [00:01<00:00, 13.92 examples/s]
-Casting the dataset:   0%|          | 0/24 [00:00<?, ? examples/s]Casting the dataset: 100%|██████████| 24/24 [00:00<00:00, 3812.71 examples/s]
-[data] train: 24 graphs
-Initializing dataset storage from graphs...
-Reading Graphs:   0%|          | 0/24 [00:00<?, ?it/s]Reading Graphs: 100%|██████████| 24/24 [00:00<00:00, 101169.14it/s]
-Computing Shortest Paths on: cuda
-Vectorized APSP (Torch):   0%|          | 0/24 [00:00<?, ? examples/s]Vectorized APSP (Torch): 100%|██████████| 24/24 [00:00<00:00, 832.84 examples/s]
-GPU Magnetic Spectral Decomposition (q=0.25):   0%|          | 0/24 [00:00<?, ? examples/s]GPU Magnetic Spectral Decomposition (q=0.25): 100%|██████████| 24/24 [00:00<00:00, 476.92 examples/s]
-Tokenizing:   0%|          | 0/24 [00:00<?, ? examples/s]Tokenizing: 100%|██████████| 24/24 [00:00<00:00, 735.95 examples/s]
-Parallelizing label generation across 1 cores...
-Generating Labels (Parallel CPU) (num_proc=1):   0%|          | 0/24 [00:00<?, ? examples/s]Generating Labels (Parallel CPU) (num_proc=1): 100%|██████████| 24/24 [00:01<00:00, 15.54 examples/s]Generating Labels (Parallel CPU) (num_proc=1): 100%|██████████| 24/24 [00:01<00:00, 13.86 examples/s]
-Casting the dataset:   0%|          | 0/24 [00:00<?, ? examples/s]Casting the dataset: 100%|██████████| 24/24 [00:00<00:00, 4116.43 examples/s]
-[data] dev: 24 graphs
-Initializing dataset storage from graphs...
-Reading Graphs:   0%|          | 0/24 [00:00<?, ?it/s]Reading Graphs: 100%|██████████| 24/24 [00:00<00:00, 120989.54it/s]
-Computing Shortest Paths on: cuda
-Vectorized APSP (Torch):   0%|          | 0/24 [00:00<?, ? examples/s]Vectorized APSP (Torch): 100%|██████████| 24/24 [00:00<00:00, 868.58 examples/s]
-GPU Magnetic Spectral Decomposition (q=0.25):   0%|          | 0/24 [00:00<?, ? examples/s]GPU Magnetic Spectral Decomposition (q=0.25): 100%|██████████| 24/24 [00:00<00:00, 548.76 examples/s]
-Tokenizing:   0%|          | 0/24 [00:00<?, ? examples/s]Tokenizing: 100%|██████████| 24/24 [00:00<00:00, 794.21 examples/s]
-Parallelizing label generation across 1 cores...
-Generating Labels (Parallel CPU) (num_proc=1):   0%|          | 0/24 [00:00<?, ? examples/s]Generating Labels (Parallel CPU) (num_proc=1): 100%|██████████| 24/24 [00:01<00:00, 15.18 examples/s]Generating Labels (Parallel CPU) (num_proc=1): 100%|██████████| 24/24 [00:01<00:00, 13.52 examples/s]
-Casting the dataset:   0%|          | 0/24 [00:00<?, ? examples/s]Casting the dataset: 100%|██████████| 24/24 [00:00<00:00, 4284.82 examples/s]
-[data] test: 24 graphs
-You are using a model of type gemma3_text to instantiate a model of type gtlm_gemma3. This is not supported for all configurations of models and can yield errors.
-Some weights of GTLMGemma3ForCausalLM were not initialized from the model checkpoint at google/gemma-3-1b-it and are newly initialized: ['model.layers.0.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.0.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.0.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.0.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.0.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.0.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.0.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.0.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.0.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.1.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.1.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.1.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.1.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.1.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.1.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.1.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.1.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.1.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.10.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.10.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.10.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.10.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.10.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.10.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.10.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.10.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.10.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.11.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.11.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.11.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.11.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.11.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.11.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.11.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.11.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.11.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.12.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.12.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.12.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.12.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.12.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.12.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.12.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.12.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.12.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.13.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.13.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.13.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.13.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.13.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.13.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.13.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.13.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.13.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.14.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.14.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.14.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.14.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.14.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.14.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.14.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.14.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.14.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.15.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.15.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.15.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.15.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.15.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.15.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.15.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.15.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.15.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.16.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.16.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.16.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.16.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.16.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.16.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.16.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.16.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.16.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.17.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.17.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.17.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.17.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.17.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.17.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.17.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.17.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.17.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.18.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.18.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.18.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.18.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.18.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.18.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.18.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.18.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.18.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.19.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.19.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.19.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.19.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.19.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.19.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.19.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.19.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.19.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.2.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.2.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.2.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.2.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.2.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.2.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.2.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.2.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.2.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.20.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.20.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.20.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.20.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.20.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.20.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.20.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.20.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.20.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.21.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.21.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.21.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.21.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.21.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.21.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.21.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.21.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.21.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.22.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.22.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.22.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.22.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.22.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.22.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.22.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.22.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.22.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.23.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.23.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.23.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.23.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.23.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.23.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.23.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.23.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.23.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.24.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.24.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.24.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.24.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.24.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.24.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.24.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.24.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.24.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.25.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.25.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.25.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.25.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.25.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.25.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.25.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.25.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.25.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.3.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.3.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.3.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.3.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.3.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.3.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.3.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.3.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.3.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.4.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.4.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.4.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.4.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.4.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.4.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.4.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.4.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.4.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.5.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.5.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.5.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.5.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.5.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.5.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.5.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.5.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.5.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.6.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.6.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.6.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.6.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.6.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.6.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.6.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.6.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.6.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.7.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.7.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.7.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.7.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.7.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.7.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.7.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.7.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.7.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.8.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.8.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.8.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.8.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.8.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.8.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.8.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.8.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.8.self_attn.graph_bias.bias_modules.1.proj.2.weight', 'model.layers.9.self_attn.graph_bias.bias_modules.0.weights', 'model.layers.9.self_attn.graph_bias.bias_modules.1.deep_set.0.bias', 'model.layers.9.self_attn.graph_bias.bias_modules.1.deep_set.0.weight', 'model.layers.9.self_attn.graph_bias.bias_modules.1.lambda_lin.bias', 'model.layers.9.self_attn.graph_bias.bias_modules.1.lambda_lin.weight', 'model.layers.9.self_attn.graph_bias.bias_modules.1.proj.0.bias', 'model.layers.9.self_attn.graph_bias.bias_modules.1.proj.0.weight', 'model.layers.9.self_attn.graph_bias.bias_modules.1.proj.2.bias', 'model.layers.9.self_attn.graph_bias.bias_modules.1.proj.2.weight']
-You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
-Loading GTLM via standard HuggingFace loading...
-Applying LoRA with config: {'r': 32, 'lora_alpha': 64, 'lora_dropout': 0.05, 'target_modules': ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']}
-Trainable parameters:
-  base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.0.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.0.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.0.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.0.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.0.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.0.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.0.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.0.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.0.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.0.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.0.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.0.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.0.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.0.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.0.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.0.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.0.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.0.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.0.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.0.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.0.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.1.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.1.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.1.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.1.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.1.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.1.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.1.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.1.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.1.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.1.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.1.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.1.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.1.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.1.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.1.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.1.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.1.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.1.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.1.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.1.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.1.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.1.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.1.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.2.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.2.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.2.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.2.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.2.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.2.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.2.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.2.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.2.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.2.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.2.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.2.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.2.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.2.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.2.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.2.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.2.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.2.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.2.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.2.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.2.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.2.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.2.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.3.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.3.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.3.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.3.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.3.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.3.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.3.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.3.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.3.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.3.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.3.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.3.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.3.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.3.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.3.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.3.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.3.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.3.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.3.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.3.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.3.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.3.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.3.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.4.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.4.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.4.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.4.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.4.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.4.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.4.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.4.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.4.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.4.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.4.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.4.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.4.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.4.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.4.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.4.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.4.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.4.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.4.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.4.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.4.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.4.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.4.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.5.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.5.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.5.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.5.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.5.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.5.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.5.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.5.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.5.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.5.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.5.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.5.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.5.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.5.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.5.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.5.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.5.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.5.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.5.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.5.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.5.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.5.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.5.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.6.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.6.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.6.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.6.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.6.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.6.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.6.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.6.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.6.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.6.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.6.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.6.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.6.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.6.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.6.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.6.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.6.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.6.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.6.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.6.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.6.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.6.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.6.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.7.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.7.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.7.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.7.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.7.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.7.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.7.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.7.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.7.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.7.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.7.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.7.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.7.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.7.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.7.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.7.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.7.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.7.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.7.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.7.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.7.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.7.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.7.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.8.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.8.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.8.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.8.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.8.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.8.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.8.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.8.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.8.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.8.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.8.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.8.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.8.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.8.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.8.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.8.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.8.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.8.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.8.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.8.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.8.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.8.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.8.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.9.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.9.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.9.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.9.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.9.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.9.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.9.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.9.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.9.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.9.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.9.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.9.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.9.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.9.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.9.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.9.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.9.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.9.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.9.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.9.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.9.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.9.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.9.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.10.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.10.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.10.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.10.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.10.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.10.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.10.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.10.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.10.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.10.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.10.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.10.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.10.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.10.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.10.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.10.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.10.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.10.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.10.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.10.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.10.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.10.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.10.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.11.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.11.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.11.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.11.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.11.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.11.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.11.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.11.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.11.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.11.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.11.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.11.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.11.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.11.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.11.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.11.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.11.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.11.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.11.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.11.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.11.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.11.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.11.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.12.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.12.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.12.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.12.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.12.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.12.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.12.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.12.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.12.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.12.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.12.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.12.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.12.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.12.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.12.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.12.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.12.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.12.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.12.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.12.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.12.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.12.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.12.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.13.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.13.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.13.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.13.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.13.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.13.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.13.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.13.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.13.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.13.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.13.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.13.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.13.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.13.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.13.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.13.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.13.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.13.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.13.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.13.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.13.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.13.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.13.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.14.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.14.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.14.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.14.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.14.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.14.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.14.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.14.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.14.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.14.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.14.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.14.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.14.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.14.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.14.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.14.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.14.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.14.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.14.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.14.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.14.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.14.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.14.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.15.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.15.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.15.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.15.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.15.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.15.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.15.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.15.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.15.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.15.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.15.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.15.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.15.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.15.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.15.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.15.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.15.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.15.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.15.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.15.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.15.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.15.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.15.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.16.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.16.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.16.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.16.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.16.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.16.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.16.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.16.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.16.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.16.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.16.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.16.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.16.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.16.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.16.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.16.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.16.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.16.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.16.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.16.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.16.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.16.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.16.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.17.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.17.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.17.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.17.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.17.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.17.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.17.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.17.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.17.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.17.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.17.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.17.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.17.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.17.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.17.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.17.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.17.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.17.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.17.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.17.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.17.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.17.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.17.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.18.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.18.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.18.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.18.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.18.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.18.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.18.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.18.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.18.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.18.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.18.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.18.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.18.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.18.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.18.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.18.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.18.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.18.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.18.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.18.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.18.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.18.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.18.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.19.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.19.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.19.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.19.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.19.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.19.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.19.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.19.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.19.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.19.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.19.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.19.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.19.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.19.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.19.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.19.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.19.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.19.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.19.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.19.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.19.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.19.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.19.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.20.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.20.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.20.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.20.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.20.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.20.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.20.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.20.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.20.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.20.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.20.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.20.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.20.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.20.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.20.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.20.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.20.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.20.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.20.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.20.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.20.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.20.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.20.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.21.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.21.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.21.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.21.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.21.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.21.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.21.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.21.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.21.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.21.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.21.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.21.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.21.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.21.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.21.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.21.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.21.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.21.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.21.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.21.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.21.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.21.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.21.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.22.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.22.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.22.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.22.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.22.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.22.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.22.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.22.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.22.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.22.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.22.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.22.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.22.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.22.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.22.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.22.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.22.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.22.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.22.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.22.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.22.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.22.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.22.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.23.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.23.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.23.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.23.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.23.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.23.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.23.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.23.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.23.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.23.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.23.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.23.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.23.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.23.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.23.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.23.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.23.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-No label_names provided for model class `PeftModelForCausalLM`. Since `PeftModel` hides base models input arguments, if label_names is not given, label_names can't be set automatically within `Trainer`. Note that empty label_names list will be used instead.
-  base_model.model.model.layers.23.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.23.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.23.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.23.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.23.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.23.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.24.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.24.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.24.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.24.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.24.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.24.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.24.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.24.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.24.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.24.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.24.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.24.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.24.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.24.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.24.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.24.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.24.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.24.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.24.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.24.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.24.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.24.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.24.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.25.self_attn.q_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.25.self_attn.q_proj.lora_B.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.25.self_attn.k_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.25.self_attn.k_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.25.self_attn.v_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.25.self_attn.v_proj.lora_B.default.weight (8,192) [LoRA]
-  base_model.model.model.layers.25.self_attn.o_proj.lora_A.default.weight (32,768) [LoRA]
-  base_model.model.model.layers.25.self_attn.o_proj.lora_B.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.25.self_attn.graph_bias.bias_modules.0.weights (32)
-  base_model.model.model.layers.25.self_attn.graph_bias.bias_modules.1.lambda_lin.weight (256)
-  base_model.model.model.layers.25.self_attn.graph_bias.bias_modules.1.lambda_lin.bias (256)
-  base_model.model.model.layers.25.self_attn.graph_bias.bias_modules.1.deep_set.0.weight (16,384)
-  base_model.model.model.layers.25.self_attn.graph_bias.bias_modules.1.deep_set.0.bias (32)
-  base_model.model.model.layers.25.self_attn.graph_bias.bias_modules.1.proj.0.weight (2,048)
-  base_model.model.model.layers.25.self_attn.graph_bias.bias_modules.1.proj.0.bias (32)
-  base_model.model.model.layers.25.self_attn.graph_bias.bias_modules.1.proj.2.weight (128)
-  base_model.model.model.layers.25.self_attn.graph_bias.bias_modules.1.proj.2.bias (4)
-  base_model.model.model.layers.25.mlp.gate_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.25.mlp.gate_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.25.mlp.up_proj.lora_A.default.weight (36,864) [LoRA]
-  base_model.model.model.layers.25.mlp.up_proj.lora_B.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.25.mlp.down_proj.lora_A.default.weight (221,184) [LoRA]
-  base_model.model.model.layers.25.mlp.down_proj.lora_B.default.weight (36,864) [LoRA]
-
-==================================================
-TRAINABLE PARAMETER SUMMARY
-==================================================
-LoRA Adapters:            26,091,520
-Custom Graph Biases:         498,472
---------------------------------------------------
-Total Trainable:          26,589,992
-Total Model Params:    1,026,475,944
-Trainable %:                 2.5904%
-==================================================
-
-  0%|          | 0/3 [00:00<?, ?it/s]`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
-GTLM-Gemma3: packed sequence length 600 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
- 33%|███▎      | 1/3 [00:01<00:02,  1.50s/it]GTLM-Gemma3: packed sequence length 679 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
- 67%|██████▋   | 2/3 [00:02<00:00,  1.03it/s]GTLM-Gemma3: packed sequence length 625 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-
-  0%|          | 0/12 [00:00<?, ?it/s][AGTLM-Gemma3: packed sequence length 558 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-
- 17%|█▋        | 2/12 [00:00<00:00, 17.24it/s][AGTLM-Gemma3: packed sequence length 590 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-GTLM-Gemma3: packed sequence length 562 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-
- 33%|███▎      | 4/12 [00:00<00:00, 11.54it/s][AGTLM-Gemma3: packed sequence length 661 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-GTLM-Gemma3: packed sequence length 632 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-
- 50%|█████     | 6/12 [00:00<00:00, 10.32it/s][AGTLM-Gemma3: packed sequence length 690 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-GTLM-Gemma3: packed sequence length 700 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-
- 67%|██████▋   | 8/12 [00:00<00:00,  9.87it/s][AGTLM-Gemma3: packed sequence length 745 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-
- 83%|████████▎ | 10/12 [00:00<00:00,  9.64it/s][AGTLM-Gemma3: packed sequence length 770 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-
- 92%|█████████▏| 11/12 [00:01<00:00,  9.56it/s][AGTLM-Gemma3: packed sequence length 747 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-
-100%|██████████| 12/12 [00:01<00:00,  9.45it/s][A                                             
-                                               [A 67%|██████▋   | 2/3 [00:03<00:00,  1.03it/s]
-100%|██████████| 12/12 [00:01<00:00,  9.45it/s][A
-                                               [AYou are using a model of type gemma3_text to instantiate a model of type gtlm_gemma3. This is not supported for all configurations of models and can yield errors.
-GTLM-Gemma3: packed sequence length 605 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-100%|██████████| 3/3 [00:05<00:00,  2.09s/it]You are using a model of type gemma3_text to instantiate a model of type gtlm_gemma3. This is not supported for all configurations of models and can yield errors.
-                                             100%|██████████| 3/3 [00:06<00:00,  2.09s/it]100%|██████████| 3/3 [00:06<00:00,  2.26s/it]
-{'eval_loss': 7.541005611419678, 'eval_em_accuracy': 0.0, 'eval_runtime': 1.5304, 'eval_samples_per_second': 15.682, 'eval_steps_per_second': 7.841, 'bias_learning_rate': 0.00857142857142857, 'bias_weight_decay': 0.0, 'epoch': 0.17}
-{'train_runtime': 6.7797, 'train_samples_per_second': 0.885, 'train_steps_per_second': 0.443, 'train_loss': 8.316610336303711, 'bias_learning_rate': 0.012857142857142855, 'bias_weight_decay': 0.0, 'epoch': 0.25}
-  0%|          | 0/12 [00:00<?, ?it/s] 17%|█▋        | 2/12 [00:00<00:00, 19.40it/s] 33%|███▎      | 4/12 [00:00<00:00, 12.31it/s] 50%|█████     | 6/12 [00:00<00:00, 11.09it/s] 67%|██████▋   | 8/12 [00:00<00:00, 10.63it/s] 83%|████████▎ | 10/12 [00:00<00:00, 10.36it/s]100%|██████████| 12/12 [00:01<00:00, 10.20it/s]100%|██████████| 12/12 [00:01<00:00, 10.77it/s]
-GTLM-Gemma3: packed sequence length 601 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-  0%|          | 0/12 [00:00<?, ?it/s] 17%|█▋        | 2/12 [00:00<00:00, 18.97it/s]GTLM-Gemma3: packed sequence length 705 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-GTLM-Gemma3: packed sequence length 634 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
- 33%|███▎      | 4/12 [00:00<00:00, 12.32it/s]GTLM-Gemma3: packed sequence length 630 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-GTLM-Gemma3: packed sequence length 607 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
- 50%|█████     | 6/12 [00:00<00:00, 11.24it/s]GTLM-Gemma3: packed sequence length 647 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-GTLM-Gemma3: packed sequence length 582 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
- 67%|██████▋   | 8/12 [00:00<00:00, 10.80it/s]GTLM-Gemma3: packed sequence length 552 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-GTLM-Gemma3: packed sequence length 748 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
- 83%|████████▎ | 10/12 [00:00<00:00, 10.56it/s]GTLM-Gemma3: packed sequence length 676 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-GTLM-Gemma3: packed sequence length 602 exceeds sliding_window=512. The adapter drops Gemma-3's sliding-window band (it is defined over packed serialization order and would hide most of the graph from the sliding layers), so those layers now attend more widely than the pretrained model does. This is intended, but it means logits no longer match stock Gemma-3.
-100%|██████████| 12/12 [00:01<00:00, 10.33it/s]100%|██████████| 12/12 [00:01<00:00, 10.90it/s]
-[results] spd+magnetic types=('T3', 'T4', 'T9', 'T10') test_accuracy=0.0 (best-val=0.0, majority-class baseline=0.1065)
-[results] appended training run to /shared/workspace/povejmo/gams_gtlm/train/results/train_runs.jsonl
-end: Sat Aug 22 12:59:39 UTC 2026
