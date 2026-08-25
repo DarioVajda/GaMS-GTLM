@@ -21,7 +21,7 @@
 # its torchvision then loads against our torch (job 130961).
 #
 #SBATCH --partition=frida
-#SBATCH --account=povejmo
+#SBATCH --account=lkm
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8

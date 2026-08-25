@@ -11,6 +11,7 @@
 # is built against -- see data/README.md "Reproduce".
 #
 #SBATCH --partition=frida
+#SBATCH --account=lkm
 #SBATCH --nodelist=ana
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

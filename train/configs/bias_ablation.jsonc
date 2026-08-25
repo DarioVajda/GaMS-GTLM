@@ -33,7 +33,9 @@
       "granularity": "per_config",
       "max_concurrent": 2,
       "partition": "frida",
-      "account": "povejmo",
+      // `lkm`, not `povejmo` -- see train/configs/arms_v3.jsonc for the fairshare
+      // arithmetic (2026-08-25).
+      "account": "lkm",
       "nodelist": "ana",
       "gpus": "A100_80GB:1",
       "cpus": 8,

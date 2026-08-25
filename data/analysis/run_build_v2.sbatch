@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=frida
+#SBATCH --account=lkm
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32

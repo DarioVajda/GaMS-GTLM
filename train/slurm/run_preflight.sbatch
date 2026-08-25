@@ -33,7 +33,7 @@
 #                         untrained model, so the sharper assertion never fires).
 #
 #SBATCH --partition=frida
-#SBATCH --account=povejmo
+#SBATCH --account=lkm
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8

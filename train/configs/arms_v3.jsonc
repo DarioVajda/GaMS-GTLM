@@ -57,69 +57,23 @@
     "mode": "sbatch",
     "sbatch": {
       "granularity": "per_config",
-      "max_concurrent": 4,
+      "max_concurrent": 18,
       "partition": "frida",
-      "account": "povejmo",
-      // ── B200 only, not B200|B300 ────────────────────────────────────────
-      // Of the four B300 hosts, ixb5 is drained (GPU7 unrecoverable memory
-      // error) and ixb7's enroot mellanox hook still fails on a missing
-      // /dev/infiniband/rdma_cm -- a host-config fault no user can fix.
-      // Including B300 would let part of the array land on a node where the
-      // container cannot start.  ixb1-ixb4 are healthy.  Re-add B300 once ixb7
-      // is repaired.
-      //
-      // ONE tier for all 18 runs is not a preference: a gap measured across two
-      // hardware or software stacks is not a measurement of the thing being
-      // compared.
-      "gpus": ["B200"],
-      // Blackwell hosts are Ubuntu 24.04 / python3.12 and this repo's venv is
-      // 3.10, so a BARE job there dies on imports.  The pyxis container is a
-      // py3.10 base and the venv resolves inside it.  The one thing that used to
-      // block it -- `.venv/bin/python` being an absolute symlink to
-      // /opt/deepops/venv/bin/python, a host path with no counterpart in the
-      // image -- is fixed: it now points at /usr/bin/python3 (same 3.10.12).
-      // Do NOT substitute PYTHONPATH for running the venv interpreter directly;
-      // that leaves the image's dist-packages on the path and its torchvision
-      // loads against our torch (`operator torchvision::nms does not exist`).
+      "account": "lkm",
+      "gpus": ["H100", "B200", "B300"],
       "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
       "mounts": "/shared:/shared",
       "cpus": 8,
       "mem": "128G",
-      // One limit covers every arm and has to fit the slowest.  Measured on
-      // A100 the serialised arm on the GTLM stack took 4.16 h for 3 epochs, so
-      // ~11 h for 8; B200 is faster, but a killed run loses everything, so the
-      // headroom is deliberate.
       "time": "16:00:00"
     }
   },
 
   "mode": "train",
   "model_name": "google/gemma-3-1b-it",
-  "types": "",                       // "" = every type present in data_root
-  // The GRADING contract and the training targets.  v2_clean is NOT a
-  // re-spelling of v2_graded: 76 of 2,184 test ANSWERS differ (T19 x62,
-  // T17 x14) and the grading block was restructured.  See train/config.py.
+  "types": "",
   "items_root": "data/datasets/generated/v2_clean",
 
-  // The arm axis as a BUNDLE (a list of objects) rather than six lists: six
-  // lists would be six independent axes and expand to their product, adding
-  // configurations nobody asked for (a serialised prompt WITH the magnetic bias
-  // over a one-node graph is not a thing).  A bundle is one axis whose values
-  // are coherent settings.
-  //
-  // `max_length` is a PER-NODE tokenization cap.  The graph arms' longest node
-  // text is 670 characters, so 2048 never binds; the serialised arm packs the
-  // whole flattened ball into its single prompt node, which qa/build_variants
-  // bounds at 16,384 tokens.
-  //
-  // `batch_size` x `accumulation_steps` = 16 in EVERY arm.  Only the PRODUCT is
-  // scientifically binding -- gradient accumulation normalised by
-  // `num_items_in_batch` yields the same average gradient however the 16 items
-  // are split, so the factorisation is a pure memory/throughput knob.  It is set
-  // per arm from the arms_v3_timing runs, and `run.py` derives `max_steps` from
-  // the product so every arm runs exactly the same number of optimizer steps
-  // whatever factorisation it uses.  Arms 5/6 are ~35-token sequences and would
-  // be almost entirely kernel-launch overhead at a small micro-batch.
   "arm": [
     {"data_root": "data/datasets/balls/v2_clean",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
     {"data_root": "data/datasets/balls/v2_clean",             "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
@@ -144,34 +98,11 @@
   "lora": true,
   "lora_r": 32,
   "lr": 5e-4,
-  // Binds on arm 1 ONLY -- it is the sole configuration with `graph_bias`
-  // parameters (every other arm reports `Custom Graph Biases: 0`).  That is
-  // legitimate, since it is a hyperparameter *of* the thing being ablated, but
-  // it is disclosed in train/README.md, and `lr` (LoRA) stays shared and untuned
-  // across arms so the study is not two tuned knobs against zero.
   "bias_lr": 1e-2,
-
-  // The token-budget TRAINING sampler is retired; 0 is the only accepted value
-  // and a non-zero one raises (train/config.py).  Stated explicitly rather than
-  // left to the default so the provenance file records the decision.
   "train_token_budget": 0,
   "num_epochs": 8,
-  // 400 gives evals at 400 … 4,400; `run.py`'s EvaluateOnFinalStep callback adds
-  // one at step 4,632, because 400 does not divide 4,632 and HF's Trainer does
-  // not evaluate or save at the end of training -- as configured without it the
-  // last 232 steps would be trained and silently discarded.  Total: 12 evals.
   "eval_steps": 400,
-  // Items per EVALUATION batch, independent of the training micro-batch: they
-  // used to share one knob, so lowering the training batch for memory quartered
-  // evaluation throughput as a side effect.
   "eval_max_batch": 16,
-  // In-training evals and checkpoint selection run on a fixed, stratified 50 %
-  // of dev (527 of 1,040 items, all 18 dev types intact), chosen from a CONSTANT
-  // seed so every arm and every seed selects on the identical subset.  The final
-  // dev (1,040) and test (2,184) evaluations run over everything.  Disclosed in
-  // train/README.md: selecting on ~527 items and taking the best of 12
-  // evaluations gives the reported DEV figure a mild optimistic bias; the TEST
-  // figure is untouched by this and is the number to quote.
   "dev_subsample": 0.5,
   "num_workers": 4
 }

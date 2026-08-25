@@ -67,7 +67,9 @@
       // brings the whole matrix in under a day.
       "max_concurrent": 5,
       "partition": "frida",
-      "account": "povejmo",
+      // `lkm`, not `povejmo` -- see train/configs/arms_v3.jsonc for the fairshare
+      // arithmetic (2026-08-25).
+      "account": "lkm",
       // ── Why A100-80GB and not Blackwell ──────────────────────────────────
       // The GPU ladder prefers B300/B200, and `sweep`'s pyxis wrap exists
       // for exactly that.  Both were re-tested on 2026-08-22 and neither works

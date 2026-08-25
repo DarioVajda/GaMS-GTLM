@@ -11,6 +11,7 @@
 # CPU only: the work is the surface index plus one union lookup per item.
 #
 #SBATCH --partition=frida
+#SBATCH --account=lkm
 #SBATCH --nodelist=aga,ana,apl
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

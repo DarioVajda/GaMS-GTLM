@@ -34,7 +34,9 @@
       "granularity": "per_config",
       "max_concurrent": 3,
       "partition": "frida",
-      "account": "povejmo",
+      // `lkm`, not `povejmo` -- see train/configs/arms_v3.jsonc for the fairshare
+      // arithmetic (2026-08-25).
+      "account": "lkm",
       // B200 only, and for the same reason the real sweep gives: of the four
       // B300 hosts ixb5 is draining and ixb7's enroot mellanox hook still fails
       // on a missing /dev/infiniband/rdma_cm, so a B300 slot can be one the

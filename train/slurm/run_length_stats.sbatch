@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=len_stats
 #SBATCH --partition=frida
-#SBATCH --account=povejmo
+#SBATCH --account=lkm
 #SBATCH --nodelist=ana
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G

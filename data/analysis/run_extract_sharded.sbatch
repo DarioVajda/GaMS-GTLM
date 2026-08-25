@@ -27,6 +27,7 @@
 # once the node is fixed -- the constraint below already admits it.
 #
 #SBATCH --partition=frida
+#SBATCH --account=lkm
 #SBATCH --constraint=GPU_BRD:B200|GPU_BRD:B300
 #SBATCH --exclude=ixb7
 #SBATCH --nodes=1

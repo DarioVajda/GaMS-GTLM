@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=frida
+#SBATCH --account=lkm
 # See run_save_v3.sbatch: only these nodes have the Python 3.10 the venv needs.
 #SBATCH --nodelist=aga,ana,apl
 #SBATCH --nodes=1

@@ -9,6 +9,7 @@
 # that every id, split and answer matches the reference.
 #
 #SBATCH --partition=frida
+#SBATCH --account=lkm
 # Ubuntu 22.04 / python3.10 nodes only -- see data/README.md "Reproduce".
 #SBATCH --nodelist=aga,ana,apl
 #SBATCH --nodes=1

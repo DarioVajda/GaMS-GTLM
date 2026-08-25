@@ -28,6 +28,7 @@
 #     sbatch run_save_v4.sbatch gams2b     # -> data/stores/kg_graph_v4_gams2b  (for diffing)
 #
 #SBATCH --partition=frida
+#SBATCH --account=lkm
 # Only aga/ana/apl still run Ubuntu 22.04 with /usr/bin/python3 = 3.10, which is
 # what graph_model/.venv was built against; axa and every ix* node are 24.04 and
 # ship 3.12 only, where the venv's site-packages are invisible.  Probed
