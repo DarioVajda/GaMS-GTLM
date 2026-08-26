@@ -2,34 +2,18 @@
 
 The task: answer a Slovene lexicographical question about a headword, given that
 headword's neighbourhood in the CJVT/DDDS knowledge graph as a text graph.  Items
-come from `data/datasets/generated/`, balls from `data/datasets/balls/` (built by
-`data/qa/build_balls.py`, which records the node and edge lists so the graph the
-model saw is an artefact, not a side effect of whatever the extractor did that
-day).
+come from `data/datasets/generated/`, balls from `data/datasets/balls/`.
 
-Structurally this is `graph_model`'s `our_tests` kg_qa arm with a real graph and
-a real backbone.  Two things differ, both deliberate:
+Three things distinguish this from `graph_model`'s `our_tests` kg_qa arm:
 
-  * **the backbone is chosen by name** (`BACKBONES` below, the same dispatch
-    `graphqa` uses), because the point of the run is a *gemma-3-1b-it* baseline
-    and `our_tests` imports the Llama classes at module scope;
-  * **no data_prep mode.**  Features are recomputed at load rather than cached,
-    and a cache key is one more thing that can silently go stale against a
-    rebuilt store.
-
-    The original argument for this was that "these graphs are ~32 nodes", which
-    died with balls/v2: the D4 policy gives p50 = 77, p90 = 154, p99 = 293 and
-    max 705, and the magnetic eigendecomposition is cubic.  Re-measured on
-    balls/v2 (2026-08-22, timing probe): the whole corpus's
-    features -- SPD and magnetic for 12,490 graphs, plus the generation copies of
-    dev and test -- are built once per run in a few minutes on the GPU, against
-    hours of training.  So the trade still holds, for a different reason: it is
-    now small relative to the run, rather than small in absolute terms.
-
-  * **the loss is computed on the answer-span tail of the logits.**  Not an
-    optimisation of taste -- see `GradeTrainer.compute_loss` in run.py.  At a
-    262 k vocabulary, full-sequence logits for a p99 ball cost tens of gigabytes
-    and the 14,055-token maximum ball cannot be trained at all.
+  * the backbone is chosen by name (`BACKBONES` below), so the same code runs a
+    gemma-3 or a llama checkpoint;
+  * graph features are recomputed at load rather than cached, so no cache key can
+    go stale against a rebuilt store.  Building SPD and magnetic features for the
+    whole corpus takes a few minutes on the GPU against hours of training;
+  * the loss is computed on the answer-span tail of the logits -- at a 262 k
+    vocabulary, full-sequence logits for a p99 ball cost tens of gigabytes.  See
+    `GradeTrainer.compute_loss` in run.py.
 """
 import os
 
@@ -38,9 +22,7 @@ from dataclasses import dataclass
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Copied from graph_model's graphqa/config.py rather than imported: that module is
-# not exported by the installed `gtlm` package (only `gtlm.models`, `gtlm.train`
-# and `gtlm.utils` are), and it carries a lot of GraphQA-specific validation.
-# This is the whole of what is needed here.  The LoRA targets are named per
+# not exported by the installed `gtlm` package.  LoRA targets are named per
 # backbone because PEFT's defaults are model_type-keyed and do not know the
 # gtlm_* types.
 IMPLS = ("v2-eager", "v2-flex")
@@ -68,52 +50,27 @@ UNWIRED_BACKBONES = {
 }
 
 MODEL_NAME = "google/gemma-3-1b-it"
-# Names the EXPERIMENT, not the directory -- it is baked into `run_name` and the
-# checkpoint path, and the first two runs were recorded under it, so it stays put
-# even though the package moved.
+# Names the EXPERIMENT, not the directory: it is baked into `run_name` and the
+# checkpoint path, so it stays put even though the package moved.
 EXPERIMENT_NAME = "sl_qa"
+# The balls and the items are ONE pairing and move together.  A ball carries the
+# answer; the dataset carries the answer and the grading contract, and the two
+# must agree -- `train/data.py:_read_items` asserts it.  Mixing generations is
+# self-consistent enough to run and produces numbers that are not comparable.
 DATA_ROOT = os.path.join(REPO_ROOT, "data", "datasets", "balls", "v2_clean")
-# The GRADING contract lives only in the dataset, never in the ball: for T17 and
-# T19 the item-level facts (`all_items`, `n_all`, `n_asked`, `quantity_band`);
-# the TYPE-level fields (`mode`, `sep`, `arity`, `regex`) now live in
-# `data/qa/spec.py` rather than in every row (commit 85011db), because an in-row
-# constant is exactly how T19 kept being graded `sequence` for a whole run after
-# the spec said otherwise.
-#
-# `v2_clean` is the current pipeline output and is the authority for BOTH the
-# target and the contract.  It is **not** a re-spelling of the older
-# `v2_graded`, and the two must never be mixed:
-#
-#   * 76 of 2,184 test ANSWERS differ (T19 x62, T17 x14) -- these are training
-#     targets, not just grading.  `T17-000584` goes from
-#     `ODGOVOR: lutkar Majarona` to `ODGOVOR: bazilika in majaron | divji
-#     majaron | listki majarona | lutkar Majarona`;
-#   * the grading block was restructured as above, so 1,966 of 2,184 `v2_clean`
-#     rows now carry `{}`.
-#
-# `train/data.py:_read_items` asserts ball-answer == dataset-answer, so a
-# MISMATCHED pairing raises loudly.  The hazard runs the other way: the old
-# default pairing (`balls/v2` + `generated/v2_graded`) is self-consistent, so a
-# hand-run `python -m train` against it executes cleanly and produces numbers
-# that look directly comparable to the arms_v3 sweep and are not.  Hence the
-# defaults move together.
 ITEMS_ROOT = os.path.join(REPO_ROOT, "data", "datasets", "generated", "v2_clean")
-# Checkpoints are large (~500 MB per run) and belong to this repo, next to the
-# results record rather than wherever the job happened to cd to.
+# Checkpoints are ~500 MB per run and belong next to the results record rather
+# than wherever the job happened to cd to.
 CHECKPOINT_ROOT = os.path.join(REPO_ROOT, "checkpoints")
 
 WIRED_FEATURES = ("spd", "rrwp", "magnetic")
 UNWIRED_FEATURES = ("laplacian", "rwse")
 
-# The answer prefix the label mask keys on.  It has to be a string the *questions*
-# never contain, or the mask would cut at the wrong place; every generated question
-# is Slovene prose and every answer line starts `ODGOVOR:` (QA_TASKS.md 0.1), so
-# the prefix below is the one token sequence guaranteed to appear exactly once.
-#
-# The chat template leaves it intact rather than competing with it: gemma writes
-# `<start_of_turn>model\nODGOVOR: …`, so the marker is still preceded by exactly
-# the newline this constant carries, and cutting the wrapped text here yields the
-# template's own generation prompt.  See `train/chat.py`.
+# Where the label mask cuts.  It must be a string the QUESTIONS never contain:
+# every question is Slovene prose and every answer line opens `ODGOVOR:`
+# (QA_TASKS.md 0.1), so this appears exactly once.  The chat template preserves
+# it -- gemma writes `<start_of_turn>model\nODGOVOR: …`, keeping the leading
+# newline -- so cutting here yields the template's own generation prompt.
 ANSWER_PREFIX = "\nODGOVOR:"
 
 
@@ -124,42 +81,25 @@ class RunConfig:
     # ── model ──────────────────────────────────────────────────────────────
     model_name: str = MODEL_NAME
     impl: str = "v2-flex"
-    # torch.compile mode for the FlexAttention kernel, used only when
-    # `impl == "v2-flex"`.  gtlm's own default is "max-autotune-no-cudagraphs",
-    # which buys ~1.47x per step for a ~320 s one-time compile PER DISTINCT
-    # (L, N) SHAPE.  This corpus batches by token budget over sequences from 300
-    # to 16,382 tokens, so it presents many shapes and that trade inverts: the
-    # autotune time would dwarf the kernel saving.  Plain "default" compiles in
+    # torch.compile mode for the FlexAttention kernel (`impl == "v2-flex"` only).
+    # gtlm defaults to "max-autotune-no-cudagraphs", which buys ~1.47x per step
+    # for a ~320 s compile PER DISTINCT (L, N) SHAPE.  This corpus presents many
+    # shapes, so the autotune time would dwarf the saving; "default" compiles in
     # seconds and keeps the flex win.
     flex_compile_mode: str = "default"
-    # torch._dynamo recompile budget for the flex kernel.  gtlm defaults to 32;
-    # the GTLM arm blew straight through that (2-706 nodes x token-budget
-    # lengths = many distinct (L, N) shapes), fell back to UNCOMPILED python and
-    # ran at 14-18 s/step against eager's 3.4.  The serialised arm never hit it:
-    # one node per graph, so only L varies.
+    # torch._dynamo recompile budget for the flex kernel.  gtlm defaults to 32,
+    # which the GTLM arm exhausts (2-706 nodes x many lengths); past the budget
+    # it falls back to uncompiled python at 14-18 s/step against eager's 3.4.
     flex_cache_size_limit: int = 512
-    # Run the arm on STOCK Gemma-3 (AutoModelForCausalLM + SDPA/flash) instead of
-    # the GTLM stack.  Only meaningful for the BASELINE arms, whose balls carry
-    # zero graph nodes -- the whole subgraph is flattened into the prompt, so
-    # there is no graph for the GTLM machinery to do anything with.
+    # Run on STOCK Gemma-3 (AutoModelForCausalLM + SDPA) instead of the GTLM
+    # stack.  Only valid for the BASELINE arms, whose balls carry zero graph
+    # nodes -- there is no graph for the GTLM machinery to act on.
     #
-    # Why it matters: routing a plain-text baseline through the GTLM interface
-    # forces it onto the custom attention path, where FlashAttention cannot be
-    # used.  Comparing GTLM's throughput against a baseline nerfed that way
-    # flatters GTLM for a reason that has nothing to do with the model.  A
-    # baseline is meant to show what a STANDARD LLM does, so it gets the
-    # standard stack and the standard kernels.
-    #
-    # This also restores Gemma-3's sliding_window=512 (22 of 26 layers), which
-    # GTLMGemma3ForCausalLM drops -- see train/README.md.  That is the
-    # pretrained configuration, so the baseline runs on-distribution.
-    #
-    # "On-distribution" is a claim about the INPUT as much as the kernels, and it
-    # used to be false on the half that matters more: the prompt was a bare
-    # `"{question}\nODGOVOR: {answer}"` with no `<bos>` and no turn markers, fed
-    # to an instruction-tuned checkpoint.  It is now written by the model's own
-    # chat template (`train/chat.py`), which is what makes this arm a floor the
-    # GTLM numbers have to clear rather than an understatement of the backbone.
+    # A baseline has to show what a standard LLM does, so it gets the standard
+    # kernels and the pretrained configuration: FlashAttention, and Gemma-3's
+    # sliding_window=512 on 22 of 26 layers, which GTLMGemma3ForCausalLM drops.
+    # Routing it through the GTLM path instead would flatter GTLM's throughput
+    # for a reason that has nothing to do with the model.
     plain_llm: bool = False
     dtype: str = "bf16"
     lora: bool = True
@@ -168,9 +108,8 @@ class RunConfig:
     active_params: tuple = ("graph_bias",)
 
     # ── graph bias ─────────────────────────────────────────────────────────
-    # SPD and magnetic ON, RRWP off: the run is asked for specifically as
-    # "SPD and magnetic bias", and leaving RRWP on would make it a three-feature
-    # run reported as a two-feature one.
+    # SPD and magnetic on, RRWP off: the arm is named "SPD and magnetic bias",
+    # and leaving RRWP on would report a three-feature run as a two-feature one.
     spd: bool = True
     max_spd: int = 8
     rrwp: bool = False
@@ -193,24 +132,18 @@ class RunConfig:
 
     # ── schedule ───────────────────────────────────────────────────────────
     num_epochs: int = 6
-    # `batch_size x accumulation_steps` is the EFFECTIVE batch, and only the
-    # PRODUCT is scientifically binding: gradient accumulation normalised by
-    # `num_items_in_batch` yields the same average gradient however the 16 items
-    # are split into micro-batches (equal up to floating-point summation order
-    # and dropout RNG -- not a systematic difference).  So the factorisation is a
-    # pure memory/throughput knob and may be set per arm; the product may not.
-    # `run.py` derives `max_steps` from the product, so every arm runs the same
-    # number of optimizer steps whatever factorisation it uses.
+    # Only the PRODUCT `batch_size x accumulation_steps` is scientifically
+    # binding: accumulation normalised by `num_items_in_batch` gives the same
+    # average gradient however the items are split into micro-batches.  So the
+    # factorisation is a memory/throughput knob and may vary per arm; the product
+    # may not, and `run.py` derives `max_steps` from it so every arm takes the
+    # same number of optimizer steps.
     batch_size: int = 4
     accumulation_steps: int = 4
     lr: float = 5e-4
-    # LoRA learning rate is `lr`; this one is for the graph-bias tensors only, so
-    # it binds on the SPD+magnetic arm alone (every other arm reports
-    # `Custom Graph Biases: 0`).  3e-2 was the old default; 1e-2 is the better
-    # choice more often in practice.  It is a hyperparameter *of* the thing being
-    # ablated, which is legitimate, but it must be disclosed -- and `lr` stays
-    # shared and untuned across arms so the study is not two tuned knobs
-    # against zero.
+    # For the graph-bias tensors only, so it binds on the SPD+magnetic arm alone
+    # (every other arm reports `Custom Graph Biases: 0`).  `lr` stays shared and
+    # untuned across arms, so the study is not two tuned knobs against zero.
     bias_lr: float = 1e-2
     eval_steps: int = 50
     max_steps: int = -1
@@ -221,39 +154,28 @@ class RunConfig:
     wandb_project: str = None
 
     # ── evaluation ─────────────────────────────────────────────────────────
-    # Evaluation batches are formed by TOKEN budget, not by item count: the
-    # corpus runs from ~300 to 16,384 packed tokens, so a fixed batch size is
-    # either wasteful at the bottom or an OOM at the top.  See
-    # `evaluate.token_budget_batches`.
-    #
-    # These two are the A100-80GB REFERENCE values.  `evaluate.scaled_budgets`
-    # rescales them linearly by the device's own total memory (clamped), so the
-    # same config runs on a 178 GiB B200 at ~36k/18k and on a smaller card at
-    # proportionally less.  Set them explicitly to pin a budget instead.
+    # Evaluation batches are formed by TOKEN budget, not item count: the corpus
+    # runs from ~300 to 16,384 packed tokens, so a fixed batch size is either
+    # wasteful at the bottom or an OOM at the top.  These are the A100-80GB
+    # reference values; `evaluate.scaled_budgets` rescales them by the device's
+    # own memory.  Set them explicitly to pin a budget instead.
     eval_token_budget: int = 16_384
     gen_token_budget: int = 8_192
-    # Items per evaluation batch, independent of the TRAINING `batch_size`.  It
-    # used to share `max_batch` with the training sampler, which meant dropping
-    # the training micro-batch for memory quartered evaluation throughput as a
-    # side effect -- with 8 epochs and a hard Slurm wall clock that is a
-    # run-killing coupling, not a papercut.
+    # Items per evaluation batch, independent of the TRAINING `batch_size` so
+    # that lowering the training micro-batch for memory does not also quarter
+    # evaluation throughput.
     eval_max_batch: int = 16
-    # The token-budget TRAINING sampler is retired (see train/batching.py): every
-    # arm now runs the same fixed effective batch, because under token-budget
-    # batching the item count per batch falls out of sequence length and each arm
-    # got a different effective batch AND a different number of updates.  The
-    # knob survives only so a config that still sets it fails loudly.
+    # Retired -- see train/batching.py.  Kept only so a config that still sets it
+    # fails loudly instead of silently running a different schedule.
     train_token_budget: int = 0
-    # The in-training evals and checkpoint selection run on a fixed, stratified
-    # ~50 % subsample of dev; the FINAL dev and test evaluations run on
-    # everything.  Selected from `dev_subsample_seed`, which is a CONSTANT and
-    # never `cfg.seed`, so every arm and every seed selects on the identical
-    # subset.  0 disables the subsample and evaluates on the whole split.
+    # In-training evals and checkpoint selection run on a fixed, stratified ~50 %
+    # subsample of dev; the FINAL dev and test evaluations run on everything.
+    # The subsample seed is a CONSTANT, never `cfg.seed`, so every arm and every
+    # seed selects the identical subset.  0 evaluates on the whole split.
     dev_subsample: float = 0.5
     dev_subsample_seed: int = 20260823
-    # The final dev+test evaluations run pass 2 on EVERY pass-1 miss, which on an
-    # untrained model is nearly the whole split.  Off for timing probes, which
-    # only want the training step and the in-training eval measured.
+    # The final evaluations run pass 2 on EVERY pass-1 miss, which on an
+    # untrained model is nearly the whole split.  Off for timing probes.
     final_eval: bool = True
 
     # ── derived ────────────────────────────────────────────────────────────
@@ -313,10 +235,9 @@ class RunConfig:
     def stack(self):
         """Which model stack runs this arm -- `"gtlm"` or `"plain"`.
 
-        The third coordinate of a run's identity.  `arms_v3` runs the serialised
-        input on BOTH stacks and the no-retrieval input on both, so
-        `(input_tag, arm)` names two runs each and neither the checkpoint
-        directory nor the results record would distinguish them.
+        The third coordinate of a run's identity: the serialised and the
+        no-retrieval inputs are each run on BOTH stacks, so `(input_tag, arm)`
+        names two runs and would collide in the checkpoint path.
         """
         return "plain" if self.plain_llm else "gtlm"
 
@@ -330,11 +251,8 @@ class RunConfig:
     def input_tag(self):
         """Which INPUT this arm reads, from the ball directory's own name.
 
-        Three of the four arms in the run matrix share a backbone, a schedule and
-        a seed and differ only in what they are shown, so the bias arm name alone
-        does not identify a run -- `balls/v2_serialised` with SPD off and
-        `balls/v2_noretrieval` with SPD off would otherwise write to the same
-        checkpoint directory.
+        Most arms share a backbone, a schedule and a seed and differ only in what
+        they are shown, so the bias arm name alone does not identify a run.
         """
         return os.path.basename(self.data_root.rstrip("/")) or "balls"
 
@@ -355,12 +273,10 @@ class RunConfig:
             raise ValueError(
                 f"Bias feature(s) {bad} are in the schema but not produced by "
                 f"data.py (which computes {WIRED_FEATURES}).")
-        # The inert-flag trap.  `arm()` reads the bias flags, which do NOTHING
-        # under `plain_llm` -- stock Gemma-3 has no graph-bias parameters at all.
-        # A plain smoke run has already been recorded as
-        # `..._v2_clean_serialised_spd+magnetic_s0`, i.e. a run with zero bias
-        # parameters filed under the name of the bias arm.  Refuse the
-        # combination rather than silently mislabel a row in the results table.
+        # `arm()` reads the bias flags, which do NOTHING under `plain_llm` --
+        # stock Gemma-3 has no graph-bias parameters.  Refuse the combination
+        # rather than file a run with zero bias parameters under the bias arm's
+        # name in the results table.
         if self.plain_llm:
             on = [f for f in WIRED_FEATURES if getattr(self, f)]
             if on:
@@ -377,10 +293,7 @@ class RunConfig:
                 f"update count a function of sequence length, so two arms ran "
                 f"different optimisations.  Set it to 0 and use "
                 f"batch_size x accumulation_steps.")
-        # Unlike `our_tests`, all-features-off is ALLOWED here, and is the point:
-        # it is the control arm.  The model still reads the same packed node texts
-        # in the same order, so the difference between that run and the SPD +
-        # magnetic run is attributable to the structural bias and to nothing else.
-        # Without it, "GTLM scores X on T9" is unreadable — X could be the
-        # backbone's Slovene and the flat text alone.
+        # All features off is ALLOWED, and is the control arm: the model reads
+        # the same packed node texts in the same order, so the gap to the
+        # SPD+magnetic run is attributable to the structural bias alone.
         return self

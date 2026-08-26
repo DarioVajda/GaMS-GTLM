@@ -8,7 +8,7 @@ measure its recall against our own templates (we author them, so the gold target
 word is known for free)."*  This is that measurement.
 
     sbatch analysis/run_measure_extraction.sbatch                # -> results/
-    python -m analysis.measure_extraction --n 40 --prompt ../prompt.txt
+    python -m analysis.measure_extraction --n 40
 
 The gold target is `slots.F` (the form a question names) or `slots.L` (the lemma)
 -- the string the template put in the question, verified present verbatim in
@@ -30,7 +30,6 @@ reach, where returning it faithfully is correct and resolving is impossible.
 import os
 import re
 import ast
-import sys
 import json
 import time
 import hashlib
@@ -39,12 +38,10 @@ import collections
 
 import numpy as np
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-from qa.store import open_store                                    # noqa: E402
+from qa.store import open_store
+from lib.paths import GENERATED_DIR, EXTRACTOR_PROMPT
 
 DEFAULT_MODEL = "cjvt/GaMS3-12B-Instruct"
-DEFAULT_PROMPT = os.path.join(ROOT, "prompt.txt")
 LIST_RE = re.compile(r"\[.*?\]", re.S)
 STR_RE = re.compile(r'"([^"]*)"' + r"|'([^']*)'")
 
@@ -198,8 +195,8 @@ def score(dump, model=None, prompt=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=DEFAULT_MODEL)
-    ap.add_argument("--prompt", default=DEFAULT_PROMPT)
-    ap.add_argument("--dataset", default=os.path.join(ROOT, "datasets/generated/v1"))
+    ap.add_argument("--prompt", default=EXTRACTOR_PROMPT)
+    ap.add_argument("--dataset", default=os.path.join(GENERATED_DIR, "v1"))
     ap.add_argument("--n", type=int, default=40, help="items per type (0 = all)")
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--max-new-tokens", type=int, default=64)
@@ -219,7 +216,9 @@ def main():
         dump = [json.loads(l) for p in args.score_only
                 for l in open(p, encoding="utf-8")]
         print(f"scoring {len(dump):,} rows from {len(args.score_only)} dump(s)")
-        summary = score(dump, args.model, args.prompt)
+        # No prompt is read on this path, so none is recorded: the dumps were
+        # produced by an earlier run and only that run knows which prompt it used.
+        summary = score(dump, args.model, prompt=None)
         if args.out:
             with open(args.out, "w", encoding="utf-8") as f:
                 json.dump(summary, f, ensure_ascii=False, indent=2)

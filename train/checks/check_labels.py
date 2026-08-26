@@ -11,7 +11,6 @@ import os
 import json
 import argparse
 
-import networkx as nx
 from transformers import AutoTokenizer
 
 from gtlm.utils import TextGraphDataset

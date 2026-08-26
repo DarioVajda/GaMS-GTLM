@@ -10,14 +10,13 @@ Reports:
   * how many noun form leaves sit at hop 1 from an anchor
   * how many noun form nodes there are, i.e. what repeating the gender on every
     form would have cost
-Usage:  check_gender_reachability.py STORE
+Usage:  python -m analysis.check_gender_reachability STORE
 """
-import os, sys, collections
+import sys
+
 import numpy as np
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
-import graph_store
+from lib import graph_store
 
 K_ANCHOR, K_FORM = 0, 1
 NOUN = "(samostalnik"

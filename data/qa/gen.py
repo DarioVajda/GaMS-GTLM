@@ -137,7 +137,7 @@ MIN_DISTINCT_FORMS = 6
 def healthy_grid(grid):
     """Is this paradigm actually inflected, or is it lemma-filled?
 
-    Found 2026-08-22 by reading a generated T20 item.  The store's `odstotek`
+    Some entries are lemma-filled rather than inflected.  The store's `odstotek`
     reads
 
         rodilnik    dvojina  odstotkov      <- right

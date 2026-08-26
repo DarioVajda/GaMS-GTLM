@@ -1,7 +1,7 @@
 """The licence for the fast path: two-pass == generate-everything, item by item.
 
-    .venv/bin/python -m train.checks.test_two_pass --max-items 32
-    .venv/bin/python -m train.checks.test_two_pass --max-items 32 --checkpoint <dir>
+    .venv/bin/python -m train.checks.check_two_pass --max-items 32
+    .venv/bin/python -m train.checks.check_two_pass --max-items 32 --checkpoint <dir>
 
 Pass 1 declares an item correct without generating anything, on the grounds that
 a teacher-forced forward whose argmax equals the gold token at every answer

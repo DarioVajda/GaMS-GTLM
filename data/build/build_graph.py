@@ -1,206 +1,59 @@
 #!/usr/bin/env python3
+"""Build the GTLM text graph from the raw CJVT N-Triples.
+
+Streams the export, reshapes it into the untyped self-describing text graph
+`gtlm` reads, and either saves it as a store (`--save-graph`) or runs the k-hop
+ball-sizing analysis over it.  `data/README.md` describes the resulting graph and
+the reshaping decisions behind it; this file implements them.
+
+The five that shape the code:
+
+  * **edges are untyped.**  The relation is recoverable from the endpoint texts,
+    because every node's text carries its own type tag (`iztočnica:`, `oblika:`,
+    `pomen:`, `zgled:`, `prevod (madžarsko):`).  The two relations that are NOT a
+    function of the endpoint types -- synonym and antonym, both sense-to-sense --
+    are reified as nodes whose text says which they are, and so are collocations.
+
+  * **node codes are exact, never hashed buckets.**  A code is
+    `(type_id << 56) | payload`, where payload is the numeric IRI suffix for a
+    known prefix, an exact `(D << 28) | H` packing for collocations, and a 56-bit
+    blake2b of the local name otherwise.
+
+  * **empty connector nodes are collapsed.**  MWE decomposition
+    (`MWE -> part -> word`) becomes one edge, and the three-node translation
+    chain collapses onto the `translation-form` that carries the text and the
+    link back to its Slovenian sense.
+
+  * **a collocation node carries the curated phrase.**  A `frac:Collocation` node
+    takes only `rdfs:member` / `frac:head` / `rdf:type` and nothing ever points at
+    one, so the inflected phrase is reachable only through the IRI's naming
+    convention: the dependent-sense id names the multi-word entry that spells the
+    pairing out.  `--colloc-text pair` falls back to the bare lemma pair.
+
+  * **one collocation node per distinct phrase.**  A pairing is reified once per
+    participant, so several IRIs share a member set while naming different
+    curated phrases; the dedup key is therefore `(member set, folded phrase)`,
+    not the member set alone.
+
+Sizing analysis: 2 (form_mode) x 2 (examples) x 2 (collocations) = 8 variants,
+reported with percentiles and split by seed kind (single word vs MWE).  Tokens
+are node-text tokens plus the prompt; there are no relation-label tokens.
 """
-Builder + sizing analysis for the GTLM-compatible CJVT graph.
-
-This is THE builder: one file, continuously improved.  The "vN" in a store name
-is a text/structure convention, not a separate script -- every convention from v3
-onwards is reachable from this file's flags, and the manifest records which one
-built a given store ("text_convention").  The flaw list below is the changelog.
-
-Fixes the four defects recorded in data/README.md "Known flaws" for v2:
-
-  1. NO BLANKET LEVI REIFICATION.  Edges are untyped (GTLM's native TextGraph
-     format).  The relation is recoverable from the endpoint texts, because
-     every node's text is self-describing and carries its type tag:
-        iztocnica: pes (samostalnik, imenovalnik, ednina)
-        oblika: psa (rodilnik, ednina)
-        pomen: <definition>
-        zgled: <example sentence>
-        prevod (madzarsko): <hun text>
-     The only relations that were NOT a function of (src type, dst type) --
-     synonym vs antonym, both sense->sense -- are reified as their own nodes
-     with self-describing text ("sopomenka: pes ~ kuza"), as are collocations.
-
-  2. COLLOCATIONS ARE WIRED IN.  v2 parsed only frac:head and left 4.8M
-     frac:Collocation IRIs as textless degree-1 leaves.  v3 parses rdfs:member.
-     Verified shape in the raw KG:
-        <dependent-sense-D-lexical-unit-H> rdfs:member  <sense-X> .
-        <dependent-sense-D-lexical-unit-H> rdfs:member  <sense-Y> .
-        <dependent-sense-D-lexical-unit-H> frac:head    <lexical-unit-H> .
-     The same pairing is reified once per participant (identical member set,
-     different frac:head), so pairings are DEDUPLICATED BY MEMBER SET.  frac:head
-     is an indexing head, not a grammatical one, so it is dropped and the
-     collocation node is symmetric.  Members are SENSES (not lexical units), so
-     the collocation node attaches to the two senses.
-     v3/v4 gave the node the two lemmas joined by a plus ("kolokacija:
-     aplikativen + etnologija") on the belief that the inflected phrase was not
-     stored anywhere.  THAT WAS WRONG -- see flaw 8.
-
-  3. NO NODE-ID COLLISIONS.  v2's prefix_id_for hashed unknown IRI prefixes into
-     400 buckets, so every `dependent-sense-D-lexical-unit` prefix collided.
-     v3 packs a code as (type_id << 56) | payload, where payload is the numeric
-     suffix for known prefixes, an exact (D << 28) | H packing for collocations,
-     and a 56-bit blake2b of the full local name otherwise.
-
-  4. TRANSLATIONS HAVE TEXT.  v2 filtered writtenRep to @sl, which silently
-     dropped every translation (they are @hun) and left the whole vartrans chain
-     textless.  v3 keeps foreign writtenRep, and COLLAPSES the chain: the
-     textless `sense-translation` and `lexical-entry-translation` nodes are
-     dropped and `translation-form` (which carries both the text and the link to
-     the Slovenian source sense) is attached directly to that source sense.
-
-Also new: POS is parsed (lexinfo:partOfSpeech on lexical units) and folded into
-the anchor text, and `collocations` joins `form_mode` and `examples` as a toggle
-so the cost of flaw #2 can be measured rather than assumed.
-
-  5. SIBLING SENSES ARE DISTINGUISHABLE.  Only 225,618 of 8,468,227 senses carry
-     a skos:definition (2.7%); the rest fell back to their entry's lemma, so on
-     96.9% of polysemous anchors EVERY sibling sense node had byte-identical
-     text ("pomen: pes", "pomen: pes").  With untyped edges and GTLM's node-
-     permutation equivariance those nodes are genuinely interchangeable whenever
-     the extractor prunes their subtrees -- label noise produced by the builder,
-     not a coverage gap.  A sense now gets:
-        - its dictionary ordinal, when its entry has more than one sense
-          ("pomen 2: pes"), which makes siblings distinct unconditionally; and
-        - a bounded snippet of its first usage example when it has no definition
-          ("pomen 1: pes (zgled: Sosedov pes je spet lajal ...)"), which makes
-          them distinct MEANINGFULLY for the 47.7% of such senses that have one.
-     Definition-bearing and example-bearing senses are largely disjoint
-     populations, which is exactly why the example fallback pays.  Controlled by
-     --sense-snippet (0 disables) and --no-sense-index.
-
-  6. LITERALS ARE UNESCAPED.  v3 passed the N-Triples literal through verbatim,
-     so 3.48% of example nodes carried a literal backslash-quote:
-        zgled: ... jih imam pravico tozniti,\\" pravi.
-     writtenRep / value / definition now go through unescape_nt().  Only \\" and
-     \\\\ occur in this dump; the rest of the escape set is handled anyway and
-     unknown escapes pass through unchanged.
-
-  7. MORPHOLOGY IS ACTUALLY MAPPED (v4 text convention).  Three separate faults
-     kept verb morphology out of the node text entirely, so a whole verb
-     paradigm collapsed to a handful of distinct strings:
-        oblika: popraskam (ednina)      <- 1st person present
-        oblika: popraskaj (ednina)      <- 2nd person IMPERATIVE, same text mod surface
-        oblika: popraskata (dvojina)    <- 2nd AND 3rd person dual: BYTE-IDENTICAL
-     (a) VALUE_SL listed person as firstPerson/secondPerson/thirdPerson; the KG
-         emits first/second/third, and feat_string() drops what it cannot map,
-         so person vanished from all 253,497 forms carrying it.
-     (b) FEATURE_PROPS listed "tense" and "mood".  Neither predicate exists in
-         this KG.  What carries the tense/mood distinction is lexinfo:vform
-         (present / imperative / participle / infinitive / supine), which was
-         not in FEATURE_PROPS at all -- 452,782 forms.
-     (c) aspect and clitic hang off the LEXICAL-UNIT, but the feature branch
-         only accepted word-form subjects, so they were dropped even when
-         listed.  They are now collected separately (UNIT_PROPS) and rendered
-         into the anchor parenthetical after the POS.
-     definiteness is mapped too: without it an adjective's definite and
-     indefinite forms carry byte-identical labels.  Measured effect: form nodes
-     byte-identical to a sibling fall 89,405 -> 8,651 (-90.3%).
-     NOTE on reachability: the corpus-wide counts for these predicates (aspect
-     1.7M, vform 2.4M, clitic 424k) are dominated by lexical-unit-part subjects
-     -- MWE components, which flaw #1's collapse discards.  Reachable on word
-     entries: vform 452,782, person 253,497, definiteness 164,812, aspect
-     18,157, clitic 25.
-
-  8. COLLOCATIONS ARE VERBALISED (v5 text convention).  Flaw 2 concluded that the
-     inflected phrase "is genuinely not stored".  It is stored -- just not on the
-     collocation node, and not behind any edge.  A frac:Collocation node takes
-     only rdfs:member / frac:head / rdf:type in all 42 GB and nothing ever points
-     AT one (0 triples with a collocation in the object position), so no traversal
-     from either side can reach the text.  The link is a NAMING CONVENTION:
-
-         <dependent-sense-D-lexical-unit-H> rdf:type frac:Collocation
-         <sense-D> ontolex:isSenseOf <lexical-unit-M>   (M a MultiWordExpression)
-         <lexical-unit-M> canonicalForm/writtenRep -> "kisova voda"
-
-     D is the sense of the multi-word entry that spells the pairing out.  The
-     trap is that the OTHER id in that name, H, is restated as a real triple
-     (frac:head), so the convention looks like pure redundancy -- and code_of()
-     was already parsing D out to pack the node id, using it as an identifier
-     ingredient and never dereferencing it.
-     Measured over the raw dump: 4,717,090 of 4,717,090 collocation nodes
-     resolve, 3,744,473 distinct phrases, 75.3% of them differing from their
-     constituent lemmas concatenated -- agreement, word order, and the
-     prepositions/copula that the pair form drops outright.  Independently, 91.5%
-     of the 1,307 collocation phrases in data/datasets/reference/ come back
-     verbatim from this path alone, which also settles where that file's
-     phrases came from (this export, not the DDDS API).
-     Controlled by --colloc-text {phrase,pair}.  Through v6 the skip condition
-     stayed on the members, so structure was byte-identical to a v4 store of the
-     same tokenizer; flaw 10 breaks that tie deliberately, for phrase mode only.
-
-  9. NOUN GENDER REACHES THE TEXT (v6 text convention).  Flaw 7c fixed the
-     subject-type guard for aspect and clitic but left `gender` behind, and the
-     reason is worth stating because the obvious patch does not work.  This KG
-     carries lexinfo:gender at BOTH levels, on disjoint parts of speech: on a
-     word-form it is the agreement feature of an adjective or an -l participle
-     (3,242,639 triples, rendered since v3), and on a lexical-unit it is the
-     inherent gender of a noun (310,362 triples, rendered by nothing until v6).
-     Because `gender` was already in FEATURE_PROPS, the parse branch's
-        if local in FEATURE_PROPS: ... elif local in UNIT_PROPS: ...
-     routed every noun-entry gender into the FORM branch, where the
-     T_WORDFORM/T_FORMLU guard dropped it -- and the elif could never run.  So
-     adding "gender" to UNIT_PROPS -- the obvious one-line fix -- changes
-     NOTHING on its own.  The branch now dispatches on the
-     SUBJECT TYPE and consults both sets, which is what makes a property that
-     legitimately lives at two levels work.
-     Placement: the gender is rendered on the ANCHOR only --
-        iztocnica: miza (samostalnik, zenski spol, imenovalnik, ednina)
-     -- and the entry's form leaves inherit it rather than repeat it.  That is
-     sound because gender is a property of the ENTRY here, not of the form (the
-     source models it that way), and because every form leaf is adjacent to its
-     anchor: measured on the v5 store, 200,000 of 200,000 sampled form leaves
-     have an anchor at hop 1, so no ball can contain a noun form without the
-     node that carries its gender.  Repeating it instead would have written the
-     label onto 5,176,265 form leaves rather than 310,362 anchors (x16.7).
-     Verified over all 401 words files (data/analysis/scan_gender.py): every one
-     of the 310,362 nouns has exactly one entry gender, no noun has two, and no
-     other POS has any -- so the two roles of the property never collide on one
-     node.  Text-only change: structure stays byte-identical to v5.
-
- 10. ONE COLLOCATION NODE PER PHRASE, NOT PER MEMBER SET (v7 convention).  Flaw 8
-     resolved the phrase but left the dedup key from flaw 2 untouched, and the two
-     do not agree.  Each pairing is reified once per participant, so the dump holds
-     several frac:Collocation IRIs over the same {sense_a, sense_b} member set;
-     _dedup_pairs_keyed() kept exactly one of them and its docstring asserted the
-     duplicates "all carry the same sense id in the other half".  That is FALSE.
-     Measured on the v6 store: 439,370 member sets (15.3%) name more than one
-     DEPENDENT sense, i.e. more than one curated phrase, and keeping one dropped
-     717,545 phrases (20.0% of the total).  `iziti` + `zbirka` has 8 curated
-     phrases -- `zbirka izide`, `iziti v zbirki`, ... -- and the store kept 1.
-     The loss was not random either: the survivor was the lowest IRI code, i.e.
-     the earliest-entered entry, so the store systematically preferred one end of
-     the editing history.
-     The fix keys the dedup on (member set, PHRASE) instead of on the member set
-     alone -- one node per distinct node TEXT, which is the only thing the model
-     can tell apart anyway.  Unresolved reifications render as the lemma pair,
-     which is a function of the member set alone, so they still collapse to one.
-     The phrase is folded first (_colloc_key: case, whitespace, one trailing
-     period), because two nodes that differ only there are indistinguishable to
-     the grader as well and would put the same item into a gold list twice;
-     keying on the raw surface gives 3,744,612 pairings against 3,569,711.
-     Effect, measured: 2,981,731 -> 3,569,711 collocation nodes (+19.7%), 36.7M ->
-     37.3M store nodes (+1.6%), phrases per anchor p50 4 -> 5 / p90 125 -> 143.
-     PHRASE MODE ONLY: under --colloc-text pair every duplicate renders the same
-     string, so keying on the text is exactly the old behaviour and a pair store
-     stays byte-identical to v4.
-
-Analysis: 2 (form_mode) x 2 (examples) x 2 (collocations) = 8 variants, reported
-with percentiles, split by seed kind (single word vs MWE).  Tokens = node-text
-tokens + prompt (no relation-label tokens: there are no relation labels).  For
-comparison with v2 we also report the induced edge count, so levi_nodes would be
-nodes + edges.
-"""
-import os, re, sys, glob, json, time, argparse, hashlib, unicodedata
+import os
+import re
+import glob
+import json
+import time
+import argparse
+import hashlib
+import unicodedata
 from collections import defaultdict
-import numpy as np
 from multiprocessing import Pool
 
-# graph_store lives in data/lib/, one level up and over: it is shared with the
-# lookup CLI and the analysis scripts, so it is not owned by the builder.
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
-import graph_store
+import numpy as np
+
+from lib import graph_store
+from lib.paths import HF_CACHE, KG_RAW_DIR, RESULTS_DIR
 
 ONTOLEX = "http://www.w3.org/ns/lemon/ontolex#"
 LEXINFO = "http://www.lexinfo.net/ontology/3.0/lexinfo#"
@@ -277,28 +130,22 @@ _num_re    = re.compile(r"^(.*)-(\d+)$")
 _colloc_re = re.compile(r"^dependent-sense-(\d+)-lexical-unit-(\d+)$")
 
 # ---- Slovenian labels ------------------------------------------------------
-# Order matters: it is the order the parenthetical is rendered in.  vform and
-# person lead so a verb form reads "(sedanjik, 1. oseba, ednina)"; case/number/
-# gender/degree keep their v3 relative order, so adding a label to this tuple is
-# a purely ADDITIVE change to every nominal FORM string: the pre-existing items
-# keep their positions and a form's text may only grow.
-# The same claim does NOT hold for anchors, and must not be extended to them: a
-# noun anchor carries its entry-level gender, which is inserted after the POS
-# rather than appended, so anchor strings move where form strings do not.
+# Order matters: this is the order the parenthetical is rendered in.  vform and
+# person lead, so a verb form reads "(sedanjik, 1. oseba, ednina)".  Appending a
+# label here only ever GROWS a form string, leaving the existing items in place;
+# the same is not true of anchors, where entry-level gender is inserted after
+# the POS rather than appended.
 FEATURE_PROPS = ("vform", "person", "case", "number", "gender", "degree",
                  "definiteness")
-# Properties that sit on the lexical-unit rather than on a word-form.  They are
-# rendered into the ANCHOR parenthetical, right after the POS.
+# Properties that sit on the lexical-unit rather than on a word-form, rendered
+# into the ANCHOR parenthetical right after the POS.
 #
-# `gender` appears here AND in FEATURE_PROPS because this KG carries it in both
-# places, on disjoint parts of speech: on a word-form it is the agreement
-# feature of an adjective or an -l participle, on a lexical-unit it is the
-# inherent gender of a noun.  Measured over all 401 *-words.nt files
-# (data/analysis/scan_gender.py, 2026-08-21): 310,362 of 310,362 nouns carry
-# exactly one entry-level gender, and NO other part of speech carries one at
-# all -- so the two roles never collide on one node, and rendering both is
-# unambiguous.  Noun gender therefore lands on the ANCHOR only; the entry's
-# form leaves inherit it from there, one hop away.  See flaw M4 (v6).
+# `gender` is in both sets because this KG carries it at both levels on disjoint
+# parts of speech: on a word-form it is adjective/participle agreement, on a
+# lexical-unit the inherent gender of a noun.  Every one of the 310,362 nouns
+# carries exactly one entry-level gender and no other POS carries any
+# (`analysis/scan_gender.py`), so the two roles never collide on one node.  Noun
+# gender lands on the ANCHOR only; form leaves are one hop away and inherit it.
 UNIT_PROPS = ("aspect", "gender", "clitic")
 VALUE_SL = {
     "nominative":"imenovalnik","genitive":"rodilnik","dative":"dajalnik",
@@ -345,15 +192,12 @@ TAG_SENSE_N = "pomen {}: "        # polysemous entry: dictionary ordinal
 TAG_SENSE_EX = " (zgled: {})"     # disambiguating snippet, no definition
 SENSE_SNIPPET_CHARS = 60          # default budget for that snippet
 
-# Default tokenizer for token_len.  Every Gemma 3 checkpoint -- 270m, 1b, 4b,
-# 12b, 27b, pt and it alike -- and GaMS3-12B-Instruct share one tokenizer:
-# tokenizer.model is byte-identical across all of them, and encoding 5,000 real
-# node texts gives byte-identical *ids*, not merely equal counts (verified
-# 2026-08-20).  So one build serves the whole iteration ladder, and the name
-# below is a label for which of the interchangeable repos was loaded.
-# The older cjvt/GaMS-2B (Gemma 2, vocab 256,000) is NOT in that family: it
-# costs +0.8% tokens in aggregate on this graph (920,680,698 vs 913,315,688 over
-# all 36.7M nodes), and agrees node for node only 45.97% of the time.
+# Default tokenizer for token_len.  Every Gemma 3 checkpoint and GaMS3-12B share
+# one tokenizer -- byte-identical `tokenizer.model`, byte-identical ids on real
+# node texts -- so one build serves the whole ladder and this name only records
+# which of the interchangeable repos was loaded.  Gemma 2 (vocab 256,000) is NOT
+# in that family: +0.8 % tokens over this graph, agreeing node for node 46 % of
+# the time, so a store built with it is not interchangeable.
 DEFAULT_TOKENIZER = "cjvt/GaMS3-12B-Instruct"
 TAG_EX     = "zgled: "
 TAG_COLLOC = "kolokacija: "
@@ -399,9 +243,9 @@ def _localname(s):
 
 
 # N-Triples literal escapes.  The dump triple-quotes every writtenRep / value /
-# definition, so the only escapes that actually occur are \" (1,461 per 400k
-# lines) and \\ (12), but \uXXXX and the C-style set are handled too, and an
-# unrecognised escape passes through untouched rather than being silently eaten.
+# definition, so in practice only \" and \\ occur, but \uXXXX and the C-style set
+# are handled too and an unrecognised escape passes through untouched rather than
+# being silently eaten.
 _ESC_RE = re.compile(r"\\(u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|.)", re.S)
 _ESC_MAP = {'"': '"', "\\": "\\", "n": "\n", "r": "\r", "t": "\t",
             "b": "\b", "f": "\f", "/": "/", "'": "'"}
@@ -470,17 +314,14 @@ def parse_file(path):
                     continue
                 elif pred.startswith(LEXINFO):
                     local = pred[len(LEXINFO):]
-                    # Dispatch on the SUBJECT TYPE, not on which set the property
-                    # name falls in first.  `gender` is in both sets -- it is a
-                    # form feature on adjectives and participles and an entry
-                    # feature on nouns -- so an `if FEATURE_PROPS / elif
-                    # UNIT_PROPS` chain routes every noun-entry gender into the
-                    # form branch, where the T_WORDFORM guard drops it and the
-                    # elif can never run.  That was flaw M4: all 310,362 noun
-                    # gender triples fell out of the graph here.  T_PART stays
-                    # excluded: MWE components carry the bulk of these triples
-                    # and are collapsed away, so their values are unreachable in
-                    # the built graph anyway.
+                    # Dispatch on the SUBJECT TYPE, not on whichever set the
+                    # property name is found in first: `gender` is in both, so an
+                    # `if FEATURE_PROPS / elif UNIT_PROPS` chain would route every
+                    # noun-entry gender into the form branch, where the
+                    # T_WORDFORM guard drops it and the elif can never run.
+                    # T_PART stays excluded -- MWE components carry the bulk of
+                    # these triples and are collapsed away, so their values are
+                    # unreachable in the built graph anyway.
                     if local in FEATURE_PROPS or local in UNIT_PROPS:
                         sc = code_of(subj)
                         if sc is not None:
@@ -563,11 +404,9 @@ def feat_string(props, pos_local=None, unit_props=None):
             v = unit_props.get(p)
             if v is None:
                 continue
-            # A property that lives in both sets (gender) must not render twice
-            # when a node somehow carries it at both levels.  On this dump that
-            # never happens -- entry gender is noun-only and nouns have no
-            # form-level gender -- so this guard costs one lookup and never
-            # fires; it is here so the function stays correct if that changes.
+            # A property in both sets (gender) must not render twice if a node
+            # ever carries it at both levels.  It never does on this dump, so the
+            # guard costs a lookup and never fires.
             if p in props:
                 continue
             sl = _label(p, v)
@@ -614,16 +453,13 @@ def _dedup_pairs_keyed(a, b, key):
     Returns (pairs, keys) in the SAME row order as _dedup_pairs(a, b), so the
     minted node ids are unchanged by carrying the key through.
 
-    Used for collocations in --colloc-text pair mode, where the key is the
+    Used for collocations under `--colloc-text pair`, where the key is the
     frac:Collocation IRI code and every reification of one member set renders the
     same lemma-pair string, so which representative survives cannot matter.
 
-    NOT usable in phrase mode.  An earlier version of this docstring claimed the
-    duplicates "all carry the same sense id in the other half" of the IRI and so
-    verbalise identically.  That is false -- 15.3% of member sets name several
-    dependent senses, i.e. several distinct curated phrases -- and acting on it
-    dropped 20.0% of the phrases from the v5/v6 stores.  See flaw 10 and
-    _dedup_colloc_by_phrase().
+    NOT usable in phrase mode: 15.3 % of member sets name several dependent
+    senses, i.e. several distinct curated phrases, and keeping one drops the
+    rest.  Use `_dedup_colloc_by_phrase` there.
     """
     if len(a) == 0:
         return np.empty((0, 2), dtype=np.int64), np.empty(0, dtype=np.int64)
@@ -658,12 +494,11 @@ def _colloc_key(s):
 
 
 def _dedup_colloc_by_phrase(a, b, iri, phrase_of):
-    """Dedup collocation reifications on (member set, PHRASE) -- flaw 10.
+    """Dedup collocation reifications on (member set, PHRASE).
 
     `a`, `b` are the two member senses of one frac:Collocation IRI and `iri` is
     that IRI's node code; `phrase_of(iri_code) -> str` dereferences the naming
-    convention to the curated phrase (flaw 8), returning '' when it does not
-    resolve.
+    convention to the curated phrase, returning '' when it does not resolve.
 
     Returns (pairs, iri, phrases) with one row per distinct (pair, folded phrase),
     in lexsort order (lo, hi, phrase, capitalisation, surface, iri) so the minted
@@ -727,114 +562,204 @@ def _dedup_colloc_by_phrase(a, b, iri, phrase_of):
 
 
 # ---------------------------------------------------------------------------
-def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
-          sense_index=True, colloc_text="phrase"):
-    t0 = time.time()
+class Parsed:
+    """What one pass over the raw N-Triples yields.
+
+    `edges` holds an (m, 2) array of node codes per EDGE_KEYS relation; the rest
+    are node-code-keyed maps of the literals and features the node text is built
+    from.
+    """
+
+    __slots__ = ("edges", "wr", "wrf", "dfn", "val",
+                 "feat", "unit", "pos", "n_multi_wr")
+
+    def __init__(self):
+        self.edges = {}
+        self.wr = {}        # code -> Slovene writtenRep
+        self.wrf = {}       # code -> (lang, writtenRep) for other languages
+        self.dfn = {}       # code -> skos:definition
+        self.val = {}       # code -> rdf:value (example sentences)
+        self.feat = defaultdict(dict)   # word-form code -> {prop: value}
+        self.unit = defaultdict(dict)   # lexical-unit code -> {prop: value}
+        self.pos = {}       # lexical-unit code -> part of speech
+        self.n_multi_wr = 0
+
+    def __getitem__(self, key):
+        return self.edges[key]
+
+
+def _better_written_rep(new, old):
+    """Is `new` the better spelling of a form that carries several?
+
+    A form may carry several writtenRep values -- `word-form-1911547` has "BOJ",
+    "Boj" and "boj".  Fewest capitals wins, then the lexicographically smallest,
+    so the dictionary lemma beats sentence-initial and all-caps variants and the
+    choice does not depend on which file was read first.
+    """
+    return (sum(1 for ch in new if ch.isupper()), new) < \
+           (sum(1 for ch in old if ch.isupper()), old)
+
+
+def parse_all(files, workers, t0):
+    """Parse every file in parallel and merge the results into one `Parsed`."""
     print(f"[parse] {len(files)} files x {workers} workers", flush=True)
+    out = Parsed()
     agg = {k: [] for k in EDGE_KEYS}
-    wr = {}; wrf = {}; dfn = {}; val = {}
-    feat_map = defaultdict(dict)
-    unit_map = defaultdict(dict)
-    pos_map = {}
-    n_wr_multi = [0]
     with Pool(workers) as pool:
         for i, res in enumerate(pool.imap_unordered(parse_file, files, chunksize=4)):
             for k in agg:
                 if res[k].shape[0]:
                     agg[k].append(res[k])
             for c, s in res["wr"]:
-                # A form may carry SEVERAL writtenRep values -- e.g. word-form-1911547
-                # has "BOJ", "Boj" and "boj".  A plain dict assignment keeps an
-                # arbitrary one (this is a latent v2 bug: it is why anchors came out
-                # as "BOJ").  Prefer the least-capitalised variant, then the
-                # lexicographically smallest, so the choice is deterministic and the
-                # dictionary lemma wins over sentence-initial / acronym variants.
-                old = wr.get(c)
+                old = out.wr.get(c)
                 if old is None:
-                    wr[c] = s
+                    out.wr[c] = s
                 elif s != old:
-                    n_wr_multi[0] += 1
-                    if (sum(1 for ch in s if ch.isupper()), s) < \
-                       (sum(1 for ch in old if ch.isupper()), old):
-                        wr[c] = s
-            for c, l, s in res["wrf"]:  wrf[c] = (l, s)
-            for c, s in res["dfn"]:     dfn[c] = s
-            for c, s in res["val"]:     val[c] = s
-            for c, p, v in res["feat"]: feat_map[c][p] = v
-            for c, p, v in res["unit"]: unit_map[c][p] = v
-            for c, p in res["pos"]:     pos_map[c] = p
+                    out.n_multi_wr += 1
+                    if _better_written_rep(s, old):
+                        out.wr[c] = s
+            for c, l, s in res["wrf"]:  out.wrf[c] = (l, s)
+            for c, s in res["dfn"]:     out.dfn[c] = s
+            for c, s in res["val"]:     out.val[c] = s
+            for c, p, v in res["feat"]: out.feat[c][p] = v
+            for c, p, v in res["unit"]: out.unit[c][p] = v
+            for c, p in res["pos"]:     out.pos[c] = p
             if (i + 1) % 200 == 0:
                 print(f"[parse] {i+1}/{len(files)}  {time.time()-t0:.0f}s", flush=True)
+    for k in EDGE_KEYS:
+        out.edges[k] = (np.concatenate(agg[k], axis=0) if agg[k]
+                        else np.empty((0, 2), dtype=np.int64))
+    return out
 
-    def cat(k):
-        return (np.concatenate(agg[k], axis=0) if agg[k]
-                else np.empty((0, 2), dtype=np.int64))
-    canon = cat("canon"); other = cat("other"); sense = cat("sense")
-    # FLAW 4 (cont.): `lexical-entry-translation-N ontolex:sense sense-translation-N`
-    # would re-introduce the two textless chain nodes we mean to collapse away.
-    n_chain = 0
-    if len(sense):
-        keep = (sense[:, 0] >> TYPE_SHIFT) != T_ENTRYTR
-        n_chain += int((~keep).sum())
-        sense = sense[keep]
-    if len(canon):
-        # ...and `lexical-entry-translation-N canonicalForm translation-form-N`
-        # would re-add the entry node via the canonical-form map.
-        keep = (canon[:, 0] >> TYPE_SHIFT) != T_ENTRYTR
-        n_chain += int((~keep).sum())
-        canon = canon[keep]
-    if n_chain:
-        print(f"[trans] dropped {n_chain:,} translation-chain edges "
+
+def drop_translation_chain(canon, sense):
+    """Remove the two textless nodes of the translation chain.
+
+    `lexical-entry-translation-N` reaches `sense-translation-N` by
+    `ontolex:sense` and `translation-form-N` by `canonicalForm`; keeping either
+    edge would re-introduce a node that carries no text.  The form itself is
+    attached to its Slovenian sense through `vartrans:source` instead.
+    """
+    n = 0
+    out = []
+    for arr in (sense, canon):
+        if len(arr):
+            keep = (arr[:, 0] >> TYPE_SHIFT) != T_ENTRYTR
+            n += int((~keep).sum())
+            arr = arr[keep]
+        out.append(arr)
+    if n:
+        print(f"[trans] dropped {n:,} translation-chain edges "
               f"(collapsed onto translation-form)", flush=True)
-    syn = cat("syn"); ant = cat("ant"); usage = cat("usage")
-    constit = cat("constit"); corr = cat("corr")
-    tsrc = cat("tsrc"); member = cat("member")
-    del agg
-    print(f"[parse] done {time.time()-t0:.0f}s  canon={len(canon):,} other={len(other):,} "
-          f"sense={len(sense):,} usage={len(usage):,} constit={len(constit):,} "
-          f"corr={len(corr):,} tsrc={len(tsrc):,} member={len(member):,} "
-          f"syn={len(syn):,} ant={len(ant):,} wr={len(wr):,} wrf={len(wrf):,} "
-          f"dfn={len(dfn):,} val={len(val):,} feat={len(feat_map):,} "
-          f"unit={len(unit_map):,} pos={len(pos_map):,}",
-          flush=True)
-    n_vform = sum(1 for d in feat_map.values() if "vform" in d)
-    n_person = sum(1 for d in feat_map.values() if "person" in d)
-    n_defnt = sum(1 for d in feat_map.values() if "definiteness" in d)
-    n_aspect = sum(1 for d in unit_map.values() if "aspect" in d)
-    n_clitic = sum(1 for d in unit_map.values() if "clitic" in d)
-    # gender is reported at BOTH levels, because it exists at both and the two
-    # counts mean different things: form gender is adjective/participle
-    # agreement, entry gender is the inherent gender of a noun.  Reporting only
-    # the form count is what let flaw 9 (M4) hide -- the diagnostic looked
-    # healthy while every noun's gender was being dropped.
-    n_gender_f = sum(1 for d in feat_map.values() if "gender" in d)
-    n_gender_u = sum(1 for d in unit_map.values() if "gender" in d)
-    print(f"[feat] reachable on word entries: vform={n_vform:,} person={n_person:,} "
-          f"definiteness={n_defnt:,} aspect={n_aspect:,} clitic={n_clitic:,} "
-          f"gender(form)={n_gender_f:,} gender(entry)={n_gender_u:,}",
+    sense, canon = out
+    return canon, sense
+
+
+# The order the parse totals are printed and recorded in, which is neither
+# EDGE_KEYS order nor alphabetical: relations that describe an entry first, then
+# the two reified sense-to-sense ones.
+REPORT_ORDER = ("canon", "other", "sense", "usage", "constit", "corr",
+                "tsrc", "member", "syn", "ant")
+
+
+def report_parse(p, edges, stats, t0):
+    """Print the parse totals and record them in `stats["raw"]`."""
+    counts = {k: len(edges[k]) for k in REPORT_ORDER}
+    print(f"[parse] done {time.time()-t0:.0f}s  "
+          + " ".join(f"{k}={v:,}" for k, v in counts.items())
+          + f" wr={len(p.wr):,} wrf={len(p.wrf):,} dfn={len(p.dfn):,} "
+            f"val={len(p.val):,} feat={len(p.feat):,} unit={len(p.unit):,} "
+            f"pos={len(p.pos):,}", flush=True)
+
+    def having(m, prop):
+        return sum(1 for d in m.values() if prop in d)
+
+    # Gender is counted at BOTH levels because it exists at both and the two mean
+    # different things: on a word-form it is adjective/participle agreement, on a
+    # lexical-unit the inherent gender of a noun.
+    feats = {p_: having(p.feat, p_)
+             for p_ in ("vform", "person", "definiteness", "gender")}
+    units = {p_: having(p.unit, p_) for p_ in ("aspect", "clitic", "gender")}
+    print(f"[feat] reachable on word entries: vform={feats['vform']:,} "
+          f"person={feats['person']:,} definiteness={feats['definiteness']:,} "
+          f"aspect={units['aspect']:,} clitic={units['clitic']:,} "
+          f"gender(form)={feats['gender']:,} gender(entry)={units['gender']:,}",
           flush=True)
     stats["raw"] = {k: int(v) for k, v in dict(
-        canon=len(canon), other=len(other), sense=len(sense), usage=len(usage),
-        constit=len(constit), corr=len(corr), tsrc=len(tsrc), member=len(member),
-        syn=len(syn), ant=len(ant), writtenrep_sl=len(wr), writtenrep_foreign=len(wrf),
-        definitions=len(dfn), values=len(val), pos=len(pos_map),
-        feat_forms=len(feat_map), unit_props=len(unit_map),
-        vform=n_vform, person=n_person, definiteness=n_defnt,
-        aspect=n_aspect, clitic=n_clitic,
-        writtenrep_multivalued=n_wr_multi[0]).items()}
+        **counts,
+        writtenrep_sl=len(p.wr), writtenrep_foreign=len(p.wrf),
+        definitions=len(p.dfn), values=len(p.val), pos=len(p.pos),
+        feat_forms=len(p.feat), unit_props=len(p.unit),
+        vform=feats["vform"], person=feats["person"],
+        definiteness=feats["definiteness"],
+        aspect=units["aspect"], clitic=units["clitic"],
+        writtenrep_multivalued=p.n_multi_wr).items()}
 
-    # ---- collapse MWE decomposition ---------------------------------------
-    if len(constit) and len(corr):
-        order = np.argsort(corr[:, 0], kind="stable")
-        parts_s = corr[order, 0]; words_s = corr[order, 1]
-        idx = np.clip(np.searchsorted(parts_s, constit[:, 1]), 0, len(parts_s) - 1)
-        hit = parts_s[idx] == constit[:, 1]
-        mwe_word = np.stack([constit[hit, 0], words_s[idx[hit]]], axis=1)
-        mwe_word = np.unique(mwe_word, axis=0)
-    else:
-        mwe_word = np.empty((0, 2), dtype=np.int64)
-    del constit, corr
+
+def collapse_mwe(constit, corr):
+    """MWE -> word edges, with the empty `lexical-unit-part` connector removed.
+
+    The raw shape is `MWE --constituent--> part --correspondsTo--> word`, where
+    the part node carries no text of its own.
+    """
+    if not (len(constit) and len(corr)):
+        return np.empty((0, 2), dtype=np.int64)
+    order = np.argsort(corr[:, 0], kind="stable")
+    parts_s = corr[order, 0]; words_s = corr[order, 1]
+    idx = np.clip(np.searchsorted(parts_s, constit[:, 1]), 0, len(parts_s) - 1)
+    hit = parts_s[idx] == constit[:, 1]
+    mwe_word = np.unique(np.stack([constit[hit, 0], words_s[idx[hit]]], axis=1),
+                         axis=0)
     print(f"[collapse] {len(mwe_word):,} MWE->word constituent edges", flush=True)
+    return mwe_word
+
+
+# The low 28 bits of a collocation code hold the indexing head; the next 28 the
+# dependent sense that names the phrase.  See `colloc_phrase_of_iri`.
+COLLOC_ID_MASK = (1 << 28) - 1
+
+
+def undirected_csr(si, di, n):
+    """(indptr, indices) over `n` nodes, with every edge stored both ways.
+
+    The graph is built directed and traversed undirected, so each edge appears
+    once per endpoint.
+
+    Neighbours are sorted WITHIN each node's slice, which is what makes the store
+    bit-reproducible.  Sorting only by source would leave the order inside a
+    slice set by the order the edge arrays arrived in -- and the parse runs under
+    `imap_unordered`, so that is worker-completion order and varies from run to
+    run.  Nothing downstream reads the order (consumers sort by node id
+    themselves), but a store that cannot be rebuilt byte-for-byte cannot be
+    checked byte-for-byte either.
+    """
+    src2 = np.concatenate([si, di]); dst2 = np.concatenate([di, si])
+    oo = np.lexsort((dst2, src2))          # primary src2, secondary dst2
+    src2 = src2[oo]; dst2 = dst2[oo]
+    indptr = np.zeros(n + 1, dtype=np.int64)
+    np.add.at(indptr, src2 + 1, 1); np.cumsum(indptr, out=indptr)
+    return indptr, dst2
+
+
+# ---------------------------------------------------------------------------
+def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
+          sense_index=True, colloc_text="phrase"):
+    t0 = time.time()
+    parsed = parse_all(files, workers, t0)
+    wr, wrf, dfn, val = parsed.wr, parsed.wrf, parsed.dfn, parsed.val
+    feat_map, unit_map, pos_map = parsed.feat, parsed.unit, parsed.pos
+
+    canon, sense = drop_translation_chain(parsed["canon"], parsed["sense"])
+    parsed.edges["canon"], parsed.edges["sense"] = canon, sense
+    other = parsed["other"]
+    syn = parsed["syn"]; ant = parsed["ant"]; usage = parsed["usage"]
+    constit = parsed["constit"]; corr = parsed["corr"]
+    tsrc = parsed["tsrc"]; member = parsed["member"]
+    report_parse(parsed, parsed.edges, stats, t0)
+    del parsed
+
+    mwe_word = collapse_mwe(constit, corr)
+    del constit, corr
 
     # ---- sense -> lexical unit, and lemma text per lexical unit ------------
     canon_of = {}
@@ -852,49 +777,28 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
         lu = sense_lu.get(int(se))
         return lemma_of_lu(lu) if lu is not None else ""
 
-    # ---- FLAW 8: the collocation's surface string --------------------------
-    # A frac:Collocation node carries no text of its own -- rdfs:member, frac:head
-    # and rdf:type are the ONLY predicates it ever takes, in all 42 GB, and nothing
-    # in the dump ever points AT one (0 triples with a collocation in the object
-    # position).  But its IRI names the sense of the multi-word entry that spells
-    # the phrase out, and that entry does carry the text:
-    #
-    #     <dependent-sense-D-lexical-unit-H>  rdf:type  frac:Collocation
-    #     <sense-D>          ontolex:isSenseOf     <lexical-unit-M>
-    #     <lexical-unit-M>   rdf:type              ontolex:MultiWordExpression
-    #     <lexical-unit-M>   ontolex:canonicalForm <form-lexical-unit-M>
-    #     <form-lexical-unit-M> ontolex:writtenRep """kisova voda"""@sl
-    #
-    # so the phrase is three ordinary lookups away and sense_lu / canon_of / wr
-    # already hold every one of them.  The link exists only as a naming
-    # convention, never as a triple -- which is why v2/v3/v4 all missed it while
-    # code_of() was parsing D out of that very IRI to pack the node id.
-    #
-    # Measured on the raw dump: 4,717,090 of 4,717,090 collocation nodes resolve,
-    # 3,744,473 distinct phrases, and 75.3% of them differ from their constituent
-    # lemmas concatenated (agreement, word order, and the prepositions/copula the
-    # pair form drops entirely).  See data/README.md Finding 8.
-    COLLOC_ID_MASK = (1 << 28) - 1
-
     def colloc_phrase_of_iri(iri):
-        """Curated phrase behind one frac:Collocation IRI code, or '' if unresolved."""
+        """Curated phrase behind one frac:Collocation IRI code, or '' if unresolved.
+
+        The phrase is not on the collocation node and not behind any edge -- it
+        is reachable only through the IRI's naming convention:
+
+            <dependent-sense-D-lexical-unit-H>  rdf:type  frac:Collocation
+            <sense-D>          ontolex:isSenseOf     <lexical-unit-M>
+            <lexical-unit-M>   ontolex:canonicalForm <form-lexical-unit-M>
+            <form-lexical-unit-M> ontolex:writtenRep  'kisova voda'@sl
+
+        `code_of` packs that IRI as `(T_COLLOC << 56) | (D << 28) | H` whenever
+        both ids fit in 28 bits, which they do throughout this KG (max sense id
+        ~1.0e7, max lexical-unit id ~1.2e7, against 2^28 = 2.7e8).  On the
+        `_hash56` fallback the unpacked D names no sense and this returns ''.
+        """
         if (iri >> TYPE_SHIFT) != T_COLLOC:
             return ""
-        # code_of() packs the IRI as (T_COLLOC << 56) | (D << 28) | H whenever both
-        # ids fit in 28 bits, which they do throughout this KG (max sense id ~1.0e7,
-        # max lexical-unit id ~1.2e7, vs 2^28 = 2.7e8).  On the _hash56 fallback the
-        # unpacked D is meaningless, but then it names no sense and we return ''.
         d = (iri >> 28) & COLLOC_ID_MASK
         return lemma_of_sense((T_SENSE << TYPE_SHIFT) | d)
 
-    # ---- FLAW 2 + FLAW 10: collocations from rdfs:member -------------------
-    # Each pairing is reified once per participant, so several frac:Collocation
-    # IRIs share one {sense_a, sense_b} member set.  Through v6 the dedup key was
-    # that member set, which was wrong in phrase mode: the duplicates name
-    # DIFFERENT dependent senses, i.e. different curated phrases, and 20.0% of the
-    # phrases were being thrown away.  Key on (member set, phrase) instead -- one
-    # node per distinct node text.  Pair mode keeps the old key, under which every
-    # duplicate renders identically anyway.
+    # ---- collocations from rdfs:member -------------------------------------
     colloc_pairs = np.empty((0, 2), dtype=np.int64)
     colloc_iri = np.empty(0, dtype=np.int64)        # parallel to colloc_pairs
     colloc_phrases = None                           # parallel too, phrase mode only
@@ -910,9 +814,8 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
         two = sizes == 2
         starts = bounds[two]
         a = mo[starts]; b = mo[starts + 1]
-        # ms[starts] is the frac:Collocation IRI code itself.  v3/v4 discarded it
-        # once the members were read; flaw 8 needs it, because the sense id it
-        # encodes is the only route to the phrase's surface string.
+        # ms[starts] is the frac:Collocation IRI code itself, kept because the
+        # sense id it encodes is the only route to the phrase's surface string.
         if colloc_text == "phrase":
             colloc_pairs, colloc_iri, colloc_phrases = _dedup_colloc_by_phrase(
                 a, b, ms[starts], colloc_phrase_of_iri)
@@ -935,15 +838,16 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
                                  "distinct_pairings": int(len(colloc_pairs))}
     del member
 
-    # ---- FLAW 1: reify only syn/ant (the sense->sense ambiguous class) -----
+    # ---- reify the two sense->sense relations ------------------------------
+    # Synonym and antonym are the only relations not recoverable from the
+    # endpoint types, so each pairing becomes a node whose text names which.
     syn_pairs = _dedup_pairs(syn[:, 0], syn[:, 1]) if len(syn) else np.empty((0, 2), np.int64)
     ant_pairs = _dedup_pairs(ant[:, 0], ant[:, 1]) if len(ant) else np.empty((0, 2), np.int64)
     print(f"[reify] syn={len(syn_pairs):,} ant={len(ant_pairs):,} pairings", flush=True)
     del syn, ant
 
-    # ---- FLAW 4: collapse the translation chain ---------------------------
-    # translation-form carries the @hun text AND vartrans:source -> sl sense.
-    # sense-translation / lexical-entry-translation carry nothing: drop them.
+    # `translation-form` carries both the foreign text and `vartrans:source`
+    # back to the Slovenian sense, so this one edge is the whole chain.
     trans_edges = tsrc[:, [0, 1]] if len(tsrc) else np.empty((0, 2), np.int64)
     del tsrc
 
@@ -1011,10 +915,13 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
         if t:
             text[j] = TAG_FORM + t
             kind[j] = K_FORM
-    # ---- FLAW 5: make sibling senses distinguishable -----------------------
-    # Two lookup tables, both kept as sorted numpy arrays rather than dicts: at
-    # 8.5M senses a Python dict of either costs ~1 GB, and the build already
-    # peaks at 65 GB.
+    # ---- tables that make sibling senses distinguishable -------------------
+    # Only 2.7 % of senses carry a definition; the rest fall back to their
+    # entry's lemma, which on a polysemous anchor makes every sibling sense node
+    # byte-identical.  A dictionary ordinal fixes that unconditionally, and a
+    # snippet of the first usage example fixes it meaningfully where there is
+    # one.  Both are kept as sorted numpy arrays rather than dicts: at 8.5M
+    # senses a Python dict of either costs ~1 GB on top of a 65 GB peak.
     empty64 = np.empty(0, dtype=np.int64)
     ex_se = ex_code = empty64                    # sense -> first example w/ text
     if snippet_chars > 0 and len(usage):
@@ -1114,8 +1021,7 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
     stats["textless_by_type"] = tl_by_type
 
     # ---- mint the reified nodes (collocation / synonym / antonym) ----------
-    # The collocation phrases were resolved and deduped on above (flaws 8 and 10);
-    # row t of colloc_pairs carries its text in colloc_phrases[t].
+    # Row t of `colloc_pairs` carries its text in `colloc_phrases[t]`.
     mint_src = []; mint_dst = []; mint_text = []; mint_kind = []
     next_id = n_real
     n_phrase = [0]
@@ -1123,10 +1029,10 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
     def mint(pairs, tag, joiner, k, namer, phrase_of=None):
         """Reify each pairing as one node whose text names both endpoints.
 
-        With `phrase_of`, the node instead carries the phrase itself when one
-        resolves, falling back to the pair form when it does not.  The SKIP
-        condition stays on the members either way; what does change the node
-        count is the caller's dedup key (flaw 10), not this function.
+        With `phrase_of`, the node carries the curated phrase instead whenever
+        one resolves, falling back to the pair form when it does not.  Either
+        way a pairing is skipped unless both members are real, named nodes; the
+        node COUNT is set by the caller's dedup key, not here.
         """
         nonlocal next_id
         if not len(pairs):
@@ -1181,12 +1087,7 @@ def build(files, workers, stats, snippet_chars=SENSE_SNIPPET_CHARS,
     print(f"[nodes] final {n:,} nodes / {len(si):,} directed edges  "
           f"({n_textless:,} textless, {100.0*n_textless/max(n,1):.2f}%)", flush=True)
 
-    # ---- undirected CSR (traverse both directions) ------------------------
-    src2 = np.concatenate([si, di]); dst2 = np.concatenate([di, si])
-    oo = np.argsort(src2, kind="stable")
-    src2 = src2[oo]; dst2 = dst2[oo]
-    indptr = np.zeros(n + 1, dtype=np.int64)
-    np.add.at(indptr, src2 + 1, 1); np.cumsum(indptr, out=indptr)
+    indptr, dst2 = undirected_csr(si, di, n)
     print(f"[csr] {len(dst2):,} half-edges  {time.time()-t0:.0f}s", flush=True)
 
     is_form_leaf = (kind == K_FORM)
@@ -1261,8 +1162,8 @@ def analyze_variant(G, seeds, max_hops, token_len, prompt_tokens, active):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--kg-dir", default="/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB")
-    ap.add_argument("--out", default="/shared/workspace/povejmo/gams_gtlm/data/analysis/results/sizing_study.json")
+    ap.add_argument("--kg-dir", default=KG_RAW_DIR)
+    ap.add_argument("--out", default=os.path.join(RESULTS_DIR, "sizing_study.json"))
     ap.add_argument("--n-seeds", type=int, default=400)
     ap.add_argument("--max-hops", type=int, default=3)
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "16")))
@@ -1278,7 +1179,7 @@ def main():
                     help="collocation node text: 'phrase' resolves the inflected "
                          "surface string through the multi-word entry named in the "
                          "frac:Collocation IRI (kolokacija: kisova voda); 'pair' is "
-                         "the v3/v4 lemma-pair form (kolokacija: kisov + voda). "
+                         "the bare lemma-pair form (kolokacija: kisov + voda). "
                          "'phrase' falls back to 'pair' per node when it does not "
                          "resolve, so the graph structure is identical either way.")
     ap.add_argument("--variants", default="",
@@ -1346,7 +1247,7 @@ def main():
         token_len = np.array([max(1, len(s) // 4) if s else 0 for s in texts], dtype=np.int32)
         tok_name = "char/4 proxy"
     else:
-        os.environ.setdefault("HF_HOME", "/shared/workspace/povejmo/huggingface_cache")
+        os.environ.setdefault("HF_HOME", HF_CACHE)
         os.environ["HF_HUB_OFFLINE"] = "1"; os.environ["TRANSFORMERS_OFFLINE"] = "1"
         from transformers import AutoTokenizer
         tok = AutoTokenizer.from_pretrained(args.tokenizer)

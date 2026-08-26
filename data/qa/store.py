@@ -15,15 +15,12 @@ full 37M-node scan and is cached under the store directory.
 """
 import os
 import re
-import sys
 import json
 import collections
 
 import numpy as np
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
-import graph_store                                            # noqa: E402
+from lib import graph_store
 
 # node kinds, from the builder
 K_ANCHOR, K_FORM, K_SENSE, K_EXAMPLE, K_TRANS = 0, 1, 2, 3, 4

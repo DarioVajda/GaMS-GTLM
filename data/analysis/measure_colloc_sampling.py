@@ -18,22 +18,14 @@ lowest-node-id rank is used.  Stated rather than assumed.
     python measure_colloc_sampling.py [STORE] [--anchors 400] [--voda voda]
 """
 import os
-import sys
 import json
-import math
-import random
 import argparse
-import collections
 
 import numpy as np
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.dirname(HERE)
-sys.path.insert(0, DATA)
-sys.path.insert(0, os.path.join(DATA, "lib"))
-
-from qa.store import open_store, K_ANCHOR, K_SENSE, K_COLLOC   # noqa: E402
-from qa import colloc_sampling                                             # noqa: E402
+from qa.store import open_store, K_ANCHOR, K_SENSE, K_COLLOC
+from qa import colloc_sampling
+from lib.paths import RESULTS_DIR
 
 K_DEFAULT = 15
 
@@ -195,7 +187,7 @@ def main():
     ap.add_argument("store", nargs="?", default=None)
     ap.add_argument("--anchors", type=int, default=400)
     ap.add_argument("--voda", default="voda")
-    ap.add_argument("--out", default=os.path.join(HERE, "results", "colloc_sampling.json"))
+    ap.add_argument("--out", default=os.path.join(RESULTS_DIR, "colloc_sampling.json"))
     args = ap.parse_args()
 
     store = open_store(args.store)

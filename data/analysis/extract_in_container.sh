@@ -23,7 +23,7 @@ cd "$ROOT/data"
 
 exec python -m analysis.measure_extraction \
     --dataset "$DATASET" \
-    --prompt "$ROOT/data/prompt_v3.txt" \
+    --prompt "$ROOT/data/prompts/extractor_prompt.txt" \
     --n 0 \
     --num-shards "$NUM_SHARDS" --shard "$SHARD" \
     --dump "${PREFIX}_items.part${SHARD}.jsonl" \

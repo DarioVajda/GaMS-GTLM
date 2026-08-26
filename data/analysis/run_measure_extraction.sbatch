@@ -3,7 +3,7 @@
 # R4 -- measure the D3 entity extractor against the generated questions.
 #
 #     sbatch analysis/run_measure_extraction.sbatch                     # defaults
-#     sbatch analysis/run_measure_extraction.sbatch --prompt ../prompt_v2.txt
+#     sbatch analysis/run_measure_extraction.sbatch --prompt prompts/archive/extractor_prompt_v2.txt
 #     sbatch analysis/run_measure_extraction.sbatch --model cjvt/GaMS-9B-Instruct
 #
 # One A100-80GB holds GaMS3-12B-Instruct in bf16 (~24 GB) with room for a batch

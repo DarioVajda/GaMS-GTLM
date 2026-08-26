@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Fast local check of the M4 fix: parse ONE noun-batch words file and confirm
-entry-level gender now reaches `unit`, and that feat_string renders it into the
-anchor parenthetical without disturbing the form strings.
+"""Parse ONE noun-batch words file and report where gender lands.
 
-Usage:  test_gender_parse.py [FILE]
+Entry-level gender must reach `unit` and be rendered into the anchor
+parenthetical, leaving the form strings alone.
+
+Usage:  python -m analysis.probe_gender_parse [FILE]
 """
-import os, sys
+import os
+import sys
 from collections import defaultdict
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build"))
-import build_gtlm_graph as B
+from build import build_graph as B
+from lib.paths import kg_raw_file
 
-PATH = sys.argv[1] if len(sys.argv) > 1 else (
-    "/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB/220-words.nt")
+PATH = sys.argv[1] if len(sys.argv) > 1 else kg_raw_file("220-words.nt")
 
 
 def main():

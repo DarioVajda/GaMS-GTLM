@@ -20,8 +20,8 @@ it.  That is what decouples them without letting them drift.
 Four reproducibility requirements are the contract (selftest C18):
 
   (a) the candidate pool is sorted by node id before drawing -- CSR adjacency
-      order is NOT stable across builds (0.44 % of `indices` rows moved in v5),
-      so an unsorted pool means the same seed picks different phrases after a
+      order is NOT stable across builds (the parse is parallel and unordered), so
+      an unsorted pool means the same seed picks different phrases after a
       rebuild;
   (b) the RNG seed derives from the anchor's node code and nothing else -- never
       from a loop counter or extraction order;

@@ -1,4 +1,4 @@
-"""Minimal JSONL append for the experiment's train record.
+"""JSONL read and append for the experiment's records.
 
 Package-private on purpose: experiments stay independent, so each carries its own
 copy rather than sharing a utility (the same pattern `graph_model`'s experiments
@@ -17,3 +17,14 @@ def append_jsonl(path, record):
     with open(path, "a") as f:
         f.write(json.dumps(record) + "\n")
     return record
+
+
+def read_jsonl(path):
+    """Every record in ``path``, in file order.  Blank lines are skipped."""
+    with open(path, encoding="utf-8") as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def load_items(root, split):
+    """``{id: item}`` for one split of a generated dataset directory."""
+    return {r["id"]: r for r in read_jsonl(os.path.join(root, f"{split}.jsonl"))}

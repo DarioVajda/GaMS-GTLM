@@ -15,7 +15,6 @@ import json
 import hashlib
 import collections
 
-import numpy as np
 
 from . import sl
 

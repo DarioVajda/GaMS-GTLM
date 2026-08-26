@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# `lookup ...` -> data/lookup/kg_lookup.py, from any working directory.
+# `lookup ...` -> data/lookup/cli.py, from any working directory.
 #
 # Put this directory on PATH once:
 #     echo 'export PATH="/shared/workspace/povejmo/gams_gtlm/bin:$PATH"' >> ~/.bashrc
@@ -15,7 +15,7 @@ set -euo pipefail
 
 here=$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
 repo=$(dirname -- "$here")
-target="$repo/data/lookup/kg_lookup.py"
+target="$repo/data/lookup/cli.py"
 
 [ -f "$target" ] || { echo "lookup: missing $target" >&2; exit 127; }
 
@@ -37,4 +37,7 @@ if [ -z "$py" ]; then
     fi
 fi
 
-exec "$py" "$target" "$@"
+# `-m` from data/, so `lib.paths` and `lib.graph_store` resolve without the
+# script having to put its own directory on sys.path.
+cd -- "$repo/data"
+exec "$py" -m lookup.cli "$@"

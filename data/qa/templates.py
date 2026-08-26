@@ -26,8 +26,8 @@ test items, so the score on them measures generalisation to unseen phrasing
 rather than memorisation of a frame.  They are chosen before generation (C8), not
 retrofitted, and each type withholds 3.
 
-Volume: ~13 frames per type, 3 of them withheld.  No paraphrase expansion in v1 --
-at D16 scale that is ~70 items per frame with the slot values varying every time,
+Volume: ~13 frames per type, 3 of them withheld.  No paraphrase expansion -- at
+D16 scale that is ~70 items per frame with the slot values varying every time,
 which is enough for retrieval training.  Widening the pool later is cheap and
 invalidates nothing already generated.
 """
@@ -144,8 +144,8 @@ TEMPLATES = {
         ("Rabim {CAS_ACC} glagola {L} po osebah.", "train"),
         ("Katere oblike ima {L} v {CAS_LOC}?", "train"),
         ("{CAS_NOM} glagola {L}, prosim.", "A"),
-        # C24: arity 9 — every person in all three numbers.  The frame used to
-        # name a single cell ("v 2. osebi dvojine") and got the whole table back.
+        # C24: arity 9 — every person in all three numbers, so the frame must
+        # ask for the whole table rather than name a single cell.
         ("Kako bi rekel {L} v {CAS_LOC}? Izpiši vse osebe in števila.", "A"),
         ("Spregaj {L} v {CAS_LOC}, vsa tri števila.", "A"),
     ],

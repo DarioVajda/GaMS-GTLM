@@ -18,6 +18,8 @@ import random
 import argparse
 import collections
 
+from . import grade
+
 
 def read(path):
     with open(path, encoding="utf-8") as f:
@@ -37,7 +39,9 @@ def show(it, width=300):
     tags = [it["type"], it["band"], it["split"], it["tier"], it["template_id"]]
     if it["negative"]:
         tags.append(f"NEG/{it['negative_flavour']}")
-    g = it["grading"]
+    # Through `contract`, never off the row: the type-level fields live in
+    # `qa/spec.py` and a row carries only this item's own facts.
+    g = grade.contract(it)
     tags.append(g["mode"])
     if g.get("quantity_band"):
         tags.append(f"band={g['quantity_band']}"

@@ -38,30 +38,30 @@ The five lookups:
 Every lookup exits 0 when it finds something and 1 when it does not, so `raw id`
 doubles as a test for "is this id in the export at all".
 
-Run `kg_lookup.py store -h` / `kg_lookup.py raw -h`, or `-h` on any of the five,
+Run `lookup store -h` / `lookup raw -h`, or `-h` on any of the five,
 for the exact semantics and a worked example.
 
 `bin/lookup` in the repo root wraps this script, so with that directory on PATH
 every command below can be typed as `lookup ...` from any working directory.
 """
-import argparse, os, re, subprocess, sys
+import argparse
+import os
+import re
+import subprocess
+import sys
 
-# realpath, not abspath: `bin/lookup` may be reached through a symlink, and the
-# store and corpus paths below are all derived from this location.
-HERE = os.path.dirname(os.path.realpath(__file__))   # data/lookup
-DATA = os.path.dirname(HERE)                         # data
-LIB = os.path.join(DATA, "lib")                      # data/lib -- graph_store
+from lib.paths import KG_RAW_DIR, STORES_DIR
+
 # Override with KG_STORE=/path/to/store to query a different build -- e.g. a
 # `_gams2b` store, which is identical except for `token_len`.
-STORE = os.environ.get("KG_STORE") or os.path.join(
-    DATA, "stores", "kg_graph_gemma3")
-RAW = os.path.join(DATA, "kg_raw", "OntoLex DSB")
+STORE = os.environ.get("KG_STORE") or os.path.join(STORES_DIR, "kg_graph_gemma3")
+RAW = KG_RAW_DIR
 
 TYPE_SHIFT = 56
 T_LU = 1          # lexical-unit -> headword anchor
 T_WORDFORM = 3    # word-form    -> inflected form leaf
 
-# `kind.npy` values, from build_gtlm_graph.py.  Unlike node_codes these cover
+# `kind.npy` values, from build_graph.py.  Unlike node_codes these cover
 # the minted nodes too, so they are what lets a search reach collocations.
 K_ANCHOR, K_FORM, K_SENSE, K_EXAMPLE = 0, 1, 2, 3
 K_TRANS, K_COLLOC, K_SYN, K_ANT, K_OTHER = 4, 5, 6, 7, 8
@@ -209,9 +209,8 @@ def cmd_raw_word(args):
 # ------------------------------------------------------------------- store
 
 def load_store():
-    sys.path.insert(0, LIB)
     import numpy as np
-    from graph_store import load_graph
+    from lib.graph_store import load_graph
     G = load_graph(STORE, verbose=False)
     return np.asarray(G["node_codes"]), G
 
@@ -295,7 +294,7 @@ def _tier(text, kind, want, word_re):
 
 
 # code type id -> the IRI stem it came from, so every printed label can be fed
-# straight back to `raw iri`.  Mirrors TYPE_NAME in build_gtlm_graph.py.
+# straight back to `raw iri`.  Mirrors TYPE_NAME in build_graph.py.
 _STEM = {1: "lexical-unit", 2: "lexical-unit-part", 3: "word-form",
          4: "form-lexical-unit", 5: "sense", 6: "sense-translation",
          7: "translation-form", 8: "example", 9: "resource",
@@ -426,7 +425,7 @@ def _print_unsearched(args, wanted, total_by_kind):
     print(f"\n{total:,} further occurrence(s) of {args.word!r} in node types "
           f"not searched:")
     print(f"  {breakdown}")
-    print(f"  show them with:  kg_lookup.py store word {args.word!r} --also all")
+    print(f"  show them with:  lookup store word {args.word!r} --also all")
 
 
 def _print_form_headwords(G, codes, form_rows, args):
@@ -462,13 +461,12 @@ def _print_form_headwords(G, codes, form_rows, args):
             if v < codes.size and int(codes[v] >> TYPE_SHIFT) == T_LU:
                 heads[int(codes[v] & ((1 << TYPE_SHIFT) - 1))] = txt[v]
     if heads:
-        print(f"\n  headwords those forms belong to:")
+        print("\n  headwords those forms belong to:")
         for lu, s in sorted(heads.items())[:args.max]:
             print(f"    lexical-unit-{lu:<10} {s}")
 
 
 def cmd_store_id(args):
-    import numpy as np
     codes, G = load_store()
     txt, indptr, indices = G["text"], G["indptr"], G["indices"]
     i = lu_index(codes, args.id)
@@ -495,33 +493,8 @@ def cmd_store_id(args):
     return 0
 
 
-def main():
-    RAWD = argparse.RawDescriptionHelpFormatter
-
-    ap = argparse.ArgumentParser(
-        prog="kg_lookup.py", description=__doc__, formatter_class=RAWD,
-        epilog="""example -- spelling to id, then id to neighbourhood
-
-  $ kg_lookup.py store word milijonar
-  milijonar: 2 lexical-unit node(s)
-
-    lexical-unit-69611      iztočnica: milijonar (samostalnik, imenovalnik, ednina)
-    lexical-unit-11997406   iztočnica: Milijonar (samostalnik, imenovalnik, ednina)
-
-  $ kg_lookup.py store id 69611 --hops 1 --max 2
-  lexical-unit-69611  (node 69609)
-    iztočnica: milijonar (samostalnik, imenovalnik, ednina)
-
-  --- hop 1: 220 nodes ---
-    iztočnica: dolarski milijonarji
-    iztočnica: ekscentrični milijonar
-    … 218 more (raise --max)
-
-Two ids for one spelling is normal: the low one is the core entry, the high one a
-duplicate from the >1M range.  Feed either to `raw id` instead to see the triples
-it was built from.""")
-    sub = ap.add_subparsers(dest="layer", required=True, metavar="{store,raw}")
-
+def _add_store_parser(sub, RAWD):
+    """The `store` subtree: query the built graph."""
     # ---------------------------------------------------------------- store
     st = sub.add_parser(
         "store", formatter_class=RAWD,
@@ -586,7 +559,7 @@ case-folding scan, which costs 4x more, the two agree exactly on `jabolk` and
 `čebul` and differ by 8 hits in 327,165 on `boj`.""",
         epilog="""examples
 
-  $ kg_lookup.py store word jabolke
+  $ lookup store word jabolke
 
   === iztočnica — 0 node(s) ===          (nothing: it is not a headword)
 
@@ -601,9 +574,9 @@ case-folding scan, which costs 4x more, the two agree exactly on `jabolk` and
 
   1,247 further occurrence(s) of 'jabolke' in node types not searched:
     zgled 1,203 · pomen 12 · kolokacija 32
-    show them with:  kg_lookup.py store word 'jabolke' --also all
+    show them with:  lookup store word 'jabolke' --also all
 
-  $ kg_lookup.py store word jabolk --also kolokacija,pomen
+  $ lookup store word jabolk --also kolokacija,pomen
   ... headwords and forms as above, then the two named types, each with its
   own exact / whole-word / substring tiers.""")
     p.add_argument("word", help="the spelling to look for, e.g. milijonar")
@@ -641,7 +614,7 @@ in both directions, and each node is reported once, at the hop where it is first
 reached.  Exits 1 if the id is not in the store.""",
         epilog="""example
 
-  $ kg_lookup.py store id 69611 --hops 1 --max 4
+  $ lookup store id 69611 --hops 1 --max 4
   lexical-unit-69611  (node 69609)
     iztočnica: milijonar (samostalnik, imenovalnik, ednina)
 
@@ -678,6 +651,10 @@ roughly creation order and unrelated to relevance, so read them
 as an arbitrary sample, not as the top N.""")
     p.set_defaults(fn=cmd_store_id)
 
+
+
+def _add_raw_parser(sub, RAWD):
+    """The `raw` subtree: query the untouched N-Triples."""
     # ------------------------------------------------------------------ raw
     rw = sub.add_parser(
         "raw", formatter_class=RAWD,
@@ -728,7 +705,7 @@ Exits 1 if the id appears nowhere in the export -- which is how you prove an id
 is genuinely missing rather than dropped by the builder.""",
         epilog="""example
 
-  $ kg_lookup.py raw id 34748 --max 3
+  $ lookup raw id 34748 --max 3
   lexical-unit-34748: 109 triples  (65 outgoing, 44 incoming)
 
   --- outgoing ---
@@ -743,7 +720,7 @@ is genuinely missing rather than dropped by the builder.""",
     dependent-sense-14008590-lexical-unit-34748  frac:head
     … 41 more (raise --max)
 
-  $ kg_lookup.py raw id 542411
+  $ lookup raw id 542411
   lexical-unit-542411: no triples in the export        # exit status 1""")
     p.add_argument("id", type=int, help="numeric part of lexical-unit-<ID>")
     p.add_argument("--max", type=int, default=40, metavar="N",
@@ -765,7 +742,7 @@ stripped, exactly as this tool prints it, so you can follow a reference straight
 out of a previous result.""",
         epilog="""example -- following canonicalForm from `raw id 34748` to the spelling
 
-  $ kg_lookup.py raw iri word-form-1567346
+  $ lookup raw iri word-form-1567346
   word-form-1567346: 11 triples  (10 outgoing, 1 incoming)
 
   --- outgoing ---
@@ -800,7 +777,7 @@ Use this when you need to see the untouched literal, or a language the store
 does not surface.""",
         epilog="""example
 
-  $ kg_lookup.py raw word sprijaznjen --max 3
+  $ lookup raw word sprijaznjen --max 3
   \"\"\"sprijaznjen\"\"\"@sl: 7 triples
 
     word-form-1567346    ontolex:writtenRep    \"\"\"sprijaznjen\"\"\"@sl
@@ -819,6 +796,38 @@ spelled alike -- the ambiguity is real, not a duplicate.""")
                    help="how many triples to print (default: 40).\n"
                         "Display limit only.")
     p.set_defaults(fn=cmd_raw_word)
+
+
+
+def main():
+    RAWD = argparse.RawDescriptionHelpFormatter
+
+    ap = argparse.ArgumentParser(
+        prog="lookup", description=__doc__, formatter_class=RAWD,
+        epilog="""example -- spelling to id, then id to neighbourhood
+
+  $ lookup store word milijonar
+  milijonar: 2 lexical-unit node(s)
+
+    lexical-unit-69611      iztočnica: milijonar (samostalnik, imenovalnik, ednina)
+    lexical-unit-11997406   iztočnica: Milijonar (samostalnik, imenovalnik, ednina)
+
+  $ lookup store id 69611 --hops 1 --max 2
+  lexical-unit-69611  (node 69609)
+    iztočnica: milijonar (samostalnik, imenovalnik, ednina)
+
+  --- hop 1: 220 nodes ---
+    iztočnica: dolarski milijonarji
+    iztočnica: ekscentrični milijonar
+    … 218 more (raise --max)
+
+Two ids for one spelling is normal: the low one is the core entry, the high one a
+duplicate from the >1M range.  Feed either to `raw id` instead to see the triples
+it was built from.""")
+    sub = ap.add_subparsers(dest="layer", required=True, metavar="{store,raw}")
+
+    _add_store_parser(sub, RAWD)
+    _add_raw_parser(sub, RAWD)
 
     args = ap.parse_args()
     sys.exit(args.fn(args))

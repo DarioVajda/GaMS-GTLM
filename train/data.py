@@ -34,12 +34,11 @@ Two things travel alongside the training dataset:
     The ball carries the answer; only the dataset carries the item-level
     `grading` facts (for T17 and T19: `quantity_band`, `n_asked`, `n_all`,
     `all_items`), and `qa.grade.grade` needs both.  The TYPE-level fields
-    (`mode`, `sep`, `arity`, `regex`) come from `qa/spec.py`, not from the row —
-    an in-row constant is how T19 kept being graded `sequence` for a whole run
-    after the spec said otherwise.  The join asserts the two answers agree — the
-    ball and the dataset must not disagree about what is being supervised,
-    enforced on every run rather than checked once.  See `train/config.py`'s
-    `ITEMS_ROOT` for why `v2_clean` and `v2_graded` are not interchangeable.
+    (`mode`, `sep`, `arity`, `regex`) come from `qa/spec.py`, never from the row,
+    so a stale in-row constant cannot override the spec.  The join asserts the
+    two answers agree, on every run: the ball and the dataset must not disagree
+    about what is being supervised.  See `train/config.py`'s `ITEMS_ROOT` for why
+    a ball directory and an items directory are one pairing.
   * **a generation copy** of each eval split, identical in every way except that
     its prompt node stops at `ODGOVOR:`.  Pass 2 of the evaluator decodes from
     it; building it here means the structural features are computed with the

@@ -35,8 +35,7 @@ echo "host: $(hostname)  cpus: ${SLURM_CPUS_PER_TASK}  start: $(date)"
 # nodes and in tokens, over 8 build variants x 400 seeds.  It builds the graph
 # in memory and throws it away -- it does NOT write a store; that is
 # build/run_save.sbatch.
-"$PY" /shared/workspace/povejmo/gams_gtlm/data/build/build_gtlm_graph.py \
-  --kg-dir "/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB" \
-  --out    "/shared/workspace/povejmo/gams_gtlm/data/analysis/results/sizing_study.json" \
+cd /shared/workspace/povejmo/gams_gtlm/data
+"$PY" -m build.build_graph \
   --n-seeds 400 --max-hops 3 --workers "${SLURM_CPUS_PER_TASK}" --seed 42
 echo "end: $(date)"

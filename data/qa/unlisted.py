@@ -1,25 +1,20 @@
 #!/usr/bin/env python3
 """Real Slovene words the D3 lookup cannot reach -- the source for flavour (a).
 
-0.2's flavour (a) used to be a **seeded single-character perturbation of a real
-lemma**, verified absent from the surface index.  `sl.perturb`'s substitution
-table was a voicing/vowel confusion map (a<->e, b<->p, d<->t, s<->z), so every
-string it produced was edit-distance 1 from a real word and shaped exactly like a
-native speaker's typo.  Measured: 100 % of them sat one edit from a real entry,
-and 31 % were one edit from *two or more*.  Training "say you don't know" on that
-teaches typo-intolerance, and it contradicts the extractor, which repairs typos
-on purpose (prompt v2 onward) -- the two halves of the pipeline disagreed about
-the same input.
+Flavour (a) trains one capability: **a well-formed word with no entry the lookup
+can reach**.  Without it the model has never seen an empty ball and will invent a
+paradigm for a word the dictionary does not cover, which is the worse failure
+because it is silent.
 
-The capability flavour (a) exists for is different and still needed: **a
-well-formed word with no entry the lookup can reach**.  Without it the model has
-never seen an empty ball and will invent a paradigm for a word the dictionary
-does not cover, which is the worse failure because it is silent.
+The words must be REAL, not misspellings.  A perturbed lemma is edit-distance 1
+from a real word and shaped like a typo, so training "say you don't know" on it
+teaches typo-intolerance -- and it contradicts the extractor, which repairs typos
+on purpose, leaving the two halves of the pipeline disagreeing about one input.
 
-This module is that source.  The KG holds 4.24 M single-word lexical units
-outside D8's core frame (`id >= 1M`, non-MWE) -- proper nouns, neologisms,
-technical terms -- and `QAStore.surface_index` is built over the core pool only,
-so none of them resolve.
+The source is the KG's own long tail: 4.24 M single-word lexical units outside
+D8's core frame (`id >= 1M`, non-MWE) -- proper nouns, neologisms, technical
+terms -- none of which resolve, because `QAStore.surface_index` is built over the
+core pool only.
 
 **What the sentinel therefore claims.**  "ni podatka v bazi" means *not reachable
 by the D3 lookup*, not *absent from the KG*: `triskajdekafobija` has 17 forms and

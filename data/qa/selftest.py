@@ -24,23 +24,18 @@ Which check is which:
        Python's default sort is wrong for Slovene.
   C17  T14's gold == len(T12's gold) for every lemma in both, and a lemma is a
        negative in both types or in neither.
-  C18  D5b reproducibility: the pool is node-id sorted, the seed comes from the
-       anchor's node code and nothing else, and every gold phrase is in its own
-       ball.
+  C18  D5b reproducibility: the pool is node-id sorted and the seed comes from
+       the anchor's node code and nothing else.  Containment -- C18 (d) -- needs
+       the written balls, so it lives in `qa/check_balls.py`.
   C11  the split is lemma-disjoint (D11).
   C13  the majority-class baseline for every type, reported beside the score.
 """
 import os
 import re
-import sys
-import json
-import random
 import argparse
 import collections
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from qa import sl, spec, grade, seeds, colloc_sampling, gen                # noqa: E402
+from qa import sl, spec, grade, seeds, colloc_sampling
 
 FAIL = []
 
@@ -121,7 +116,9 @@ def c10_regex(items):
     bad_re = collections.Counter()
     bad_sep = collections.Counter()
     for it in items:
-        g = it["grading"]
+        # Through `contract`, never off the row: the type-level fields live in
+        # `qa/spec.py` and a row carries only this item's own facts.
+        g = grade.contract(it)
         line = it["answer"].splitlines()[0]
         if it["negative"]:
             if line != spec.sentinel_line():
@@ -225,21 +222,21 @@ def c13_baselines(splits):
 
 
 def c18_sampling(store, items):
-    print("\nC18 -- D5b reproducibility, and gold-in-ball")
-    from qa.store import QAStore
+    """C18 (a)-(c): the sampler is reproducible.
+
+    Containment -- C18 (d), every gold item is in the ball -- is NOT checked
+    here.  It cannot be: this module only has the store, and an item's real
+    input is the union of every anchor the extractor returned, under the
+    builder's own K, holding forms and senses and MWEs as well as the
+    collocation slice.  `qa/check_balls.py` reads the written balls and asks
+    the question directly.
+    """
+    print("\nC18 -- D5b reproducibility")
     anchors = [it for it in items if it["type"] == "T17" and not it["negative"]]
     if not anchors:
         check("T17 items present", False)
         return
     sample = anchors[:200]
-    ok_ball = True
-    for it in sample:
-        a = int(next(i for i in [_anchor_of(store, it)] if i is not None))
-        ball = {p for _v, p, _s in colloc_sampling.sample(store, a)}
-        if not set(it["gold_items"]) <= ball:
-            ok_ball = False
-            break
-    check("every gold phrase is in its own ball", ok_ball, f"{len(sample)} items")
     a = _anchor_of(store, sample[0])
     b1 = colloc_sampling.sample(store, a)
     b2 = colloc_sampling.sample(store, a)

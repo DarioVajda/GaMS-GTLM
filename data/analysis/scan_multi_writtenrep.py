@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Which word-forms carry two DIFFERENT words as their writtenRep?
 
-Found 2026-08-22 while checking the top-proxy anchors of the v7 store:
+The fault this looks for, seen on the top-proxy anchors of the store:
 
     iztočnica: prikazati (zaimek, naslonska oblika)     <- 423,458 MWE memberships
 
@@ -31,7 +31,6 @@ Writes an exclusion list of the affected lexical-units, for the QA seed pool.
 """
 import os
 import re
-import sys
 import json
 import argparse
 import collections

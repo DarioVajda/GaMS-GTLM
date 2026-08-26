@@ -131,11 +131,10 @@ def contract_gap(r, b):
     """Member candidates the ball SHOWS but the contract does not ALLOW.
 
     Must be empty.  If it is not, the model is being shown evidence it will be
-    marked wrong for using -- the T17 defect of 2026-08-23, where `all_items`
-    came from one anchor and D3 had unioned several into the ball.  Stage 4's
-    `build_balls.member_contract` derives the allow-list FROM the ball, so this
-    should now be empty by construction; it stays as a guard against a dataset
-    built by an older pipeline.  See the set rule in `qa/spec.py`.
+    marked wrong for using: `all_items` came from one anchor while D3 unioned
+    several into the ball.  Stage 4's `build_balls.member_contract` derives the
+    allow-list FROM the ball, so this is empty by construction on a current
+    dataset; it stays as a guard against one built by an older pipeline.
     """
     g = grade.contract(r)
     if r.get("negative") or g["mode"] != "membership":

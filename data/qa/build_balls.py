@@ -73,7 +73,6 @@ the auxiliary is composed*, and T5/T6 (1,049 items, 8.4 %) are its one recorded
 exemption.
 """
 import os
-import sys
 import json
 import argparse
 import contextlib
@@ -81,9 +80,8 @@ import collections
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from qa.store import open_store, K_ANCHOR, K_SENSE, K_COLLOC       # noqa: E402
-from qa import colloc_sampling, gen, grade, sl, spec                           # noqa: E402
+from qa.store import open_store, K_ANCHOR, K_SENSE, K_COLLOC
+from qa import colloc_sampling, gen, grade, sl, spec
 
 K_MWE = 10          # D5, upward `sestavina`
 K_COLLOC_CAP = 10   # D5b, `sense -> kolokacija`
@@ -165,6 +163,10 @@ def induced_edges(store, order):
     The induced subgraph rather than the BFS tree: a collocation node names both
     its members, and dropping the edge back to the second member would leave the
     graph claiming a relation the text already states.
+
+    Returned in ascending `(i, j)` order.  Within one node the store lists its
+    neighbours in CSR order, which is not part of the store's contract, so an
+    unsorted edge list would make the written ball depend on it (C18 c).
     """
     pos = {n: i for i, n in enumerate(order)}
     edges = []
@@ -174,6 +176,7 @@ def induced_edges(store, order):
             j = pos.get(v)
             if j is not None and j > i:
                 edges.append([i, j])
+    edges.sort()
     return edges
 
 
@@ -205,10 +208,10 @@ def member_allow(store, r, targets):
     only ever reads its input is fully covered.
 
     Over ALL anchors, which is the bug this replaces: `gen.all_phrases` used one
-    anchor while D3 unions several into a ball, so the model was shown members
-    the allow-list had never heard of and was scored `not_in_all` for naming them
-    -- 14 of the 16 union balls in v2's test split, 0 of the 88 single-anchor
-    ones, i.e. invisible unless the lemma is a homograph.
+    anchor while D3 unions several into a ball, so the model would be shown
+    members the allow-list has never heard of and scored `not_in_all` for naming
+    them.  Only union balls are affected, so the defect is invisible unless the
+    lemma is a homograph.
     """
     attr = MEMBER_SOURCE.get(r["type"])
     if not attr:

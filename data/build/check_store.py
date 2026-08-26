@@ -44,20 +44,27 @@ else.  Seven assertions, in order of how loudly they fail:
      phrases in data/datasets/reference/Lexical-QA-SLO(in).csv present verbatim
      in the store.  Reported for both, and required only not to fall.
 
-Usage:  check_text.py NEW_STORE REFERENCE_STORE
+Usage:  python -m build.check_store NEW_STORE REFERENCE_STORE
 """
-import os, sys, csv, json, re, hashlib, random, collections, unicodedata
+import os
+import sys
+import csv
+import json
+import re
+import random
+import hashlib
+import collections
+import unicodedata
+
 import numpy as np
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
-import graph_store
+from lib import graph_store
+from lib.paths import DATASETS_DIR
 
 K_ANCHOR, K_FORM, K_SENSE, K_EXAMPLE, K_TRANS = 0, 1, 2, 3, 4
 K_COLLOC, K_SYN, K_ANT, K_OTHER = 5, 6, 7, 8
 TAG_COLLOC = "kolokacija: "
-DATA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REFCSV = os.path.join(DATA, "datasets", "reference", "Lexical-QA-SLO(in).csv")
+REFCSV = os.path.join(DATASETS_DIR, "reference", "Lexical-QA-SLO(in).csv")
 
 # The pair fallback renders as `kolokacija: A + B`; a curated phrase never
 # contains " + " (verified over the whole collocation layer: 0 of 2,981,731).

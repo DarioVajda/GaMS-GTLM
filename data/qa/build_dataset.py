@@ -17,7 +17,7 @@ The item record -- the first artefact everything downstream reads:
     split / tier      train|dev|test, and core|A|C (D12)
     template_id       "T12/03" -- which frame, so a per-frame breakdown is free
     question          plain prose, no delimiters (D3)
-    answer            the gradeable line, and in v1 nothing else (0.1)
+    answer            the gradeable line, and nothing else (0.1)
     gold_items        the answer's items, pre-split, for analysis
     slots             the frame's slot values
     negative          bool, and negative_flavour when true
@@ -30,18 +30,14 @@ across bands with headroom -- Section 5 of QA_DATASET_DESIGN.md calls for exactl
 this rather than silently producing a skewed set.
 """
 import os
-import re
-import sys
 import json
 import random
 import hashlib
 import argparse
 import collections
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from qa import sl, seeds, gen, spec, templates                # noqa: E402
-from qa.store import open_store, QAStore                      # noqa: E402
+from qa import sl, seeds, gen, spec, templates
+from qa.store import open_store
 
 TYPES = [t for t in spec.SPEC]
 TARGET = {"train": 9000, "dev": 1000, "test": 2000}
@@ -104,16 +100,15 @@ UNION_TESTED = set(TYPES) - {"T4", "T20", "T21"}
 def _union_is_silent(ctx, type_key, surface, own):
     """True when NO anchor the surface resolves to can answer this type.
 
-    The absence test must run over the UNION D3 will hand the model, not over the
-    seed anchor alone.  Measured on v1, 41 negatives shipped with gold their own
-    ball contradicts: 12 where a SECOND lexical unit with the same lemma records
-    what the item calls unrecorded (`konec`), and 29 where a co-extracted homonym
-    does (`rahlo` has no gradation, `rahel` does).
+    The absence test must run over the UNION D3 will hand the model, not over
+    the seed anchor alone: otherwise a negative ships with gold its own ball
+    contradicts, because a second lexical unit with the same lemma records what
+    the item calls unrecorded (`konec`), or a co-extracted homonym does (`rahlo`
+    has no gradation, `rahel` does).
 
     Runs the real generator rather than a per-type predicate written here, the
     way `availability()` does.  A predicate would be a second copy of each
-    generator's eligibility rule, and it would drift from it silently -- which is
-    exactly how the 41 got through.
+    generator's eligibility rule and would drift from it silently.
     """
     fn = gen.GENERATORS.get(type_key)
     if fn is None:
@@ -141,8 +136,8 @@ def negative_item(ctx, type_key, e, rng, flavour):
     missing the relation, kept apart in the record so the mix is measurable
     rather than assumed.
 
-    `unlisted` replaced the old `nonexistent`, which perturbed one character of a
-    real lemma -- see qa/unlisted.py for why that had to go.
+    `unlisted` words are real and unreachable, never misspellings -- see
+    qa/unlisted.py.
     """
     lemma = e.lemma
     if flavour == "unlisted":

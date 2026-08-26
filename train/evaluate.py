@@ -1,31 +1,28 @@
 """Evaluate with the dataset's OWN grading contract, and report it as `accuracy`.
 
 `qa/grade.py` is the contract: three modes, one constant per type.  Thirteen
-types are `sequence` (ordered, exact), five are `multiset` (**order-insensitive**
-set equality) and T17 is `membership` (**any** subset of the anchor's complete
-collocation set whose size the quantity band allows).  A token-level exact match
-answers the wrong question for the last two: it penalises a correct multiset in
-another order, and scores a model naming five perfectly valid collocations at
-zero.  So the headline number here is
+types are `sequence` (ordered, exact), five are `multiset` (order-insensitive set
+equality) and T17 is `membership` (any subset of the anchor's collocation set
+whose size the quantity band allows).  Token-level exact match answers the wrong
+question for the last two, so the headline number is
 
     accuracy = the proportion of items with `qa.grade.grade(...)["success"]`
 
 reported overall AND per type, because a single aggregate over 19 heterogeneous
 types hides everything interesting.  `f1` and the `reason` counts (`unparseable`,
 `not_in_all`, `bad_count`, `mismatch`, `repeated_item`) come along as
-diagnostics -- they are how a bad run is diagnosed without re-running it.
+diagnostics, so a bad run can be read without re-running it.
 
 Two passes, because free-running generation over the whole dev split at every
 `eval_steps` is the dominant cost of evaluation and most of it is avoidable.
 
   **Pass 1** -- one teacher-forced forward over `prompt + gold_answer`.  If the
   argmax at every answer position equals the gold token, greedy decoding would
-  have emitted exactly that string, so the item succeeds.  This is *sufficient*
-  in every mode, not just `sequence`: the gold answer trivially satisfies its own
-  multiset equality, and for `membership` it is by construction a subset of
-  `all_items` of a size the band allows.  Measured on this corpus it settles
-  74.8 % of the dev split before a single token is generated, and the share grows
-  as the model improves.
+  have emitted exactly that string, so the item succeeds.  This is sufficient in
+  every mode: the gold answer trivially satisfies its own multiset equality, and
+  for `membership` it is by construction a subset of `all_items` of an allowed
+  size.  It settles ~75 % of the dev split before a token is generated, and the
+  share grows as the model improves.
 
   **Pass 2** -- autoregressive greedy generation for the remainder, then
   `qa.grade.grade`.
@@ -33,25 +30,21 @@ Two passes, because free-running generation over the whole dev split at every
 Four conditions make the equivalence exact; all four are enforced here:
 
   * **greedy only** -- `do_sample=False`, no beams, no repetition/length penalty;
-  * **the stop token is checked** -- the label span produced by
-    `train/data.py`'s masker ends with the `<end_of_turn>` the chat template
-    closes the model turn with, so "every answer position is argmax" already
-    includes "and then it stops".  Generation stops on that token too (and on
-    `<eos>`, which gemma-3 also lists as a terminator);
+  * **the stop token is checked** -- the label span ends with the
+    `<end_of_turn>` the chat template closes the model turn with, so "every
+    answer position is argmax" already includes "and then it stops".  Generation
+    stops on that token and on `<eos>`;
   * **tokenisation false negatives are safe** -- pass 1 compares against ONE
-    tokenisation of the gold string, so a model that would emit a different token
-    sequence decoding to the same text is a pass-1 *miss*; it falls through to
-    pass 2 and is graded properly.  Pass 1 therefore never declares failure, only
-    success;
+    tokenisation of gold, so a model emitting a different token sequence that
+    decodes to the same text is a pass-1 MISS and falls through to pass 2.  Pass
+    1 therefore never declares failure, only success;
   * **prefix alignment** -- answer positions come from the label mask the
-    training loss itself uses (`OffsetLabelMasker`, keyed on `\\nODGOVOR:`), not
-    from re-tokenising the answer separately.
+    training loss itself uses, not from re-tokenising the answer separately.
 
 `fast=True` (the intermediate evals) skips pass 2 for items a token mismatch
-already condemns -- `sequence` mode and every negative, whose sentinel is
-exact-match in all three modes -- and so gives a lower bound that is exact except
-for the tokenisation false negatives above.  `fast=False` (the final evals, and
-the test) runs pass 2 on every pass-1 miss and is the number that gets reported.
+already condemns -- `sequence` mode and every negative -- giving a lower bound.
+`fast=False` (the final evals and the test) runs pass 2 on every pass-1 miss and
+is the number that gets reported.
 """
 import os
 import json
@@ -273,7 +266,7 @@ class GradeEvaluator:
         self.gen_budget = gen_budget
         # `max_batch=1` makes generation padding-free, and therefore bitwise
         # reproducible across two different groupings of the same items -- which
-        # is what lets `test_two_pass.py` assert equality rather than closeness.
+        # is what lets `check_two_pass.py` assert equality rather than closeness.
         self.max_batch = max_batch
         self._lengths = {}
         self._gold_lens = {}
@@ -544,7 +537,7 @@ class GradeEvaluator:
         `generate_all=True` bypasses the fast path entirely: every item is
         decoded and graded, with pass 1 still run so its verdict can be compared
         against generation's.  It is the reference implementation the two-pass
-        one is verified against (`train/checks/test_two_pass.py`) and is far too slow to
+        one is verified against (`train/checks/check_two_pass.py`) and is far too slow to
         use for anything else."""
         split = self.split_of(ds)
         was_training = model.training

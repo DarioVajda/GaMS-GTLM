@@ -33,7 +33,6 @@ answer sitting in the ball.
 """
 import os
 import re
-import sys
 import json
 import hashlib
 import argparse
@@ -41,10 +40,9 @@ import collections
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from qa import spec                                                # noqa: E402
-from qa.build_dataset import NEGATIVE_GROUP                        # noqa: E402
-from qa.store import open_store                                    # noqa: E402
+from qa import spec
+from qa.build_dataset import NEGATIVE_GROUP
+from qa.store import open_store
 
 WORD = re.compile(r"\w+", re.UNICODE)
 # A word in this share of all questions is template boilerplate, not content.

@@ -26,6 +26,7 @@ import json
 import argparse
 import collections
 
+from .._io import load_items, read_jsonl
 from ..qa_contract import contract, parse
 from .report_arms import arm_of
 
@@ -33,22 +34,6 @@ from .report_arms import arm_of
 PRED_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "results", "predictions")
-
-
-def load_runs(sweep_dir):
-    path = os.path.join(sweep_dir, "runs.jsonl")
-    with open(path, encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
-
-
-def load_items(items_root, split):
-    path = os.path.join(items_root, f"{split}.jsonl")
-    out = {}
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            r = json.loads(line)
-            out[r["id"]] = r
-    return out
 
 
 def analyse(rows, items, type_="T17"):
@@ -83,7 +68,7 @@ def main(argv=None):
     ap.add_argument("--type", default="T17")
     a = ap.parse_args(argv)
 
-    runs = load_runs(a.sweep_dir)
+    runs = read_jsonl(os.path.join(a.sweep_dir, "runs.jsonl"))
     if not runs:
         print(f"{a.sweep_dir}: no runs recorded")
         return 1
@@ -107,8 +92,8 @@ def main(argv=None):
 
     print(f"{a.type} degenerate repetition on `{a.split}`, "
           f"summed over seeds ({runs[0]['items_root']}):\n")
-    print(f"| arm | items | repeated | share | success |")
-    print(f"|---|--:|--:|--:|--:|")
+    print("| arm | items | repeated | share | success |")
+    print("|---|--:|--:|--:|--:|")
     detail = {}
     for arm in sorted(per_arm):
         stat, by_n = analyse(per_arm[arm], items, a.type)
@@ -117,9 +102,9 @@ def main(argv=None):
         print(f"| {arm} | {stat['items']} | {stat['repeated']} | "
               f"{stat['repeated'] / n:.3f} | {stat['success'] / n:.3f} |")
 
-    print(f"\nBroken down by how many items the GOLD asks for — the distinction "
-          f"the original\nreading could not make, because it was taken against "
-          f"single-item golds:\n")
+    print("\nBroken down by how many items the GOLD asks for — the distinction "
+          "the original\nreading could not make, because it was taken against "
+          "single-item golds:\n")
     golds = sorted({k for by_n in detail.values() for k in by_n})
     print("| arm | " + " | ".join(f"gold n={k}" for k in golds) + " |")
     print("|---" * (len(golds) + 1) + "|")

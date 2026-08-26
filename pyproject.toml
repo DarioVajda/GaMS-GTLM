@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gams-kgqa"
+version = "0.1.0"
+description = "Slovenian lexicographical QA over the CJVT knowledge graph with GTLM"
+requires-python = "==3.10.*"
+dependencies = [
+    "torch==2.11.0",
+    "transformers==4.50.3",
+    "accelerate",
+    "huggingface_hub[cli]==0.27.1",
+    "peft",
+    "triton",
+    "scikit-learn",
+    "datasets>=2.19.0",
+    "sentencepiece",
+    "protobuf",
+    "torch-geometric",
+    "networkx",
+    "scipy",
+    "torch-sparse",
+    "torch-scatter",
+    "numpy>=1.21,<2.0.0",
+    "matplotlib",
+    "tqdm",
+    "wandb",
+    "tabulate",
+    "seaborn",
+    "typing-extensions>=4.8.0",
+    "pydantic",
+    "gdown",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "pip-tools"]
+
+# `train` is imported from the repo root; the data pipeline is imported from
+# `data/`, which is where its jobs run (`cd data && python -m qa.build_dataset`).
+# Only `train` is installed -- the pipeline packages resolve from the working
+# directory, and installing them would put names as generic as `build` and `lib`
+# on the global import path.
+[tool.setuptools]
+packages = ["train", "train.analysis", "train.checks"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+extend-exclude = [".venv", "checkpoints", "data/logs", "train/results"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",    # long lines are checked by eye; the tables here read better wide
+    "E741",    # `l` is the conventional name for a line in the parsers
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""
-On-disk store for the v3 GTLM graph.
+"""On-disk store for the built GTLM graph.
 
-`build_gtlm_graph.build()` spends ~12 minutes (parse -> collapse -> reify ->
-CSR -> tokenisation) reconstructing the same 36.7M-node graph from 42 GB
-of N-Triples on every run, then throws it away.  This module persists that
-result so downstream work (subgraph extraction, TextGraphDataset adaptation)
-loads it in seconds and in ~3 GB of RAM instead of the 200 GB the builder needs.
+`build_graph.build()` spends ~12 minutes (parse -> collapse -> reify -> CSR ->
+tokenisation) reconstructing the same 37M-node graph from 42 GB of N-Triples, and
+needs ~70 GB to do it.  This module persists the result, so everything downstream
+loads it in seconds and under a gigabyte.
 
 Layout of a store directory:
 
@@ -30,7 +28,11 @@ Node text is stored as a blob rather than 36.7M pickled Python strings because
 slower to read, and impossible to memory-map.  `TextStore` maps the blob and
 decodes a node's text only when it is asked for.
 """
-import os, io, json, time, mmap, hashlib
+import os
+import json
+import time
+import mmap
+import hashlib
 import numpy as np
 
 FORMAT_VERSION = 1
@@ -46,7 +48,7 @@ _ARRAYS = (
     ("token_len",  np.int32, "n"),
 )
 
-# kind ids that the derived masks test against (mirrors build_gtlm_graph)
+# kind ids that the derived masks test against (mirrors build_graph)
 K_FORM, K_EXAMPLE, K_COLLOC = 1, 3, 5
 
 
@@ -197,7 +199,7 @@ def save_graph(out_dir, G, token_len, *, stats=None, meta=None,
 def load_graph(store_dir, *, mmap_arrays=True, mmap_text=True, verbose=True):
     """Load a store written by `save_graph`.
 
-    Returns a dict shaped like `build_gtlm_graph.build()`'s return value --
+    Returns a dict shaped like `build_graph.build()`'s return value --
     plus `token_len`, `manifest` and `stats` -- so analysis code can consume it
     unchanged.  With the defaults nothing is read into RAM until touched.
     """

@@ -30,8 +30,8 @@ from .sl import norm
 
 PREFIX = "ODGOVOR:"
 
-# The contract has two layers, and confusing them is what produced the T19 and
-# T17 defects of 2026-08-23.
+# The contract has two layers, and confusing them is what produces a whole run
+# graded against a stale constant.
 #
 #   TYPE level   `mode`, `sep`, `arity`, `regex` -- one constant per type, the
 #                same for all 12,490 items.  These live in `qa/spec.py` and are

@@ -18,7 +18,7 @@
 # shapes, offsets and the manifest are checked against the store itself.
 #
 # REFERENCE_STORE is optional and is for REGRESSION testing only -- pass an
-# existing store and check_text.py additionally asserts that the new build did
+# existing store and check_store.py additionally asserts that the new build did
 # not lose anything relative to it: the IRI-backed layer and the synonym/antonym
 # layer untouched, the collocation layer only ever growing, no member set
 # carrying one phrase twice.  A first build has nothing to compare against and
@@ -78,8 +78,9 @@ echo "store: $STORE"
 echo "ref  : ${REF:-<none -- regression check skipped>}"
 "$PY" -c "import sys, numpy, transformers; print('env OK ', sys.executable, sys.version.split()[0], 'numpy', numpy.__version__, 'transformers', transformers.__version__)"
 
-"$PY" $ROOT/data/build/build_gtlm_graph.py \
-  --kg-dir "$ROOT/data/kg_raw/OntoLex DSB" \
+cd "$ROOT/data"
+
+"$PY" -m build.build_graph \
   --workers "${SLURM_CPUS_PER_TASK}" \
   --tokenizer "$TOKENIZER" \
   --colloc-text phrase \
@@ -87,7 +88,7 @@ echo "ref  : ${REF:-<none -- regression check skipped>}"
   --no-analysis
 
 echo "--- verifying the store ---"
-"$PY" $ROOT/data/lib/graph_store.py "$STORE" --verify
+"$PY" -m lib.graph_store "$STORE" --verify
 
 echo "--- store contents ---"
 ls -la "$STORE"
@@ -95,7 +96,7 @@ du -sh "$STORE"
 
 if [ -n "$REF" ]; then
     echo "--- regression check against $(basename "$REF") ---"
-    "$PY" $ROOT/data/build/check_text.py "$STORE" "$REF"
+    "$PY" -m build.check_store "$STORE" "$REF"
 else
     echo "--- regression check skipped (no reference store given) ---"
 fi

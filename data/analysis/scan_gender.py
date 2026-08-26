@@ -9,11 +9,14 @@ Answers:
 Also reports, for every other POS, how many units carry gender -- so we know
 the full scope of an entry-level gender feature.
 """
-import os, re, sys, glob
+import os
+import re
+import glob
 from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor
 
-ROOT = "/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB"
+from lib.paths import KG_RAW_DIR
+
 LEXINFO = "http://www.lexinfo.net/ontology/3.0/lexinfo#"
 
 POS_RE = re.compile(
@@ -34,7 +37,6 @@ def scan(path):
     pos = {}                      # lu -> pos local name
     gen = defaultdict(set)        # lu -> {gender}
     gen_dupe = Counter()          # lu -> raw gender triple count
-    formgender_by_pos = Counter() # how many word-forms carry gender
     n_formgender = 0
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -55,7 +57,7 @@ def scan(path):
 
 
 def main():
-    files = sorted(glob.glob(os.path.join(ROOT, "*-words.nt")))
+    files = sorted(glob.glob(os.path.join(KG_RAW_DIR, "*-words.nt")))
     print(f"[scan] {len(files)} words files", flush=True)
     n_by_pos = Counter()
     withgender_by_pos = Counter()

@@ -24,12 +24,10 @@ code, so this is the same ball, not a resample) and report:
   * the same ball redrawn with LINEAR weights, so section 3.1c's central claim is
     checked on the realised dataset rather than on one anchor.
 
-A first version of this script counted a slot as "function word" whenever its
-PHRASE contained a preposition or auxiliary, and reported 39.4 %.  That measure
-is wrong and the number is meaningless: `boj proti kriminaliteti` and `kosilo iz
-nahrbtnika` are exactly the collocations the type exists to teach.  What matters
-is what sits at the *other end of the pairing*, not what the phrase is spelled
-with.
+A slot is NOT counted by what its phrase is spelled with: `boj proti
+kriminaliteti` and `kosilo iz nahrbtnika` contain prepositions and are exactly
+the collocations the type exists to teach.  What matters is what sits at the
+other end of the pairing.
 
 Run on a compute node (it opens the store):
 
@@ -37,22 +35,20 @@ Run on a compute node (it opens the store):
         python3 analysis/measure_ball_mix.py datasets/generated/v1
 """
 import os
-import sys
 import json
 import argparse
 import collections
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from qa.store import open_store                                   # noqa: E402
-from qa import colloc_sampling, sl                                            # noqa: E402
+from qa.store import open_store
+from qa import colloc_sampling
 
 
 # A partner counts as a HUB when its collocation degree is at or above this many
 # senses.  Set from the store's own distribution rather than picked: section 3.1b
-# measures the p99 of `sense -> kolokacija` fanout at 1,055 in v7, so a partner
-# above it is in the top percent of the graph by this exact measure.  Reported
+# measures the p99 of `sense -> kolokacija` fanout at 1,055, so a partner above it
+# is in the top percent of the graph by this exact measure.  Reported
 # alongside the raw percentiles so the threshold can be second-guessed.
 HUB_DEGREE = 1055
 # One threshold is one arbitrary cut, and the answer turned out to depend on it,
@@ -110,7 +106,6 @@ def measure(store, items, k=colloc_sampling.K_DEFAULT, seed=0):
                              for t in HUB_SWEEP])
 
     n = len(pool_sizes)
-    slots = sum(min(p, k) for p in pool_sizes)
     return {
         "anchors": n,
         "hub_degree_threshold": HUB_DEGREE,

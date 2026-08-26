@@ -1,7 +1,7 @@
 """The licence for left-padded training batches: same loss, a tiny logits slice.
 
-    .venv/bin/python -m train.checks.test_left_pad --data-root data/datasets/balls/v2_clean
-    .venv/bin/python -m train.checks.test_left_pad \
+    .venv/bin/python -m train.checks.check_left_pad --data-root data/datasets/balls/v2_clean
+    .venv/bin/python -m train.checks.check_left_pad \
         --data-root data/datasets/balls/v2_clean_serialised --plain-llm \
         --no-spd --no-magnetic --max-length 17408
 

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Regression check for the M4 fix on ADJECTIVES, where gender is a genuine
-form feature: the dispatch rewrite must leave those form strings alone.
+"""Check gender rendering on ADJECTIVES, where it is a genuine form feature.
 
-Usage:  test_gender_adj.py [FILE]
+Entry-level gender must not disturb these form strings.
+
+Usage:  python -m analysis.probe_gender_adj [FILE]
 """
-import os, sys
+import os
+import sys
 from collections import defaultdict
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build"))
-import build_gtlm_graph as B
+from build import build_graph as B
+from lib.paths import kg_raw_file
 
-PATH = sys.argv[1] if len(sys.argv) > 1 else (
-    "/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB/1-words.nt")
+PATH = sys.argv[1] if len(sys.argv) > 1 else kg_raw_file("1-words.nt")
 
 
 def main():

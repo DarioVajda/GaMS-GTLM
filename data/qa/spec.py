@@ -100,10 +100,6 @@ SPEC = {
 # have.  `sequence` is correct only where position carries meaning the data
 # itself defines: a paradigm cell, a tense, a dictionary sense ordinal.
 #
-# T19 violated this until 2026-08-23 -- it was `sequence`/arity-1 against
-# whichever example had the lowest node id, which cost the GTLM arm 2.44 points
-# of a 4-arm comparison before anyone noticed (see train/README.md).
-#
 # `member_kind` names the ball node prefix holding the candidate set, so stage 4
 # can finalise `all_items` from the ball the model is ACTUALLY shown.  That
 # matters because D3 unions several anchors into one ball: an allow-list built

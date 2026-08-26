@@ -9,14 +9,14 @@ rather than rounded away.
 
 Prints the offending anchors with their lexical-unit ids so they can be grepped
 in the raw N-Triples.
-Usage:  find_genderless_nouns.py STORE
+
+Usage:  python -m analysis.find_genderless_nouns STORE
 """
-import os, sys
+import sys
+
 import numpy as np
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
-import graph_store
+from lib import graph_store
 
 K_ANCHOR = 0
 TYPE_SHIFT = 56

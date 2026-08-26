@@ -111,10 +111,9 @@ def pomen_agreement(n, frame="baza"):
     so this is a table lookup on n mod 100 returning the WHOLE phrase, never a
     heuristic on the noun alone.
 
-    Nothing in v1 emits this -- the gradeable line is the bare integer and the UI
-    part is postponed (0.1).  It is kept, and unit-tested (C7), because it is the
-    fix for a defect present in 100/100 reference rows and because the UI layer
-    will need it unchanged.
+    Nothing emits this yet -- the gradeable line is the bare integer and the UI
+    part is postponed (0.1).  It is kept and unit-tested (C7) because the UI
+    layer will need it unchanged.
     """
     m = _slot(n)
     if frame == "baza":
@@ -189,8 +188,6 @@ def counted(n, noun):
     return f"{n} {genitive}"
 
 
-# Flavour (a)'s generator used to live here as `perturb`: a one-character
-# substitution over a voicing/vowel confusion table.  Retired 2026-08-22 --
-# every string it made was one edit from a real word and shaped like a typo,
-# so it taught the model to refuse on misspellings.  qa/unlisted.py replaced
-# it with real words the lookup cannot reach, and carries the full reasoning.
+# There is deliberately no misspelling generator here: negatives of flavour (a)
+# are real words the lookup cannot reach, drawn by qa/unlisted.py, which carries
+# the reasoning.

@@ -2,27 +2,17 @@
 
 Same protocol as `graph_model`'s `our_tests`: train, evaluate + checkpoint every
 `eval_steps`, reload the best-validation checkpoint (adapter AND graph-bias
-tensors — see `gtlm.utils.text_graph_trainer_v2._load_best_model`), then report
-that checkpoint's held-out score.
+tensors), then report that checkpoint's held-out score.  The optimizer split
+(`bias_lr` for the graph-bias parameters, `lr` for LoRA), the cosine-with-min-lr
+schedule and the 10 % warmup are kept identical, so the two are comparable.
 
-Two structural differences from `our_tests`.
-
-**The model classes come from `cfg.gtlm_classes()`** rather than being imported at
-module scope, because this experiment runs a *gemma-3* backbone and `our_tests`
-imports the Llama classes directly.
-
-**Evaluation goes through the dataset's own grader.**  `gtlm.utils`'s
-`make_compute_metrics` reports token-level exact match over teacher-forced
-predictions, which is the wrong question for six of the nineteen types: five are
-`multiset` (order-insensitive) and T17 is `membership` (any subset of the
-anchor's collocation set whose size the band allows), so EM penalises correct
-answers in another order and scores a model naming five perfectly valid
+Two things differ.  The model classes come from `cfg.gtlm_classes()` rather than
+module scope, so the backbone can be chosen by name.  And evaluation goes through
+the dataset's own grader: the shared stack reports token-level exact match, which
+is the wrong question for six of the nineteen types -- five are order-insensitive
+and T17 is membership, so EM scores a model naming five perfectly valid
 collocations at zero.  `train/evaluate.py` implements the real contract and
-reports it as `accuracy`; `METRIC` selects the best checkpoint on that same
-number, so the run cannot train against one objective and select against
-another.  Everything else — the optimizer split (`bias_lr` for the graph-bias
-parameters, `lr` for LoRA), the cosine-with-min-lr schedule, the 10 % warmup —
-is kept identical, so a number from here is comparable with one from there.
+reports it as `accuracy`.
 """
 import os
 import json
@@ -57,7 +47,7 @@ def answer_tail_inputs(inputs):
     earliest position is `L - (longest answer)`, so the slice is a few hundred
     tokens wide; right-padded it is dragged back by whichever row is shortest.
 
-    Factored out of `GradeTrainer.compute_loss` so `train/checks/test_left_pad.py`
+    Separate from `GradeTrainer.compute_loss` so `train/checks/check_left_pad.py`
     measures the slice the trainer actually takes rather than a copy of it.
     """
     labels = inputs.get("labels")
@@ -81,22 +71,19 @@ def answer_tail_inputs(inputs):
 class LeftPadCollator:
     """Wrap a collator and move every row's padding to the FRONT.
 
-    `GraphCollatorV2` right-pads and has no `padding_side` option (confirmed
-    against the installed package), so this is a post-collation roll -- see
-    `evaluate.to_left_padding` for why it is safe and what it costs.
+    `GraphCollatorV2` right-pads and has no `padding_side` option, so this is a
+    post-collation roll -- see `evaluate.to_left_padding` for why it is safe.
 
-    The reason it exists is the answer-tail logits slice.  `GradeTrainer.
-    compute_loss` slices to the tail using the EARLIEST supervised position in
-    the batch; right-padded, a shorter row's answer span sits earlier in the
-    padded sequence and drags that slice back for every row.  Measured on the
-    worst GTLM batch at packed L=16,384: `logits_to_keep=6,880` and a 100.5 GiB
-    peak, ~43 GB of it logits for answer spans a few hundred tokens long.  Left
-    padding makes every row end at `L-1`, so the same `min` collapses on its own
-    to `longest answer + 1` and no new slicing logic is needed.
+    It exists for the answer-tail logits slice.  `GradeTrainer.compute_loss`
+    slices to the tail using the EARLIEST supervised position in the batch;
+    right-padded, a shorter row's answer span sits earlier in the padded sequence
+    and drags that slice back for every row -- on the worst GTLM batch at packed
+    L=16,384 that is `logits_to_keep=6,880` and a 100.5 GiB peak.  Left padding
+    makes every row end at `L-1`, so the same `min` collapses to
+    `longest answer + 1` with no extra slicing logic.
 
-    Applied to BOTH the training and the evaluation batches (one collator object
-    serves both), which also makes `to_left_padding` in pass 2 a no-op -- it is
-    idempotent by construction.
+    One collator object serves both training and evaluation, which also makes
+    `to_left_padding` in pass 2 a no-op -- it is idempotent by construction.
     """
 
     def __init__(self, inner):
@@ -142,25 +129,22 @@ def assert_plain_arm(split, cfg):
             f"its graph. Use it only for the baselines, whose balls are empty.")
 
 
-# The grade-based accuracy from evaluate.py — NOT the token-level EM the shared
-# stack computes.  This string is what the Trainer uses to pick the checkpoint to
-# reload at the end of a run, and on the multiset and membership types the two
-# objectives actively disagree: EM would select the checkpoint that best
-# reproduces gold *ordering* rather than the one that answers most questions.
+# The grade-based accuracy from evaluate.py, NOT the token-level EM the shared
+# stack computes.  The Trainer selects the reload checkpoint on this, so training
+# and selection share one objective; on the multiset and membership types the two
+# disagree, and EM would select for reproducing gold ORDERING.
 METRIC = "eval_accuracy"
 
 
 class GradeTrainer(GraphTrainerV2):
     """`GraphTrainerV2`, with `evaluate()` replaced by the two-pass grader.
 
-    Not a `compute_metrics` hook, for two reasons.  The contract needs the item's
-    `grading` block and its id, which the `(preds, labels)` pair HF hands to
-    `compute_metrics` does not carry; and pass 2 has to *generate*, which is not
-    something a metric function is given a model to do.  Overriding `evaluate` is
-    also what keeps the logits small — the shared evaluation loop materialises
-    `(B, L, 262144)` logits for the whole packed sequence, which at this corpus's
-    p99 of 5,605 tokens is tens of gigabytes per batch; `evaluate.py` asks the
-    model for only the answer-span tail.
+    Not a `compute_metrics` hook: the contract needs the item's `grading` block
+    and its id, which the `(preds, labels)` pair HF passes does not carry, and
+    pass 2 has to generate, which a metric function has no model to do.
+    Overriding `evaluate` also keeps the logits small -- the shared loop
+    materialises `(B, L, 262144)` logits for the whole packed sequence, tens of
+    gigabytes per batch at this corpus's p99 of 5,605 tokens.
     """
 
     def __init__(self, *args, evaluator=None, **kwargs):
@@ -180,16 +164,13 @@ class GradeTrainer(GraphTrainerV2):
 
         What changes is the memory.  Gemma-3's vocabulary is 262 k, so full-
         sequence logits cost `B x L x 262144 x 2` bytes and again that much when
-        the loss upcasts to fp32: at this corpus's p99 of 5,605 packed tokens
-        that is ~24 GB for a batch of four, and the 14,055-token maximum ball
-        cannot be trained at all.  On the tail it is a few hundred megabytes,
-        which is what makes a batch bigger than one possible.
+        the loss upcasts to fp32: ~24 GB for a batch of four at this corpus's p99
+        of 5,605 packed tokens, and the 14,055-token maximum ball cannot be
+        trained at all.  On the tail it is a few hundred megabytes, which is what
+        makes a batch bigger than one possible.
 
         Batches reach here LEFT-padded (`LeftPadCollator`), so every row ends at
-        `L-1` and the `min` below collapses to `longest answer + 1` rather than
-        to the earliest answer position across rows of different lengths.  Right
-        padded, the same slice ran to 6,880 tokens and a 100.5 GiB peak on the
-        worst GTLM batch.
+        `L-1` and the slice collapses to `longest answer + 1`.
         """
         return super().compute_loss(model, answer_tail_inputs(inputs),
                                     return_outputs=return_outputs,
@@ -211,16 +192,12 @@ class GradeTrainer(GraphTrainerV2):
 class EvaluateOnFinalStep(TrainerCallback):
     """Force one eval + save on the very last optimizer step.
 
-    `eval_steps=400` does not divide 4,632, and HF's Trainer does not evaluate or
-    save at the end of training -- so as configured the last **232 steps** would
-    be trained and then silently discarded, the best checkpoint chosen from step
-    4,400.  That matters precisely because `arms_v2` found the best checkpoint
-    was the LAST one in all twelve runs: the region this drops is the region the
-    run is most likely to be still improving in.
+    `eval_steps` does not divide `max_steps` and HF's Trainer neither evaluates
+    nor saves at the end of training, so the tail of the run would be trained and
+    then discarded -- and that tail is where the best checkpoint tends to fall.
 
-    Only ever sets the flags to True, and runs after `DefaultFlowCallback` (which
-    is what `add_callback` appends after), so a step that was already an eval
-    step is unaffected rather than doubled.
+    Only ever sets the flags to True, and runs after `DefaultFlowCallback`, so a
+    step that was already an eval step is unaffected rather than doubled.
     """
 
     def on_step_end(self, args, state, control, **kwargs):
@@ -233,10 +210,9 @@ class EvaluateOnFinalStep(TrainerCallback):
 def _baselines(cfg):
     """Majority-class accuracy per split, from the balls themselves.
 
-    Reported with the result and never separately: check C13 in `QA_TASKS.md`
-    exists because several of these types admit a cheap constant answer (T9's
-    gender is 42.6 %, T10's aspect 35.7 %), and a score printed without its
-    baseline is unreadable.
+    Reported with the result and never separately (QA_TASKS.md C13): several
+    types admit a cheap constant answer -- T9's gender is 42.6 %, T10's aspect
+    35.7 % -- so a score printed without its baseline is unreadable.
     """
     out = {}
     types = cfg.type_list()
@@ -272,16 +248,13 @@ def _save_train_record(cfg, run_name, sizes, results, runs_jsonl, sweep_meta=Non
         "run_name": run_name,
         "types": list(cfg.type_list()), "arm": cfg.arm(),
         "input": cfg.input_tag(),
-        # `(input, arm)` no longer identifies a run: arms 3/4 and arms 5/6 are
-        # each two runs on the same input with the same (absent) bias flags,
-        # differing ONLY in which stack they run on.  Without `stack` two of the
-        # four contrasts the study is built around are unreadable from this file.
+        # A run is identified by `(input, arm, stack)`: two pairs of arms share an
+        # input and the same (absent) bias flags and differ only in the stack, so
+        # without this two of the study's contrasts are unreadable from this file.
         "stack": cfg.stack(), "plain_llm": cfg.plain_llm,
-        # Stamped so a run trained on the backbone's chat template cannot be read
-        # next to one trained on the bare `"{question}\nODGOVOR: {answer}"` string
-        # and mistaken for a comparable measurement.  Every record written before
-        # 2026-08-25 lacks this key; that absence IS the old format.  See
-        # `train/chat.py`.
+        # How the prompt was spelled, so a chat-template run is never read next to
+        # a bare-string one as a comparable measurement.  A record without this
+        # key predates `train/chat.py`.
         "prompt_format": "chat_template",
         "flex_compile_mode": cfg.flex_compile_mode,
         "flex_cache_size_limit": cfg.flex_cache_size_limit,
@@ -314,21 +287,20 @@ def _per_type(metrics, prefix):
 
 
 def _convergence(trainer):
-    """Was the run still improving when it stopped?  (T9's pre-registered rule.)
+    """Was the run still improving when it stopped?  (The pre-registered rule.)
 
-    `arms_v2` was declared unusable because dev accuracy was still rising in
-    every arm at the stop and the best checkpoint was the LAST one in all twelve
-    runs -- which measures how fast an arm learns, not where it ends up.  The
-    same question has to be answerable for `arms_v3` from `runs.jsonl` alone, so
-    the in-training dev curve's tail and the selected step are recorded here.
+    A sweep whose best checkpoint is the last one in most runs is measuring how
+    fast an arm learns rather than where it ends up, so the tail of the
+    in-training dev curve and the selected step are recorded here and the
+    question is answerable from `runs.jsonl` alone.
 
     Read BEFORE the final dev/test evaluations, which log into the same history.
     """
     curve = [(int(h["step"]), float(h["eval_accuracy"]))
              for h in trainer.state.log_history
              if "eval_accuracy" in h and "step" in h]
-    # What the in-training evals actually cost, so the run record answers T5's
-    # "is evaluation under a quarter of the run" without anyone parsing a log.
+    # What the in-training evals cost, so the share of the run spent evaluating
+    # is in the record rather than in a log someone has to parse.
     spent = [float(h.get("eval_pass1_s") or 0) + float(h.get("eval_pass2_s") or 0)
              for h in trainer.state.log_history if "eval_pass1_s" in h]
     best_ckpt = trainer.state.best_model_checkpoint
@@ -374,9 +346,8 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
     set_seed(cfg.seed)
     if cfg.plain_llm:
         # A baseline arm: its balls carry no graph nodes, so the packed sequence
-        # IS an ordinary prompt and stock Gemma-3 reads it directly -- with SDPA
-        # (flash kernels) and with the sliding window the weights were trained
-        # under, neither of which the GTLM path can offer.
+        # IS an ordinary prompt and stock Gemma-3 reads it directly, with SDPA
+        # and with the sliding window the weights were trained under.
         assert_plain_arm(train, cfg)
         model = AutoModelForCausalLM.from_pretrained(
             cfg.model_name, torch_dtype=cfg.torch_dtype(),
@@ -422,14 +393,11 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
         max_batch=cfg.eval_max_batch)
 
     # ── the schedule, identical in every arm ──────────────────────────────
-    # `batch_size x accumulation_steps` is the effective batch and only the
-    # PRODUCT is binding, so `max_steps` is derived from the product rather than
-    # left to HF's `len(dataloader) // accumulation_steps` -- that expression
-    # depends on the factorisation (16x1 over 9,266 items gives 580 steps per
-    # epoch where 4x4 gives 579), and two arms differing by 8 optimizer steps is
-    # exactly the kind of small unaccounted difference this ablation exists to
-    # remove.  `drop_last` then makes EVERY optimizer step exactly `effective`
-    # items rather than "16, except at each epoch boundary".
+    # `max_steps` is derived from the effective batch rather than left to HF's
+    # `len(dataloader) // accumulation_steps`, which depends on the
+    # factorisation: 16x1 over 9,266 items gives 580 steps per epoch where 4x4
+    # gives 579.  `drop_last` then makes every optimizer step exactly
+    # `effective` items rather than "16, except at each epoch boundary".
     effective = cfg.effective_batch()
     steps_per_epoch = max(1, sizes[0] // effective)
     derived = steps_per_epoch * cfg.num_epochs
@@ -444,9 +412,8 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
     args = TrainingArguments(
         num_train_epochs=cfg.num_epochs,
         max_steps=max_steps,
-        # Absolute, and inside THIS repo: a relative `./checkpoints` writes
-        # wherever the job happened to cd to, which is how a gigabyte of this
-        # experiment's checkpoints ended up in the graph_model tree.
+        # Absolute and inside this repo: a relative `./checkpoints` would
+        # write wherever the job happened to cd to.
         output_dir=os.path.join(CHECKPOINT_ROOT, EXPERIMENT_NAME, internal_run),
         logging_steps=5,
         per_device_train_batch_size=cfg.batch_size,
@@ -483,12 +450,11 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
     trainer.add_callback(EvaluateOnFinalStep())
 
     train_output = trainer.train()
-    # Read the in-training history BEFORE the final evals log into it (T9's
-    # convergence evidence: is the best checkpoint still the last one?).
+    # Read the in-training history BEFORE the final evals log into it.
     convergence = _convergence(trainer)
-    # The final numbers are the SLOW pass: pass 2 runs on every pass-1 miss, not
-    # only on the modes where a token mismatch is survivable, so `accuracy` here
-    # is the graded number rather than the lower bound the in-training evals use.
+    # The final numbers are the SLOW pass: pass 2 runs on every pass-1 miss, so
+    # `accuracy` here is the graded number, not the lower bound the in-training
+    # evals report.
     trainer.fast_eval = False
     if cfg.final_eval:
         val_metrics = trainer.evaluate(eval_dataset=val.ds, metric_key_prefix="eval",
@@ -517,8 +483,8 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
             "test_pass1_s": test_metrics.get("test_pass1_s"),
             "test_pass2_s": test_metrics.get("test_pass2_s"),
         },
-        # If either of these is non-zero the corresponding FINAL number depends
-        # on a batch grouping that was not pre-declared -- see evaluate.py.
+        # Non-zero means the corresponding FINAL number depends on a batch
+        # grouping that was not pre-declared -- see evaluate.py.
         "final_eval_oom_splits": {
             "dev": val_metrics.get("eval_oom_splits"),
             "test": test_metrics.get("test_oom_splits"),
