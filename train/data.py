@@ -290,17 +290,34 @@ def load_split(cfg, tokenizer, split, with_generation, spread=False,
     # with -- and appending `<eos>` after it would teach the model to emit a
     # two-token ending its own checkpoint never produces.  `OffsetLabelMasker`
     # verifies the turn end survived tokenization on every item.
-    ds = _features(TextGraphDataset([_graph(r, tokenizer) for r in rows]), cfg)
+    #
+    # `_features` runs LAST, after the labels.  SPD and the magnetic eigenvectors
+    # are n^2 floats per row, and `compute_labels` maps over the table with
+    # `num_proc=1` -- a forked worker, so every column it never reads is still
+    # pickled to the child and back.  Computing the features first made the label
+    # pass carry that weight for nothing: 45.6 s against 10.2 s over the train
+    # split (9,266 items, B200, spd+magnetic), for byte-identical labels.  Nothing
+    # between here and `_features` reads a structural feature, so the order is
+    # free; `cast_float_features_to_fp32` is the one step that must stay after it,
+    # since downcasting those columns is what it is for.
+    #
+    # `num_proc=None` is NOT the fix, however much the name suggests otherwise:
+    # the single-process map path is 6x slower again on this workload (281 s).
+    ds = TextGraphDataset([_graph(r, tokenizer) for r in rows])
     ds.tokenize(tokenizer, max_length=cfg.max_length, add_eos=False)
     ds.compute_labels(OffsetLabelMasker(tokenizer, cfg.max_length), num_proc=1)
+    _features(ds, cfg)
     ds.cast_float_features_to_fp32()
 
     gen_ds = None
     if with_generation:
-        gen_ds = _features(
-            TextGraphDataset([_graph(r, tokenizer, with_answer=False)
-                              for r in rows]), cfg)
+        # Same order, for one reason only: the two copies should be built the same
+        # way.  There is no label pass here, and `tokenize` is indifferent to the
+        # feature columns (20.8 s against 19.1 s), so this costs and saves nothing.
+        gen_ds = TextGraphDataset([_graph(r, tokenizer, with_answer=False)
+                                   for r in rows])
         gen_ds.tokenize(tokenizer, max_length=cfg.max_length, add_eos=False)
+        _features(gen_ds, cfg)
         gen_ds.cast_float_features_to_fp32()
 
     name = name or split
