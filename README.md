@@ -1,157 +1,94 @@
-# GaMS-KGQA: Slovenian Lexicographical Question Answering over Knowledge Graphs with GTLM
+# GaMS-KGQA — Slovenian lexicographical QA over a knowledge graph with GTLM
 
-Applying the **GTLM** (Graph Transformer Language Model) architecture to **Slovenian
-lexicographical question answering from knowledge graphs**. The goal is to adapt
-**GaMS** — a Slovenian large language model with a Gemma backbone — into the GTLM
-architecture, and train it on a dataset of knowledge graphs paired with
-question–answer examples, where each question carries an extracted subgraph of the
-global lexicographical KG.
+Given a Slovene question about a word — its declension, its senses, its
+collocations — and the neighbourhood of that word in the CJVT lexicographical
+knowledge graph, answer it by reasoning over text and graph structure together.
 
-## Motivation
+The architecture is **GTLM** ([preprint](https://arxiv.org/abs/2605.10247)): instead
+of compressing a node's text into a single token through a GNN encoder, it injects
+graph-aware attention biases directly into a pretrained LLM's attention modules.
+Node semantics survive in full, the parameter cost is negligible, and the model stays
+node-permutation equivariant and backward compatible with its backbone. The backbone
+here is Gemma 3, and the target is [**GaMS3-12B**](https://huggingface.co/cjvt/GaMS3-12B), a Slovenian model built on it.
 
-Standard LLM approaches to graph reasoning compress rich textual node attributes into
-single tokens via GNN encoders. GTLM instead injects graph-aware attention biases
-directly into a pretrained LLM's attention modules, preserving full node semantics
-while adding a negligible number of parameters and providing node-permutation
-equivariance and backward compatibility with the base model
-(see the [GTLM preprint](https://arxiv.org/abs/2605.10247)).
-
-This project brings that capability to Slovenian lexicography: given a natural-language
-question about the language (definitions, relations between lemmas, senses, etc.) and a
-relevant subgraph of a large lexicographical knowledge graph, the adapted GaMS model
-answers by reasoning jointly over text and graph structure.
-
-## Relationship to `graph_model` (the `gtlm` library)
-
-This repository is an **application** built on top of the core GTLM research codebase,
-which lives in the sibling repository [`graph_model`](../graph_model) and is packaged as
-the importable `gtlm` library. This repo depends on it as an **editable local install**,
-so architecture, dataset tooling, and training utilities are reused rather than copied:
-
-```python
-from gtlm.utils import GraphCollatorV2          # collation / batching
-from gtlm.models import ...                       # GTLM model classes
-from gtlm.train import select_active_params, get_device
+```bash
+# 0. the source KG: https://nas.cjvt.si/s/aJE6243jd8iRXfc
+#    unpack it to data/kg_raw/OntoLex DSB/ (83 GB, gitignored)
+sbatch data/build/run_save.sbatch gemma3             # 1. build the graph store
+# ...five stages in data/README.md                   # 2. generate the QA dataset
+.venv/bin/python -m sweep train train/configs/arms_v3.jsonc   # 3. train
 ```
 
-The dataset class used to adapt raw data for GTLM (`TextGraphDataset` and its
-feature-computation methods — shortest-path distances, RRWP, magnetic Laplacian, …)
-comes from `gtlm.utils`. See `graph_model`'s README for the full library surface.
+A fresh clone carries code and documentation only — the raw KG, the built store,
+the generated dataset and the checkpoints are all gitignored, and steps 0–2 above
+are what produce them.
 
-> **Note on the Gemma/GaMS adapter.** The Gemma adapter **landed upstream on 2026-07-25**
-> (`src/models/modeling_gtlm_gemma3.py` — `GTLMGemma3ForCausalLM` / `GTLMGemma3Config`).
-> It targets **Gemma 3**, and it deliberately does **not** support Gemma 2; see the model
-> scope below.
+| | |
+|---|---|
+| [`data/README.md`](data/README.md) | the graph store and the QA dataset — how to build both, and what they contain |
+| [`data/QA_TASKS.md`](data/QA_TASKS.md) | the 19 question types: what each asks, how it is generated, how it is graded |
+| [`data/QA_DATASET_DESIGN.md`](data/QA_DATASET_DESIGN.md) | dataset design decisions and the KG answerability census |
+| [`train/README.md`](train/README.md) | fine-tuning, evaluation, and the six-arm study |
+
+## Where it stands
+
+* **Graph store** — built. 37.5 M nodes / 50.1 M edges of untyped, self-describing
+  text nodes, persisted so the half-hour, ~70 GB rebuild is paid once and loads in
+  seconds under a gigabyte.
+* **QA dataset** — built. 12,490 items over 19 types, each paired with the subgraph
+  holding its evidence, plus two baseline inputs (the same graph flattened into the
+  prompt, and no graph at all).
+* **Training** — the six-arm × three-seed study is defined and the harness is
+  verified on B200, but **no result is quotable yet**: the completed runs predate the
+  chat prompt format and have to be repeated. See `train/README.md`.
 
 ## Model scope
 
-**We target Gemma 3 only.** This reverses the original plan, which named the Gemma 2–based
-GaMS-2B as the primary target: the upstream adapter that actually exists is a Gemma 3 one,
-and it refuses Gemma 2 by design.
+**Gemma 3 only.** The upstream adapter (`GTLMGemma3ForCausalLM`) targets Gemma 3 and
+refuses Gemma 2 by design, so GaMS-2B and GaMS-9B are out of scope: both ship attention
+and final logit softcapping, which the shared GTLM stack applies at neither site, and
+the adapter raises rather than silently train a backbone that no longer matches its
+pretrained weights. Gemma 3 sets both to `null`, so the omission is exact.
 
-| Model | Backbone | `model_type` | Logit softcapping | Status |
-|-------|----------|--------------|-------------------|--------|
-| **gemma-3-1b-pt** | Gemma 3 | `gemma3_text` | none | Plumbing/iteration proxy — loads today; Slovenian quality expected to be poor, to be measured |
-| **gemma-3-4b-pt** | Gemma 3 | `gemma3` (multimodal) | none | Preferred iteration target — needs a small config unwrap, see below |
-| **GaMS3-12B** | Gemma 3 | `gemma3_text` | none | **Primary target** — loads through the adapter as-is |
-| **GaMS-2B** | Gemma 2 | `gemma2` | 50.0 / 30.0 | **Out of scope** — adapter raises |
-| **GaMS-9B** | Gemma 2 | `gemma2` | 50.0 / 30.0 | **Out of scope** — adapter raises |
+| model | role |
+|---|---|
+| `gemma-3-1b-it` | current backbone — what the study runs on |
+| **GaMS3-12B** | the target; published as a text-only `gemma3_text` config, so it loads through the adapter as-is |
+| `gemma-3-4b/12b/27b` (multimodal) | not wired: they nest their text config under `text_config`, which needs an unwrap and weights from the `language_model` submodule |
 
-**Why Gemma 2 is excluded.** The shared GTLM stack applies neither softcapping site: the
-registered `gtlm_*` attention functions ignore the `softcap` kwarg, and the causal-LM mixin
-calls `lm_head` directly. Gemma 3 sets `attn_logit_softcapping` and
-`final_logit_softcapping` to `null`, so both omissions are exact. Gemma 2 ships them at
-`50.0` and `30.0`, so `GTLMGemma3ForCausalLM._sanitize_attn_config` **raises** rather than
-silently train a backbone that no longer matches its pretrained weights. Supporting GaMS-2B
-would mean adding both softcapping sites to the shared stack upstream — real work in a
-repository that deliberately chose not to carry them.
-
-**Iteration ladder.** Develop against a small Gemma 3, then scale to GaMS3-12B — the
-adapter is the same, so scaling is a config change. Prefer **gemma-3-4b-pt** over
-gemma-3-1b-pt: 1b is likely too weak at Slovenian out of the box to tell a broken pipeline
-apart from a weak model. **To be settled experimentally** — run both on a Slovenian sample
-before committing.
-
-> **Gotcha for 4b.** `gemma-3-4b` and larger *multimodal* checkpoints nest their text config
-> under `text_config` and will not load through `GTLMGemma3Config` directly
-> (`modeling_gtlm_gemma3.py:106`). Loading one means pulling `Gemma3TextConfig` out of the
-> nested field and taking weights from the `language_model` submodule. Small, but not free.
-> GaMS3-12B is published as a text-only `gemma3_text` config and is unaffected.
-
-## Dat
-
-- **Knowledge graph:** the CJVT lexicographical knowledge graph
-  ([source](https://nas.cjvt.si/s/aJE6243jd8iRXfc)).
-- **QA dataset:** generated from the graph, not reused from the reference samples. Design
-  decisions, the KG answerability census, and the frequency banding are recorded in
-  [`data/QA_DATASET_DESIGN.md`](data/QA_DATASET_DESIGN.md). Two internal reference files
-  (`data/datasets/reference/Lexical-QA-SLO-test.json`,
-  `data/datasets/reference/Lexical-QA-SLO(in).csv`, both not public) supply
-  the question-type inventory and phrasing style only.
-- **Pipeline:** the raw data requires **heavy preprocessing** first, then adaptation
-  into GTLM-ready examples using the `TextGraphDataset` class from `gtlm.utils`. Each
-  training example is a graph (a NetworkX `DiGraph`) with per-node `text` attributes, a
-  designated `prompt_node`, and question+answer text on that prompt node; question tokens
-  are masked to `-100` so the model is supervised on the answer only. Per-question
-  subgraphs are extracted from the global KG.
-
-> The repository layout (e.g. `src/` with `scripts/`, `data/`, `train/`) will be added
-> as the preprocessing and training code is written.
+Scaling from the 1b backbone to GaMS3-12B is a config change, not a port.
 
 ## Repository setup
 
-Requires **Python 3.10** (matching `graph_model`). Dependencies are managed with
-`pip-tools`: `requirements.in` is the high-level spec, `requirements.txt` is the
-generated lockfile. This project's `requirements.in` mirrors `graph_model`'s and adds an
-editable install of the `gtlm` library from the sibling checkout.
+Requires **Python 3.10**, matching the sibling [`graph_model`](../graph_model)
+checkout that provides the `gtlm` library (see the [GitHub repo](https://github.com/DarioVajda/graph_model)). Dependencies are managed with `pip-tools`:
+`requirements.in` is the spec, `requirements.txt` the lockfile.
 
 ```bash
-# From the repository root (/shared/workspace/povejmo/gams_kgqa):
-python -m venv .venv          # create the environment (Python 3.10)
-source .venv/bin/activate      # activate it
-pip install pip-tools          # install pip-tools
-pip-compile                    # compile requirements.in -> requirements.txt
-pip-sync                       # install the locked requirements (incl. editable gtlm)
+python -m venv .venv
+source .venv/bin/activate
+pip install pip-tools
+pip-compile && pip-sync
 ```
 
-`pip-sync` installs `gtlm` in editable mode from `../graph_model`, so a `git pull` in
-that repository is picked up on the next run without reinstalling. This assumes the
-`graph_model` checkout sits next to this one (`../graph_model`); adjust the `-e` path in
-`requirements.in` if your layout differs.
+`pip-sync` installs `gtlm` in editable mode from `../graph_model`, so a `git pull`
+there is picked up on the next run. Adjust the `-e` path in `requirements.in` if your
+layout differs.
 
-From here on, assume every command runs inside the activated `.venv`.
-
-### Authentication (Hugging Face + Weights & Biases)
-
-`hf_login.sh`, `wandb_login.sh`, and `login.sh` are provided as placeholders and are
-**gitignored** (they hold secrets — never commit real tokens). Insert your tokens, then:
+GaMS models are gated on the Hugging Face Hub, so an authenticated login is required
+to download them — copy the templates, insert your tokens, then run `./login.sh`:
 
 ```bash
-chmod +x *.sh
-./login.sh        # runs hf_login.sh (HF Hub) then wandb_login.sh (W&B)
+cp hf_login.example.sh hf_login.sh
+cp wandb_login.example.sh wandb_login.sh
 ```
 
-GaMS models are gated on the Hugging Face Hub, so an authenticated HF login is required
-to download them.
+From here on, every command assumes the activated `.venv`.
 
-## Status
+## A note on nodes
 
-Environment, dependency lock, and the KG construction study are in place; no training has
-started. The upstream Gemma 3 adapter has landed, so the backbone is no longer a blocker.
-
-- **Done.** Raw KG downloaded and characterised; GTLM graph construction settled at **v3**
-  (36.7 M nodes / 48.5 M edges, untyped edges with self-describing node text) together with
-  a k-hop input-sizing study — see [`data/README.md`](data/README.md).
-  The graph is now **persisted** — current store `data/stores/kg_graph_v6_gemma3/`, built
-  by `data/build/run_save_v6.sbatch` — so the ~35-minute, ~70 GB rebuild is paid
-  once instead of per run; `data/lib/graph_store.py` loads it in seconds. Its
-  `token_len` uses the Gemma 3 tokenizer, which every Gemma 3 size shares with
-  GaMS3-12B, so one store serves the whole iteration ladder below.
-- **Next.** Write the subgraph extractor on top of the store, capping **both** hubs —
-  the `sestavina` MWE↔word fan-out (D5) and the `sense`→`kolokacija` fan-out (D5b,
-  found 2026-08-21); adapt into `TextGraphDataset`; then train on a small Gemma 3
-  before scaling to GaMS3-12B.
-- **Open.** The lexicographical QA dataset — questions and answers anchored to KG entities —
-  is not yet generated. Its design is **locked** as of 2026-08-18; see
-  [`data/QA_DATASET_DESIGN.md`](data/QA_DATASET_DESIGN.md) for the decisions, the open
-  items, and the measurements behind them.
+The shared venv is built against Ubuntu 22.04 / Python 3.10, which on this cluster
+means **`aga`, `ana` and `apl`** for CPU work; the other nodes ship Python 3.12 and
+cannot see its `site-packages`. GPU work runs on B200 inside the pyxis container,
+which is a py3.10 base. Every job script already pins the right target — this is here
+so an unexplained `ModuleNotFoundError: numpy` is recognisable.
