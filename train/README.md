@@ -29,10 +29,11 @@ root, because it forwards that path to the job and it would not resolve there.
 train/
   config.py  data.py  run.py  evaluate.py    the training path
   batching.py  chat.py  qa_contract.py        shared by it
+  _io.py  _log.py                             jsonl records, log noise
   __main__.py                                 one run: python -m train
-  checks/     check_labels  test_left_pad  test_two_pass  probe_eval
-  analysis/   report_arms  analyse_t17  length_stats  project_cost  rescore
-  slurm/      run_train  run_preflight  run_length_stats
+  checks/     check_labels  check_left_pad  check_two_pass  probe_eval
+  analysis/   report_arms  analyse_t17  length_stats  project_cost
+  slurm/      run_train  run_preflight (+ preflight_stages.sh)  run_length_stats
   configs/    the sweep definitions
   results/    sweep output (gitignored)
 ```
@@ -159,8 +160,8 @@ evaluator and once by generating every item, and requires identical per-item
 success:
 
 ```bash
-.venv/bin/python -m train.checks.test_two_pass --max-items 32                 # untrained
-.venv/bin/python -m train.checks.test_two_pass --max-items 32 --checkpoint …  # trained
+.venv/bin/python -m train.checks.check_two_pass --max-items 32                 # untrained
+.venv/bin/python -m train.checks.check_two_pass --max-items 32 --checkpoint …  # trained
 ```
 
 The trained form is the one that matters — on an untrained model nothing clears pass
@@ -198,7 +199,7 @@ Identical in every arm, so that the matrix below measures the arms and nothing e
 * **Evaluation batches are formed by token budget**, not item count: a corpus running
   from 300 to 14,055 packed tokens has no single sensible batch size.
 
-Left padding being a no-op is checked, not assumed (`train.checks.test_left_pad`, run
+Left padding being a no-op is checked, not assumed (`train.checks.check_left_pad`, run
 across both stacks and all three inputs). In bf16 the left-vs-right difference sits
 inside a calibrated rounding control; in fp32 it collapses by three to four orders of
 magnitude, which is what distinguishes rounding from semantics.
@@ -246,19 +247,27 @@ must land on top of each other.
 
 ## Results
 
-**Pending.** The 18 records in `train/results/arms_v3/runs.jsonl` predate the chat
-prompt format and were trained on a bare `"{question}\nODGOVOR: {answer}"` string —
-no `<bos>`, no turn markers, the wrong terminator — against an instruction-tuned
-checkpoint. The defect is shared by all six arms, so it does not obviously favour
-one, but it is not neutral: it costs every arm adapter capacity relearning a format
-the weights already have, and it costs the plain baselines most, since for them the
-prompt node is the whole input. The runs have to be repeated before anything can be
-quoted. New records carry `"prompt_format": "chat_template"`; the absence of that key
-marks the old ones, and the adapters under `checkpoints/sl_qa/arms_v3_*` must not be
-evaluated with the new format.
+The sweep is complete: 18 records in `train/results/arms_v3/runs.jsonl`, six arms ×
+three seeds, all carrying `"prompt_format": "chat_template"`. Read them with
 
-One measurement does stand, because it is a property of the inputs rather than of a
-run. Over all 12,490 items, the same ball costs **~60 % more tokens once flattened**
+```bash
+.venv/bin/python -m train.analysis.report_arms train/results/arms_v3/runs.jsonl
+```
+
+which prints the per-arm table, the per-type breakdown, the five contrasts paired by
+seed, and the convergence verdict. The pre-registered convergence rule **passes**:
+the best checkpoint was the final one in 4 of 18 runs (22 %), under the 33 % limit,
+so the sweep is measuring where the arms end up rather than how fast they learn.
+
+`train/results/arms_v3_preformat/` holds the superseded sweep of the same six arms,
+trained on a bare `"{question}\nODGOVOR: {answer}"` string — no `<bos>`, no turn
+markers, the wrong terminator — against an instruction-tuned checkpoint. Those
+records carry no `prompt_format` key; that absence is what marks them, and the
+adapters under `checkpoints/sl_qa/arms_v3_*` from that sweep must not be evaluated
+with the new format.
+
+One measurement is a property of the inputs rather than of any run. Over all 12,490
+items, the same ball costs **~60 % more tokens once flattened**
 into a prompt — p50 1,361 packed tokens against 2,166, consistently across the whole
 distribution. The overhead is structure the graph gets for free: the serialised form
 spells out an index per node and an explicit edge list, where GTLM carries adjacency

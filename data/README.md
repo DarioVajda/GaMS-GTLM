@@ -12,11 +12,13 @@ an artefact on disk, so the graph the model saw is part of the record.
 
 ```
 data/
-├── lib/         graph_store.py — loads a store; pick_python.sh — interpreter guard
-├── build/       build_gtlm_graph.py + its regression check -> stores/
+├── lib/         graph_store.py — loads a store; paths.py — where everything lives;
+│                pick_python.sh — interpreter guard
+├── build/       build_graph.py + check_store.py, its regression check -> stores/
 ├── qa/          the dataset package -> datasets/
-├── lookup/      kg_lookup.py, the query CLI (`bin/lookup` wraps it)
+├── lookup/      cli.py, the query CLI (`bin/lookup` wraps it)
 ├── analysis/    measurement scripts (extraction runs, hub costs, sizing)
+├── prompts/     the extractor prompt, and the superseded revisions in archive/
 ├── stores/      the built stores (gitignored, ~4 GB each)
 ├── datasets/    generated/ the items · balls/ their subgraphs · reference/ two
 │                reference QA files, used for question phrasing only
@@ -26,6 +28,10 @@ data/
 A directory names a **purpose, not an import**: anything imported by two or more of
 build/analysis/lookup lives in `lib/`, and data products live under a directory that
 says what they are.
+
+Every package here is run with `-m` **from `data/`** — `python -m qa.build_dataset`,
+`python -m build.build_graph`, `python -m lookup.cli` — which is what puts `data/` on
+the import path. The job scripts `cd` there for you.
 
 ---
 
@@ -43,7 +49,7 @@ The build ends with `graph_store.py --verify`, which is self-contained: shapes,
 offsets and the manifest are checked against the store itself.
 
 Pass an existing store as a second argument to add a **regression check**
-(`build/check_text.py`): it asserts the new build lost nothing relative to that one
+(`build/check_store.py`): it asserts the new build lost nothing relative to that one
 — IRI-backed layer and synonym/antonym layer untouched, collocation layer only ever
 growing, no member set carrying one phrase twice. A first build has nothing to
 compare against and skips it.
@@ -67,8 +73,8 @@ nothing else.
 Loading is instant and needs ~1 GB, on any node:
 
 ```python
-import graph_store
-G = graph_store.load_graph("data/stores/kg_graph_gemma3")
+from lib import graph_store
+G = graph_store.load_graph("stores/kg_graph_gemma3")
 G["indptr"], G["indices"]        # undirected CSR
 G["text"][12345]                 # "iztočnica: pes (samostalnik, moški spol, ...)"
 G["token_len"][12345]            # token count, no tokenizer needed
@@ -76,7 +82,7 @@ G["kind"], G["mwe_set"], G["node_codes"]
 ```
 
 ```bash
-python data/lib/graph_store.py data/stores/kg_graph_gemma3 --verify
+cd data && python -m lib.graph_store stores/kg_graph_gemma3 --verify
 ```
 
 The directory holds `node_codes` (packed IRI ids, sorted — `searchsorted` maps an
@@ -134,17 +140,25 @@ arguments are relative to `data/`**. `v2_clean` is the current output; substitut
 your own tag throughout.
 
 ```bash
+# 1 the items
 sbatch data/qa/run_generate.sbatch stores/kg_graph_gemma3 \
-       datasets/generated/v2                                # 1 the items
+       datasets/generated/v2
+
+# 2 entity linking (GPU)
 sbatch data/analysis/run_extract_sharded.sbatch \
-       datasets/generated/v2 analysis/results/extraction_v2  # 2 entity linking (GPU)
+       datasets/generated/v2 analysis/results/extraction_v2
+
+# 3 anchors from stage 2
 sbatch data/qa/run_relabel.sbatch datasets/generated/v2 \
        analysis/results/extraction_v2 \
-       datasets/generated/v2_relabelled                     # 3 anchors from stage 2
+       datasets/generated/v2_relabelled
+
+# 4 balls AND items
 sbatch data/qa/run_build_balls.sbatch "" datasets/generated/v2_relabelled \
-       datasets/balls/v2_clean datasets/generated/v2_clean  # 4 balls AND items
+       datasets/balls/v2_clean datasets/generated/v2_clean
+
+# 5 (optional) the two baselines
 sbatch data/qa/run_build_variants.sbatch datasets/balls/v2_clean
-                                                            # 5 the two baselines
 ```
 
 * **Stage 1** walks the seed pool, computes the availability matrix by *running*
@@ -153,6 +167,8 @@ sbatch data/qa/run_build_variants.sbatch datasets/balls/v2_clean
 * **Stage 2** is the only GPU stage — a Slurm array in the pyxis container. It runs
   a real entity-linking pass, so an item's anchors are what a plain-text lookup
   resolves rather than the generator's privileged knowledge of which node it used.
+  The extractor reads `prompts/extractor_prompt.txt`; changing it changes which
+  anchors the corpus is built from, so the corpus has to be rebuilt with it.
 * **Stage 4** writes the balls **and** the dataset in one pass. They must be built
   together: the T17 target is re-verbalised against the ball, so that the model is
   never supervised on a collocation its own input does not contain. It refuses any

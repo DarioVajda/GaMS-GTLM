@@ -679,10 +679,10 @@ holds for the anchor.
 
 | band | question says | `count_ok(k, ·)` | share |
 |---|---|---|--:|
-| `none` | nothing about quantity | `2 ≤ k ≤ min(15, |ALL|)` | 40 % |
-| `vague_small` | *nekaj*, *par* | `2 ≤ k ≤ min(6, |ALL|)` | 20 % |
-| `vague_large` | *veliko*, *čim več* | `k ≥ min(5, |ALL|)` | 20 % |
-| `exact` | *natanko N*, N ∈ 2–10 | `k == min(N, |ALL|)` | 20 % |
+| `none` | nothing about quantity | `2 ≤ k ≤ min(15, \|ALL\|)` | 40 % |
+| `vague_small` | *nekaj*, *par* | `2 ≤ k ≤ min(6, \|ALL\|)` | 20 % |
+| `vague_large` | *veliko*, *čim več* | `k ≥ min(5, \|ALL\|)` | 20 % |
+| `exact` | *natanko N*, N ∈ 2–10 | `k == min(N, \|ALL\|)` | 20 % |
 
 Three properties of that table are deliberate. **The bands are loose**: a user who asks
 an open question has no count in mind, so scoring one would score our own arbitrary

@@ -38,9 +38,9 @@ are what produce them.
 * **QA dataset** — built. 12,490 items over 19 types, each paired with the subgraph
   holding its evidence, plus two baseline inputs (the same graph flattened into the
   prompt, and no graph at all).
-* **Training** — the six-arm × three-seed study is defined and the harness is
-  verified on B200, but **no result is quotable yet**: the completed runs predate the
-  chat prompt format and have to be repeated. See `train/README.md`.
+* **Training** — the six-arm × three-seed study has run to completion on B200, and
+  passes its pre-registered convergence rule. `train/analysis/report_arms` prints the
+  tables from `train/results/arms_v3/runs.jsonl`. See `train/README.md`.
 
 ## Model scope
 
@@ -73,7 +73,11 @@ pip-compile && pip-sync
 
 `pip-sync` installs `gtlm` in editable mode from `../graph_model`, so a `git pull`
 there is picked up on the next run. Adjust the `-e` path in `requirements.in` if your
-layout differs.
+layout differs. `sweep`, the harness step 3 uses, comes from the same checkout.
+
+`pyproject.toml` declares the project and the tooling config. `train` is imported
+from the repo root; the `data/` pipeline packages (`qa`, `build`, `lookup`, `lib`,
+`analysis`) are run with `-m` from `data/`, which is where their job scripts `cd` to.
 
 GaMS models are gated on the Hugging Face Hub, so an authenticated login is required
 to download them — copy the templates, insert your tokens, then run `./login.sh`:
