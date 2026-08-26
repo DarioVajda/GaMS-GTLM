@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""D5b -- the `sense -> kolokacija` cap, and the sampler that implements it.
+"""How many collocations enter a ball, and which ones (QA_DATASET_DESIGN.md D5b).
 
-QA_DATASET_DESIGN.md D5b caps how many collocations enter an extracted ball at
-K = 15, pooled across ALL of an anchor's senses, selected by seeded weighted
-sampling without replacement with `w = log(1 + proxy(partner))`.
+`sense -> kolokacija` is a hub: 99.9 % of `imeti`'s 14,249 collocations sit on
+`pomen 1`, so an uncapped hop-2 ball around a common word costs a p50 of 22,704
+tokens.  The cap is K, pooled across ALL of an anchor's senses -- per-sense would
+still admit 17 x K for `voda` -- and the K are SAMPLED rather than ranked:
+without replacement, with `w = log(1 + proxy(partner))`.  Every deterministic key
+tried was biased toward one slice of a power-law distribution.
 
-The full ball builder is out of scope for this pass (neighbourhood sampling is a
-separate piece of work), but T17's gold must be drawn from exactly the set the
-ball will hold, or the gold is unanswerable from the input.  So the SELECTION is
-implemented here, as a pure function of `(anchor node code, K, dataset seed)`,
-and the extractor is expected to call this same function rather than reimplement
-it.  That is what decouples the two without letting them drift.
+`qa/build_balls.py` passes K = 10.  K_DEFAULT below is what the generator draws
+its own gold with, before any ball exists, which is why membership targets are
+re-verbalised against the ball afterwards.
 
-C18's four reproducibility requirements are the contract:
+The generator and the ball builder must draw the same set or the gold is
+unanswerable from the input, so the selection lives here as a pure function of
+`(anchor node code, K, dataset seed)` and both call it rather than reimplement
+it.  That is what decouples them without letting them drift.
+
+Four reproducibility requirements are the contract (selftest C18):
 
   (a) the candidate pool is sorted by node id before drawing -- CSR adjacency
       order is NOT stable across builds (0.44 % of `indices` rows moved in v5),

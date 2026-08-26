@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
-"""Re-measure the D5b constants of QA_DATASET_DESIGN.md 3.1b and 3.1c.
+"""Measure the collocation cap and its sampler (QA_DATASET_DESIGN.md 3.1b, 3.1c).
 
-Those tables were taken on `kg_graph_v5_gemma3`, whose collocation layer held one
-node per member SET rather than one per phrase -- 20 % of the curated phrases were
-missing, and missing non-uniformly (README.md Finding 11).  Every number that
-counts collocations therefore moved with the v7 rebuild, and this script is what
-restates them:
+Everything a store-dependent number in those two sections rests on, recomputed
+from the store itself:
 
   3.1b  the `sense -> kolokacija` fan-out distribution, the hub list, the share of
-        senses above K = 15, and the ball-cost table at several caps
+        senses above K, and the ball-cost table at several caps
   3.1c  the power-law fit that justifies log-damped sampling weights, and the
         four-scheme comparison on one high-fan-out anchor
 
-What is NOT re-derived here: D5's *content-based* rank for the upward `sestavina`
-cap.  The ball-cost table varies the COLLOCATION cap with D5 already applied at
-K = 15, exactly as 3.1b does, and which 15 MWEs are kept changes the ball's
-contents but not its size -- so the cost column is unaffected and the cheap
+What is NOT re-derived here: the *content-based* rank for the upward `sestavina`
+cap.  The ball-cost table varies the COLLOCATION cap with that one already
+applied, exactly as 3.1b does, and which MWEs are kept changes a ball's contents
+but not its size -- so the cost column is unaffected and the cheap
 lowest-node-id rank is used.  Stated rather than assumed.
 
-    python measure_d5b.py [STORE] [--anchors 400] [--voda voda]
+    python measure_colloc_sampling.py [STORE] [--anchors 400] [--voda voda]
 """
 import os
 import sys
@@ -36,7 +33,7 @@ sys.path.insert(0, DATA)
 sys.path.insert(0, os.path.join(DATA, "lib"))
 
 from qa.store import open_store, K_ANCHOR, K_SENSE, K_COLLOC   # noqa: E402
-from qa import d5b                                             # noqa: E402
+from qa import colloc_sampling                                             # noqa: E402
 
 K_DEFAULT = 15
 
@@ -114,7 +111,7 @@ def ball_tokens(store, a, k_col, k_mwe=K_DEFAULT):
     elif k_col is None:
         keep_col = None                 # keep everything
     else:
-        keep_col = {v for v, _p, _s in d5b.sample(store, a, k=k_col)}
+        keep_col = {v for v, _p, _s in colloc_sampling.sample(store, a, k=k_col)}
 
     for v in h1:
         for w in store.nbrs(v):
@@ -158,7 +155,7 @@ def power_law(db):
 
 def scheme_comparison(store, a, k=K_DEFAULT, seeds=30, hub_threshold=2000):
     """3.1c: four selection schemes on one anchor, mean +- sd over `seeds` draws."""
-    cand = d5b.pool(store, a)
+    cand = colloc_sampling.pool(store, a)
     deg = store.colloc_degree()
     proxy = np.array([float(deg[p]) if p >= 0 else 0.0 for _v, _p, p in cand])
     out = {"pool_size": len(cand),
@@ -198,7 +195,7 @@ def main():
     ap.add_argument("store", nargs="?", default=None)
     ap.add_argument("--anchors", type=int, default=400)
     ap.add_argument("--voda", default="voda")
-    ap.add_argument("--out", default=os.path.join(HERE, "results", "d5b_v7.json"))
+    ap.add_argument("--out", default=os.path.join(HERE, "results", "colloc_sampling.json"))
     args = ap.parse_args()
 
     store = open_store(args.store)

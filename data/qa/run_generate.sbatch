@@ -28,7 +28,7 @@ ROOT=/shared/workspace/povejmo/gams_gtlm
 export PYTHONPATH=/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/site-packages:${PYTHONPATH:-}
 PY=$("$ROOT/data/lib/pick_python.sh")
 
-STORE="${1:-$ROOT/data/stores/kg_graph_v7_gemma3}"
+STORE="${1:-$ROOT/data/stores/kg_graph_gemma3}"
 OUT="${2:-$ROOT/data/datasets/generated/v1}"
 
 echo "host: $(hostname)  start: $(date)"

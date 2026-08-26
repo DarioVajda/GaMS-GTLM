@@ -33,10 +33,9 @@ CLAUDE_CONTEXT.md
 CLAUDE.md
 TODO.md
 
+# built artefacts: the store (~4 GB), and the dataset the pipeline generates from
+# it.  `reference/` is NOT ignored -- it is small, and it is an input.
 data/stores/kg_graph_*/
-
-data/datasets/reference/Lexical-QA-SLO*
-
 data/datasets/generated/
 data/datasets/balls/
 

@@ -53,13 +53,13 @@ read anything.
   D5b  `sense -> kolokacija` capped at K_COLLOC, pooled across ALL of the
        anchor's senses (99.9 % of `imeti`'s collocations sit on `pomen 1`, so a
        per-sense cap would still admit 17 x K for `voda`), and *sampled* rather
-       than truncated -- see qa/d5b.py.
+       than truncated -- see qa/colloc_sampling.py.
 
 Both K default to 10.
 
-**M2: the periphrastic auxiliary is NOT injected.**  QA_TASKS.md 1094 settled the
-opposite in 2026-08-21 -- put `biti`'s 17 form nodes in every verb's ball so T5
-and T6 containment is literally true.  Reversed 2026-08-22, for three reasons.
+**M2: the periphrastic auxiliary is NOT injected.**  The opposite was specified
+first -- put `biti`'s 17 form nodes in every verb's ball so T5 and T6
+containment is literally true.  Reversed, for three reasons (QA_TASKS.md 0.7).
 It breaks train/inference parity: no extractor returns `biti` from *"Kako se
 glagol pisati spreže v prihodnjiku?"*, so the injection exists only in this
 builder and every conjugation ball at inference would be missing 17 nodes the
@@ -83,7 +83,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qa.store import open_store, K_ANCHOR, K_SENSE, K_COLLOC       # noqa: E402
-from qa import d5b, gen, grade, sl, spec                           # noqa: E402
+from qa import colloc_sampling, gen, grade, sl, spec                           # noqa: E402
 
 K_MWE = 10          # D5, upward `sestavina`
 K_COLLOC_CAP = 10   # D5b, `sense -> kolokacija`
@@ -144,7 +144,7 @@ def ball_nodes(store, a, k_mwe=K_MWE, k_colloc=K_COLLOC_CAP, stats=None):
     # D5b picks from the pool over ALL of the anchor's senses, so it has to be
     # resolved once for the anchor rather than per sense.
     keep_colloc = {int(v) for v, _p, _s in
-                   d5b.sample(store, a, k=k_colloc)}
+                   colloc_sampling.sample(store, a, k=k_colloc)}
 
     own_senses = {int(v) for v in plain if store.kind[int(v)] == K_SENSE}
     hop1 = plain + mwes
@@ -261,7 +261,7 @@ def member_contract(store, r, texts, targets, stats):
 def reverbalise(r, pool):
     """Re-draw a membership item's TARGET from the ball it will actually see.
 
-    T17's answer was verbalised at generation time from `d5b.sample(K=15)` --
+    T17's answer was verbalised at generation time from `colloc_sampling.sample(K=15)` --
     before any ball existed -- while the ball holds K=10, so 26.5 % of its target
     phrases named collocations the model cannot see, across 62.6 % of its
     positives.  Training on that teaches exactly the failure the graph exists to

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the QA dataset: questions, answers, and everything the grader needs.
 
-    python -m qa.build_dataset --store data/stores/kg_graph_v7_gemma3 \
+    python -m qa.build_dataset --store data/stores/kg_graph_gemma3 \
                                --out   data/datasets/generated/v1
 
 Writes `train.jsonl`, `dev.jsonl`, `test.jsonl`, plus `pool.jsonl` (the seed pool

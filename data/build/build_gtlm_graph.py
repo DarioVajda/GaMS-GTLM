@@ -140,8 +140,8 @@ so the cost of flaw #2 can be measured rather than assumed.
         if local in FEATURE_PROPS: ... elif local in UNIT_PROPS: ...
      routed every noun-entry gender into the FORM branch, where the
      T_WORDFORM/T_FORMLU guard dropped it -- and the elif could never run.  So
-     adding "gender" to UNIT_PROPS, which is what data/QA_TASKS.md proposed as a
-     one-line fix, changes NOTHING on its own.  The branch now dispatches on the
+     adding "gender" to UNIT_PROPS -- the obvious one-line fix -- changes
+     NOTHING on its own.  The branch now dispatches on the
      SUBJECT TYPE and consults both sets, which is what makes a property that
      legitimately lives at two levels work.
      Placement: the gender is rendered on the ANCHOR only --
@@ -279,13 +279,12 @@ _colloc_re = re.compile(r"^dependent-sense-(\d+)-lexical-unit-(\d+)$")
 # ---- Slovenian labels ------------------------------------------------------
 # Order matters: it is the order the parenthetical is rendered in.  vform and
 # person lead so a verb form reads "(sedanjik, 1. oseba, ednina)"; case/number/
-# gender/degree keep their v3 relative order, so every nominal FORM string is
-# byte-identical to what v3.1 produced (asserted by run_save_v4_*.sbatch).
-# NARROWED IN v6: the claim used to say "every NOMINAL string" and covered
-# anchors too.  It no longer can -- a noun anchor now carries its entry-level
-# gender (flaw 9), so noun anchors differ from v3.1 by exactly that label while
-# noun FORMS remain byte-identical.  check_v6_text.py asserts the surviving half
-# directly: only anchors may differ from v5, never a form.
+# gender/degree keep their v3 relative order, so adding a label to this tuple is
+# a purely ADDITIVE change to every nominal FORM string: the pre-existing items
+# keep their positions and a form's text may only grow.
+# The same claim does NOT hold for anchors, and must not be extended to them: a
+# noun anchor carries its entry-level gender, which is inserted after the POS
+# rather than appended, so anchor strings move where form strings do not.
 FEATURE_PROPS = ("vform", "person", "case", "number", "gender", "degree",
                  "definiteness")
 # Properties that sit on the lexical-unit rather than on a word-form.  They are
@@ -1263,7 +1262,7 @@ def analyze_variant(G, seeds, max_hops, token_len, prompt_tokens, active):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--kg-dir", default="/shared/workspace/povejmo/gams_gtlm/data/kg_raw/OntoLex DSB")
-    ap.add_argument("--out", default="/shared/workspace/povejmo/gams_gtlm/data/analysis/results/results_v3.json")
+    ap.add_argument("--out", default="/shared/workspace/povejmo/gams_gtlm/data/analysis/results/sizing_study.json")
     ap.add_argument("--n-seeds", type=int, default=400)
     ap.add_argument("--max-hops", type=int, default=3)
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "16")))
@@ -1378,22 +1377,17 @@ def main():
                   "sense_snippet": args.sense_snippet,
                   "sense_index": not args.no_sense_index,
                   "colloc_text": args.colloc_text,
-                  # A store declares which text convention built it.  v3.1
-                  # rendered no morphology and wrote collocations as lemma pairs;
-                  # v4 added vform/person/definiteness on forms and aspect/clitic
-                  # on anchors; v5 verbalises the collocation nodes (flaw 8);
-                  # v6 renders entry-level noun gender on the anchor (flaw M4);
-                  # v7 keys the collocation dedup on (member set, phrase) instead
-                  # of on the member set alone (flaw 10), which is the first
-                  # convention bump that changes STRUCTURE and not only text.
-                  # The convention is read off UNIT_PROPS rather than hard-coded
-                  # so a store built with gender switched back off cannot claim
-                  # to be a v6.  v6 is no longer reachable from this builder in
-                  # phrase mode: the old dedup key was a defect, not an option.
-                  "text_convention": (
-                      "v7" if ("gender" in UNIT_PROPS
-                               and args.colloc_text == "phrase")
-                      else "v5" if args.colloc_text == "phrase" else "v4"),
+                  # A store declares which text convention built it, so a reader
+                  # never has to infer it from the directory name.  Two switches
+                  # move it: whether collocation nodes carry their curated phrase
+                  # or a bare lemma pair, and whether noun entries render their
+                  # gender on the anchor.  Derived from those switches rather
+                  # than hard-coded, so a store built with either one turned off
+                  # cannot claim to be current.
+                  "text_convention": "+".join(
+                      ["collocation-phrases" if args.colloc_text == "phrase"
+                       else "collocation-pairs"]
+                      + (["entry-gender"] if "gender" in UNIT_PROPS else [])),
                   "feature_props": list(FEATURE_PROPS),
                   "unit_props": list(UNIT_PROPS),
                   "builder": os.path.basename(__file__),

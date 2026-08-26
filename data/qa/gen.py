@@ -20,7 +20,7 @@ import re
 import collections
 
 from . import sl
-from . import d5b
+from . import colloc_sampling
 from . import seeds
 from .spec import GAP
 
@@ -604,7 +604,7 @@ BAND_LEN = {"none": 5, "vague_small": 4, "vague_large": 15}
 
 
 def gen_T17(ctx, e, rng):
-    ball = d5b.sample(ctx.store, e.a)
+    ball = colloc_sampling.sample(ctx.store, e.a)
     if not ball:
         return None
     r = rng.random()

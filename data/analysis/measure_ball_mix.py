@@ -7,7 +7,7 @@ Neither says what the sampler puts in the average ball once the dataset exists.
 C19 is the open item that asks for the realised figure; this closes it.
 
 For every T17 item in a generated dataset, redraw the anchor's ball with the same
-`d5b.sample` call the generator used (it is a pure function of the anchor's node
+`colloc_sampling.sample` call the generator used (it is a pure function of the anchor's node
 code, so this is the same ball, not a resample) and report:
 
   * the pool size before the K = 15 cap, so the share of items where the cap
@@ -46,7 +46,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qa.store import open_store                                   # noqa: E402
-from qa import d5b, sl                                            # noqa: E402
+from qa import colloc_sampling, sl                                            # noqa: E402
 
 
 # A partner counts as a HUB when its collocation degree is at or above this many
@@ -75,13 +75,13 @@ def _linear_sample(store, a, cand, k, seed):
     """
     deg = store.colloc_degree()
     w = np.array([float(deg[p]) if p >= 0 else 0.0 for _v, _p, p in cand])
-    rng = np.random.default_rng(d5b.anchor_seed(store.codes[a], seed))
+    rng = np.random.default_rng(colloc_sampling.anchor_seed(store.codes[a], seed))
     keys = rng.random(len(cand)) ** (1.0 / np.maximum(w, 1e-12))
     take = np.argpartition(-keys, k - 1)[:k]
     return [cand[int(i)] for i in sorted(take)]
 
 
-def measure(store, items, k=d5b.K_DEFAULT, seed=0):
+def measure(store, items, k=colloc_sampling.K_DEFAULT, seed=0):
     deg = store.colloc_degree()
     pool_sizes, proxies, capped = [], [], 0
     hubs_log, hubs_lin, uniq_partners = [], [], []
@@ -92,11 +92,11 @@ def measure(store, items, k=d5b.K_DEFAULT, seed=0):
         if a is None or a in seen_anchor:
             continue
         seen_anchor.add(a)
-        cand = d5b.pool(store, a)
+        cand = colloc_sampling.pool(store, a)
         if not cand:
             continue
         pool_sizes.append(len(cand))
-        ball = d5b.sample(store, a, k=k, dataset_seed=seed)
+        ball = colloc_sampling.sample(store, a, k=k, dataset_seed=seed)
         parts = [p for _v, _p, p in ball if p >= 0]
         proxies += [int(deg[p]) for p in parts]
         uniq_partners.append(len(set(parts)))
@@ -155,7 +155,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dataset")
     ap.add_argument("--store", default=None)
-    ap.add_argument("--k", type=int, default=d5b.K_DEFAULT)
+    ap.add_argument("--k", type=int, default=colloc_sampling.K_DEFAULT)
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 

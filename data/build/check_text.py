@@ -1,56 +1,50 @@
 #!/usr/bin/env python3
-"""Acceptance check for a v7 store against its v6 predecessor.
+"""Acceptance check: a freshly built store against a reference store.
 
-v7 fixes flaw 10: the collocation dedup key.  Each collocation is reified once
-per participant, so several frac:Collocation IRIs share one {sense_a, sense_b}
-member set.  Through v6 the builder kept ONE node per member set -- correct while
-the nodes were textless lemma pairs (flaw 2), wrong once v5 gave them their
-curated phrase (flaw 8), because the duplicates name different dependent senses
-and therefore different phrases.  v7 keys on (member set, PHRASE).
-
-This is the first version bump since v3 that changes STRUCTURE, so the v6 check's
-"everything is md5-identical" frame does not apply.  What must hold instead:
+The reference is normally the store the new one replaces, built with the same
+tokenizer.  A rebuild is allowed to ADD collocation nodes -- the dedup key is
+(member set, phrase), so a member set reified under several dependent senses
+mints one node per distinct phrase -- but it may not lose or reshape anything
+else.  Seven assertions, in order of how loudly they fail:
 
   1. THE REAL LAYER IS UNTOUCHED.  node_codes / ntype[:n_real] / kind[:n_real] /
      mwe_set[:n_real] byte-identical, and n_real unchanged.  Nothing about the
-     IRI-backed graph changes; only minted nodes are added.
+     IRI-backed graph may change; only minted nodes are added.
 
   2. THE SYNONYM AND ANTONYM LAYERS ARE UNTOUCHED.  They are minted BEFORE
-     collocations, so their node ids are unaffected by the extra collocation
-     nodes: same count, same ids, same text, byte for byte.  If this fails, the
-     change leaked outside the collocation path.
+     collocations, so their node ids are unaffected by extra collocation nodes:
+     same count, same ids, same text, byte for byte.  If this fails, a change
+     leaked outside the collocation path.
 
-  3. THE COLLOCATION LAYER ONLY GREW.  For every member set, v6's collocation
-     texts must all still be present in v7's.  This is the check that matters:
-     the fix is worthless if it adds phrases while dropping others, and a pure
+  3. THE COLLOCATION LAYER ONLY GREW.  For every member set, every reference
+     collocation text must still be present.  This is the check that matters: a
+     change is worthless if it adds phrases while dropping others, and a pure
      count comparison would not notice.
 
-     Compared under the v7 FOLD (case, whitespace, one trailing period), because
-     folding case-only duplicates is part of the fix, not a loss: v6 held both
-     `Fotografiranje otrok` and `fotografiranje otrok` on one member set, and a
-     gold list containing both would fail its own dedup invariant.  The count of
+     Compared under the FOLD (case, whitespace, one trailing period), because
+     folding case-only duplicates is intended rather than a loss -- a store
+     holding both `Fotografiranje otrok` and `fotografiranje otrok` on one member
+     set would make a gold list fail its own dedup invariant.  The count of
      phrases that survive only up to the fold is reported, so the fold cannot
      quietly hide a real loss.
 
   4. NO PAIR CARRIES THE SAME PHRASE TWICE.  (member set, text) must be unique
-     across the whole collocation layer -- that IS the new dedup key, so a
-     violation means the key did not take effect.
+     across the whole collocation layer -- that IS the dedup key, so a violation
+     means the key did not take effect.
 
   5. NON-COLLOCATION ADJACENCY IS UNCHANGED.  For every real node, the multiset
-     of neighbours that are real nodes, synonyms or antonyms must be identical to
-     v6's.  Collocation neighbours are compared by text in check 3, not by id --
-     their ids necessarily shift.
+     of neighbours that are real nodes, synonyms or antonyms must match the
+     reference.  Collocation neighbours are compared by text in check 3, not by
+     id -- their ids necessarily shift.
 
   6. VERBALISATION DID NOT REGRESS.  The share of collocation nodes carrying a
-     phrase rather than a `lemma + lemma` fallback must be >= v6's.
+     curated phrase rather than a `lemma + lemma` fallback must not fall.
 
-  7. REFERENCE REPRODUCTION IMPROVED.  The share of the 1,307 collocation
-     phrases in data/datasets/reference/Lexical-QA-SLO(in).csv that are present
-     verbatim in the store, v6 vs v7.  Simulated at 82.8% -> 87.9% before the
-     rebuild; this measures it on the real thing.  Reported, and required only
-     not to fall.
+  7. REFERENCE REPRODUCTION DID NOT REGRESS.  The share of the 1,307 collocation
+     phrases in data/datasets/reference/Lexical-QA-SLO(in).csv present verbatim
+     in the store.  Reported for both, and required only not to fall.
 
-Usage:  check_v7_text.py NEW_STORE OLD_STORE
+Usage:  check_text.py NEW_STORE REFERENCE_STORE
 """
 import os, sys, csv, json, re, hashlib, random, collections, unicodedata
 import numpy as np
@@ -66,8 +60,12 @@ DATA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REFCSV = os.path.join(DATA, "datasets", "reference", "Lexical-QA-SLO(in).csv")
 
 # The pair fallback renders as `kolokacija: A + B`; a curated phrase never
-# contains " + " (verified over the v6 store: 0 of 2,981,731).
+# contains " + " (verified over the whole collocation layer: 0 of 2,981,731).
 PAIR_MARK = " + "
+
+# What `manifest.meta.text_convention` must say for a store to be current: both
+# builder switches on.  The builder derives the same string from the switches.
+CURRENT_CONVENTION = "collocation-phrases+entry-gender"
 
 
 def md5(path, blocks=1 << 22):
@@ -164,11 +162,11 @@ def check_colloc_growth(Gn, Go):
                 continue
             lost_texts += 1
             if shown < 5:
-                print(f"    !! phrase lost for {pair}: {t!r} (v7 has {have!r})")
+                print(f"    !! phrase lost for {pair}: {t!r} (new has {have!r})")
                 shown += 1
-    print(f"    member sets present in v6 but not v7: {lost_pairs:,} (required 0)")
-    print(f"    v6 phrases missing from v7:           {lost_texts:,} (required 0)")
-    print(f"    v6 phrases kept only up to the fold:  {folded:,} "
+    print(f"    member sets in the reference but not the new store: {lost_pairs:,} (required 0)")
+    print(f"    reference phrases missing from the new store:      {lost_texts:,} (required 0)")
+    print(f"    reference phrases kept only up to the fold:        {folded:,} "
           f"(intended: case-only duplicates)")
 
     dup = 0
@@ -218,8 +216,8 @@ def check_verbalisation(new_by_pair, Go, n_new, n_old):
     old_pair_form = sum(1 for i in old_ids if PAIR_MARK in to(int(i)))
     rn = 100.0 * (n_new - new_pair_form) / max(n_new, 1)
     ro = 100.0 * (n_old - old_pair_form) / max(n_old, 1)
-    print(f"    verbalised: v6 {ro:.3f}% ({n_old - old_pair_form:,})  "
-          f"v7 {rn:.3f}% ({n_new - new_pair_form:,})")
+    print(f"    verbalised: reference {ro:.3f}% ({n_old - old_pair_form:,})  "
+          f"new {rn:.3f}% ({n_new - new_pair_form:,})")
     return rn >= ro - 1e-9
 
 
@@ -251,8 +249,8 @@ def check_reference(new_by_pair, Go):
         print("    (no kolokacije rows found)")
         return True
     print(f"    reference phrases: {tot}   "
-          f"v6 {hit_old} ({100.0 * hit_old / tot:.1f}%)   "
-          f"v7 {hit_new} ({100.0 * hit_new / tot:.1f}%)")
+          f"reference {hit_old} ({100.0 * hit_old / tot:.1f}%)   "
+          f"new {hit_new} ({100.0 * hit_new / tot:.1f}%)")
     print(f"    distinct phrases in store: {len(old_phrases):,} -> {len(new_phrases):,}")
     return hit_new >= hit_old
 
@@ -271,9 +269,10 @@ def main():
     print(f"manifest dedup_key       = {cst.get('dedup_key')!r}  "
           f"member_sets={cst.get('member_sets')}  "
           f"pairings={cst.get('distinct_pairings')}")
-    ok = meta.get("text_convention") == "v7"
+    ok = meta.get("text_convention") == CURRENT_CONVENTION
     if not ok:
-        print("    !! new store does not declare text_convention v7")
+        print(f"    !! new store does not declare text_convention "
+              f"{CURRENT_CONVENTION!r}")
     if cst.get("dedup_key") != "member_set+phrase":
         print("    !! new store does not declare the (member set, phrase) dedup key")
         ok = False

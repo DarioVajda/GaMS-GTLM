@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Identify the noun anchors that carry no gender in the v6 store.
+"""Identify the noun anchors that carry no gender in a store.
 
-check_v6_text.py reports 310,430 noun anchors but only 310,362 with a gender --
-68 more nouns in the store than data/analysis/scan_gender.py found in the raw
-dump.  Either the scan missed some nouns or the builder is still dropping some
-genders, and the two have very different consequences, so resolve it.
+Written for a 68-anchor discrepancy: the store held 310,430 noun anchors but only
+310,362 with a gender, i.e. 68 more nouns than data/analysis/scan_gender.py found
+in the raw dump.  Either the scan misses nouns or the builder drops genders, and
+the two have very different consequences, so the difference has to be resolved
+rather than rounded away.
 
 Prints the offending anchors with their lexical-unit ids so they can be grepped
 in the raw N-Triples.

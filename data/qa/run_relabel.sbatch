@@ -43,6 +43,6 @@ echo "--- relabel ---"
 
 echo "--- selftest on the relabelled set ---"
 "$PY" -m qa.selftest --dataset "$OUT" \
-    --store "$ROOT/data/stores/kg_graph_v7_gemma3" || true
+    --store "$ROOT/data/stores/kg_graph_gemma3" || true
 
 echo "end: $(date)"

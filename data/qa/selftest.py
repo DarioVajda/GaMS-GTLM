@@ -40,7 +40,7 @@ import collections
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from qa import sl, spec, grade, seeds, d5b, gen                # noqa: E402
+from qa import sl, spec, grade, seeds, colloc_sampling, gen                # noqa: E402
 
 FAIL = []
 
@@ -224,7 +224,7 @@ def c13_baselines(splits):
               f"{100.0 * n / len(by_type[t]):5.1f}%  {top[:56]!r}")
 
 
-def c18_d5b(store, items):
+def c18_sampling(store, items):
     print("\nC18 -- D5b reproducibility, and gold-in-ball")
     from qa.store import QAStore
     anchors = [it for it in items if it["type"] == "T17" and not it["negative"]]
@@ -235,20 +235,20 @@ def c18_d5b(store, items):
     ok_ball = True
     for it in sample:
         a = int(next(i for i in [_anchor_of(store, it)] if i is not None))
-        ball = {p for _v, p, _s in d5b.sample(store, a)}
+        ball = {p for _v, p, _s in colloc_sampling.sample(store, a)}
         if not set(it["gold_items"]) <= ball:
             ok_ball = False
             break
     check("every gold phrase is in its own ball", ok_ball, f"{len(sample)} items")
     a = _anchor_of(store, sample[0])
-    b1 = d5b.sample(store, a)
-    b2 = d5b.sample(store, a)
+    b1 = colloc_sampling.sample(store, a)
+    b2 = colloc_sampling.sample(store, a)
     check("the sampler is deterministic", b1 == b2)
     check("the pool is sorted by node id",
           all(x[0] < y[0] for x, y in zip(b1, b1[1:])) if len(b1) > 1 else True)
-    s1 = d5b.anchor_seed(store.codes[a])
+    s1 = colloc_sampling.anchor_seed(store.codes[a])
     check("the seed depends only on the node code",
-          s1 == d5b.anchor_seed(store.codes[a]))
+          s1 == colloc_sampling.anchor_seed(store.codes[a]))
 
 
 def _anchor_of(store, item):
@@ -287,7 +287,7 @@ def main():
         c17_t12_t14(splits)
         c13_baselines(splits)
         if store:
-            c18_d5b(store, allitems)
+            c18_sampling(store, allitems)
 
     print("\nSELFTEST:", "PASS" if not FAIL else f"FAIL ({len(FAIL)}): {FAIL}")
     raise SystemExit(0 if not FAIL else 1)

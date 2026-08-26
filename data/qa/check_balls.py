@@ -3,7 +3,7 @@
 
     python -m qa.check_balls datasets/generated/v2_relabelled datasets/balls/v2
 
-`qa/selftest.py` checks containment against `d5b.sample(store, a)` -- the
+`qa/selftest.py` checks containment against `colloc_sampling.sample(store, a)` -- the
 collocation slice, at the sampler's default K, for one anchor.  That validated a
 ball nobody ever built: the item's real input is the union of every anchor D3's
 lookup returned, under the builder's own K, and it holds forms and senses and
@@ -31,7 +31,7 @@ the genitive in an answer and the nominative in the graph (`množine` /
 
 **One recorded exemption: T5 and T6.**  M2 composes the periphrastic tenses from
 the *-l* participle (graph content) plus a `biti` auxiliary (not injected into
-the ball -- QA_TASKS.md, M2, reversed 2026-08-22).  So their gold legitimately
+the ball -- QA_TASKS.md 0.7).  So their gold legitimately
 contains tokens the input does not, and the invariant for them reads *every gold
 **lexical** item is in the ball*.  This script strips a leading auxiliary before
 matching those two types and reports them separately, rather than either failing
