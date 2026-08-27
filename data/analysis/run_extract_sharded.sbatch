@@ -4,12 +4,16 @@
 #
 #     sbatch analysis/run_extract_sharded.sbatch DATASET OUT_PREFIX [EXTRA ARGS]
 #
+# One stage on its own -- `sbatch data/run_pipeline.sbatch` runs all six, and
+# shards across the GPUs of a single job rather than across an array.  This is
+# the array version, for an extraction run on its own.
+#
 # A Slurm array: task k runs shard k of NUM_SHARDS and writes its own dump.
 # Score the merged result afterwards without a GPU (qa/run_relabel.sbatch does
 # this, or by hand):
 #
-#     python -m analysis.measure_extraction --score-only PREFIX_items.part*.jsonl \
-#            --out PREFIX.json
+#     python -m analysis.measure_extraction --score-only PREFIX.part*.jsonl \
+#            --out score.json
 #
 # Sharding is a stride (`items[k::N]`), so every shard gets the same type mix --
 # a contiguous split would hand one GPU all of T20's 21-word sentences.
@@ -45,8 +49,8 @@ ROOT=/shared/workspace/povejmo/gams_gtlm
 CONTAINER=/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh
 export HOME=${HOME:-/shared/home/dario.vajda}
 
-DATASET="${1:-$ROOT/data/datasets/generated/v2}"
-PREFIX="${2:-$ROOT/data/analysis/results/extraction_v2}"
+DATASET="${1:-$ROOT/data/datasets/work/generated_raw}"
+PREFIX="${2:-$ROOT/data/datasets/work/extraction/items}"
 shift 2 || true
 
 NUM_SHARDS=${SLURM_ARRAY_TASK_COUNT:-4}

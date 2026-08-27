@@ -20,11 +20,12 @@ export TOKENIZERS_PARALLELISM=false
 echo "[inner] host=$(hostname) python=$(python -V 2>&1) shard=${SHARD}/${NUM_SHARDS}"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
 cd "$ROOT/data"
+mkdir -p "$(dirname "$PREFIX")"
 
 exec python -m analysis.measure_extraction \
     --dataset "$DATASET" \
     --prompt "$ROOT/data/prompts/extractor_prompt.txt" \
     --n 0 \
     --num-shards "$NUM_SHARDS" --shard "$SHARD" \
-    --dump "${PREFIX}_items.part${SHARD}.jsonl" \
+    --dump "${PREFIX}.part${SHARD}.jsonl" \
     "$@"

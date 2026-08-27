@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The two baseline INPUT variants, derived from the balls the GTLM arm reads.
 
-    python -m qa.build_variants datasets/balls/v2 datasets/balls
+    python -m qa.build_variants datasets/balls datasets
 
 Both are built **from the exact ball file**, never re-extracted from the store.
 That is the whole point: three of the four arms in the run matrix share their
@@ -9,12 +9,12 @@ data, schedule, backbone and seed, so the only thing that may differ between the
 is the input.  Re-running the extractor for a baseline would confound the
 comparison with whatever the extractor did that day.
 
-  `v2_noretrieval`  question and answer only -- no graph at all.  Measures how
+  `balls_noretrieval`  question and answer only -- no graph at all.  Measures how
       much of the corpus a 1B model already answers from its own Slovene, which
       is the floor every other number has to clear before it says anything about
       retrieval.
 
-  `v2_serialised`   the SAME subgraph, flattened into the prompt as text: the
+  `balls_serialised`   the SAME subgraph, flattened into the prompt as text: the
       node list, then the edge list, then the question.  Isolates *structure* --
       this arm and the GTLM arm receive identical information and differ only in
       how it is encoded.
@@ -28,8 +28,8 @@ graph, with real sequential positions over the whole thing, against a GTLM whose
 node positions reset per node and whose attention carries the structural bias.
 
 The answer, `gold_items`, `negative`, `band`, `targets` and the split are copied
-verbatim, so every id and every split matches `balls/v2` exactly and the grading
-join (`datasets/generated/v2_final`) is unchanged.
+verbatim, so every id and every split matches `balls` exactly and the grading
+join (`datasets/generated`) is unchanged.
 """
 import os
 import json
@@ -121,15 +121,16 @@ def variant(row, kind, tok=None, budget=MAX_PROMPT_TOKENS):
     return out
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("balls", help="the GTLM arm's ball directory (datasets/balls/v2)")
-    ap.add_argument("out_root", help="where the <name>_<variant> dirs are written")
-    ap.add_argument("--tokenizer", default="google/gemma-3-1b-it",
-                    help="the backbone's tokenizer -- it decides where the "
-                         "serialised prompt's token budget falls")
-    ap.add_argument("--max-prompt-tokens", type=int, default=MAX_PROMPT_TOKENS)
-    args = ap.parse_args()
+def run(balls, out_root, tokenizer="google/gemma-3-1b-it",
+        max_prompt_tokens=MAX_PROMPT_TOKENS):
+    """Write the two baseline variants beside `balls`.  Returns per-split counts.
+
+    The body `main()` used to hold, so the pipeline can call this stage as a
+    function while the command line keeps behaving exactly as it did.
+    """
+    args = argparse.Namespace(balls=balls, out_root=out_root,
+                              tokenizer=tokenizer,
+                              max_prompt_tokens=max_prompt_tokens)
 
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(args.tokenizer)
@@ -179,6 +180,21 @@ def main():
 
     for k, d in dirs.items():
         print(f"[wrote] {d}")
+    return total
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("balls", help="the GTLM arm's ball directory (datasets/balls)")
+    ap.add_argument("out_root", help="where the <name>_<variant> dirs are written")
+    ap.add_argument("--tokenizer", default="google/gemma-3-1b-it",
+                    help="the backbone's tokenizer -- it decides where the "
+                         "serialised prompt's token budget falls")
+    ap.add_argument("--max-prompt-tokens", type=int, default=MAX_PROMPT_TOKENS)
+    args = ap.parse_args()
+
+    run(balls=args.balls, out_root=args.out_root, tokenizer=args.tokenizer,
+        max_prompt_tokens=args.max_prompt_tokens)
 
 
 if __name__ == "__main__":

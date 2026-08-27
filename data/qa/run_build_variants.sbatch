@@ -4,9 +4,13 @@
 #
 #     sbatch run_build_variants.sbatch [BALLS] [OUT_ROOT]
 #
-# Pure file transform -- no store, no GPU.  It reads datasets/balls/v2 and writes
-# datasets/balls/v2_noretrieval and datasets/balls/v2_serialised, then verifies
-# that every id, split and answer matches the reference.
+# Pure file transform -- no store, no GPU.  It reads datasets/balls and writes
+# datasets/balls_noretrieval and datasets/balls_serialised, then verifies that
+# every id, split and answer matches the reference.  The variant names are
+# derived from the ball directory's own basename, which is why the two land
+# beside it rather than inside it.
+#
+# One stage on its own -- `sbatch data/run_pipeline.sbatch` runs all six.
 #
 #SBATCH --partition=frida
 #SBATCH --account=lkm
@@ -26,8 +30,8 @@ export PYTHONPATH=/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/sit
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
 PY=$("$ROOT/data/lib/pick_python.sh")
 
-BALLS="${1:-$ROOT/data/datasets/balls/v2}"
-OUT_ROOT="${2:-$ROOT/data/datasets/balls}"
+BALLS="${1:-$ROOT/data/datasets/balls}"
+OUT_ROOT="${2:-$ROOT/data/datasets}"
 
 echo "host: $(hostname)  start: $(date)"
 cd "$ROOT/data"

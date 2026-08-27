@@ -21,6 +21,7 @@ import collections
 import numpy as np
 
 from lib import graph_store
+from lib.errors import StageError
 
 # node kinds, from the builder
 K_ANCHOR, K_FORM, K_SENSE, K_EXAMPLE, K_TRANS = 0, 1, 2, 3, 4
@@ -217,7 +218,7 @@ class QAStore:
             for p in parts:
                 if p.casefold() != me and p:
                     out.append(p)
-        return sorted(set(out), key=sl.sl_key)
+        return sorted(set(out), key=sl.sl_sort_key)
 
     # -- the frequency proxy (D9) -----------------------------------------
     def proxy(self, a):
@@ -288,13 +289,35 @@ class QAStore:
 
 
 def open_store(path=None, verbose=True):
-    """Open the current store.  Defaults to the newest kg_graph_v*_gemma3."""
+    """Open a store.  With no path, find the one store in `data/stores`.
+
+    A store directory is one that carries a `manifest.json` -- the file the
+    builder writes LAST, so a directory without one is an interrupted write and
+    not a store at all.  That is the whole test: matching on the directory's
+    name is what broke this function once already, when the stores stopped
+    carrying a `v7`-style version in their name and this went on looking for
+    `kg_graph_v*_gemma3` (every job script passes --store, so nothing noticed
+    until an extraction run hit the default).
+
+    Prefer `kg_graph_gemma3` when several are present, since the others exist to
+    be diffed against it rather than to be read.
+    """
     if path is None:
         root = os.path.join(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__))), "stores")
-        cands = sorted(d for d in os.listdir(root)
-                       if d.startswith("kg_graph_v") and d.endswith("_gemma3"))
+        try:
+            cands = sorted(
+                d for d in os.listdir(root)
+                if os.path.exists(os.path.join(root, d, "manifest.json")))
+        except OSError:
+            cands = []
         if not cands:
-            raise SystemExit(f"no store found under {root}")
-        path = os.path.join(root, cands[-1])
+            raise StageError(
+                f"no store found under {root} -- build one with "
+                f"`sbatch data/run_pipeline.sbatch`, or pass an explicit path")
+        preferred = "kg_graph_gemma3"
+        path = os.path.join(root, preferred if preferred in cands else cands[0])
+        if verbose and len(cands) > 1:
+            print(f"[store] {len(cands)} stores present, using "
+                  f"{os.path.basename(path)}", flush=True)
     return QAStore(path, verbose=verbose)

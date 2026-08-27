@@ -1,8 +1,12 @@
 #!/bin/bash
 #
-# Generate the v1 QA dataset from a v7 store.
+# Stage 1 of the QA dataset build: generate the items from a graph store.
 #
 #     sbatch run_generate.sbatch [STORE] [OUTDIR]
+#
+# One stage on its own -- `sbatch data/run_pipeline.sbatch` runs all six.  The
+# default OUTDIR is where the pipeline keeps this stage's output, so running
+# this by hand and then continuing with the pipeline lines up.
 #
 # Three phases, all single-threaded Python over an mmap'd store:
 #   1. the D8 seed pool -- every core anchor traversed to its senses and their
@@ -29,7 +33,7 @@ export PYTHONPATH=/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/sit
 PY=$("$ROOT/data/lib/pick_python.sh")
 
 STORE="${1:-$ROOT/data/stores/kg_graph_gemma3}"
-OUT="${2:-$ROOT/data/datasets/generated/v1}"
+OUT="${2:-$ROOT/data/datasets/work/generated_raw}"
 
 echo "host: $(hostname)  start: $(date)"
 echo "store: $STORE"

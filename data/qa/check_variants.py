@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Acceptance check: the variants are the same corpus, differently shown.
 
-    python -m qa.check_variants datasets/balls/v2 \
-        datasets/balls/v2_noretrieval datasets/balls/v2_serialised
+    python -m qa.check_variants datasets/balls \
+        datasets/balls_noretrieval datasets/balls_serialised
 
 Every variant must carry the same ids in the same splits with the same answers as
 the reference ball directory.  If it does not, the arms are no longer comparable
@@ -29,11 +29,9 @@ def read(d, split):
         return [json.loads(line) for line in f if line.strip()]
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("reference")
-    ap.add_argument("variants", nargs="+")
-    args = ap.parse_args()
+def run(reference, variants):
+    """Check every variant against the reference balls.  0 if all match."""
+    args = argparse.Namespace(reference=reference, variants=list(variants))
 
     bad = 0
     truncated = collections.Counter()
@@ -94,6 +92,14 @@ def main():
               f"(above the serialised prompt's token budget)")
     print("\nALL VARIANTS MATCH" if not bad else f"\n{bad} CHECK(S) FAILED")
     return 1 if bad else 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("reference")
+    ap.add_argument("variants", nargs="+")
+    args = ap.parse_args()
+    return run(reference=args.reference, variants=args.variants)
 
 
 if __name__ == "__main__":

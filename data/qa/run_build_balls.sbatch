@@ -3,9 +3,14 @@
 # Extract one text graph per QA item -- the input a GTLM reads.
 #
 #     sbatch run_build_balls.sbatch [TYPES] [DATASET] [OUT] [DATASET_OUT]
-#     sbatch run_build_balls.sbatch "" datasets/generated/v2_relabelled \
-#                                      datasets/balls/v2 \
-#                                      datasets/generated/v2_final
+#     sbatch run_build_balls.sbatch "" datasets/work/relabelled \
+#                                      datasets/balls \
+#                                      datasets/generated
+#
+# One stage on its own -- `sbatch data/run_pipeline.sbatch` runs all six.  Note
+# that run publishes these two directories together at the end; writing them
+# here overwrites the live dataset in place, which is the right thing when you
+# are deliberately rebuilding one stage and worth knowing before you do.
 #
 # TWO outputs.  OUT is the ball per item; DATASET_OUT is the same dataset with
 # the membership (T17) target re-verbalised from the ball -- see build_balls.py's
@@ -37,9 +42,9 @@ export PYTHONPATH=/shared/workspace/povejmo/graph_model/.venv/lib/python3.10/sit
 PY=$("$ROOT/data/lib/pick_python.sh")
 
 TYPES="${1:-}"
-DATASET="${2:-$ROOT/data/datasets/generated/v2_relabelled}"
-OUT="${3:-$ROOT/data/datasets/balls/v2}"
-DATASET_OUT="${4:-$ROOT/data/datasets/generated/v2_final}"
+DATASET="${2:-$ROOT/data/datasets/work/relabelled}"
+OUT="${3:-$ROOT/data/datasets/balls}"
+DATASET_OUT="${4:-$ROOT/data/datasets/generated}"
 
 echo "host: $(hostname)  start: $(date)"
 echo "types: ${TYPES:-<all>}"

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Turn relabelled QA items into the small text graphs a GTLM actually reads.
 
-    sbatch qa/run_build_balls.sbatch                 # -> datasets/balls/v2
-                                                     #  + datasets/generated/v2_final
+    sbatch qa/run_build_balls.sbatch                 # -> datasets/balls
+                                                     #  + datasets/generated
 
 **Two outputs, one target.**  `reverbalise()` re-draws a membership item's answer
 from the ball it will actually see, so the answer the ball ships and the answer
 the dataset ships must be the same string.  `--dataset-out` writes the second
-one.  `datasets/generated/v2_final` is then the authority for `answer` and
-`gold_items`; `v2_relabelled` (stage 3) stays immutable, and the rewrite is
-auditable as a diff between the two directories.
+one.  `datasets/generated` is then the authority for `answer` and `gold_items`;
+the relabelled set this reads (stage 3, in `datasets/work/`) stays immutable, and
+the rewrite is auditable as a diff between the two directories.
 
 **This builder consumes `targets`, never `node_code`.**  D3 fixes the production
 pipeline as extractor -> verbatim surface lookup -> union of every match, and
@@ -82,6 +82,7 @@ import numpy as np
 
 from qa.store import open_store, K_ANCHOR, K_SENSE, K_COLLOC
 from qa import colloc_sampling, gen, grade, sl, spec
+from lib.errors import StageError
 
 K_MWE = 10          # D5, upward `sestavina`
 K_COLLOC_CAP = 10   # D5b, `sense -> kolokacija`
@@ -309,23 +310,16 @@ def build(store, targets, k_mwe, k_colloc, cache, stats):
             [pos[a] for a in targets])
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("dataset", help="a RELABELLED dataset -- items need `targets`")
-    ap.add_argument("out")
-    ap.add_argument("--store", default=None)
-    ap.add_argument("--k-mwe", type=int, default=K_MWE)
-    ap.add_argument("--k-colloc", type=int, default=K_COLLOC_CAP)
-    ap.add_argument("--types", default="", help="comma-separated subset")
-    ap.add_argument("--dataset-out", default=None,
-                    help="also rewrite the DATASET rows here, carrying the "
-                         "re-verbalised membership target (see `reverbalise`). "
-                         "Without it the corrected answer would live only in the "
-                         "ball and every consumer reading the dataset's `answer` "
-                         "for T17 would get a target naming phrases the model "
-                         "cannot see.  Pass a NEW directory: the stage-3 artefact "
-                         "stays immutable and the rewrite is auditable as a diff.")
-    args = ap.parse_args()
+def run(dataset, out, store=None, k_mwe=K_MWE, k_colloc=K_COLLOC_CAP, types="",
+        dataset_out=None):
+    """Build one ball per item, and the dataset those balls re-verbalise.
+
+    The body `main()` used to hold, so the pipeline can call this stage as a
+    function while the command line keeps behaving exactly as it did.
+    """
+    args = argparse.Namespace(dataset=dataset, out=out, store=store,
+                              k_mwe=k_mwe, k_colloc=k_colloc, types=types,
+                              dataset_out=dataset_out)
 
     store = open_store(args.store)
     codes = np.asarray(store.codes)
@@ -355,7 +349,7 @@ def main():
                 if want and r["type"] not in want:
                     continue
                 if "targets" not in r:
-                    raise SystemExit(
+                    raise StageError(
                         f"{src}: item {r['id']} has no `targets` -- run "
                         f"qa/relabel.py against an extraction run first")
 
@@ -438,6 +432,33 @@ def main():
     if args.dataset_out:
         print(f"[wrote] {args.dataset_out}  (dataset rows, membership targets "
               f"re-verbalised -- THIS is the authority for `answer`)")
+    return stats
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("dataset", help="a RELABELLED dataset -- items need `targets`")
+    ap.add_argument("out")
+    ap.add_argument("--store", default=None)
+    ap.add_argument("--k-mwe", type=int, default=K_MWE)
+    ap.add_argument("--k-colloc", type=int, default=K_COLLOC_CAP)
+    ap.add_argument("--types", default="", help="comma-separated subset")
+    ap.add_argument("--dataset-out", default=None,
+                    help="also rewrite the DATASET rows here, carrying the "
+                         "re-verbalised membership target (see `reverbalise`). "
+                         "Without it the corrected answer would live only in the "
+                         "ball and every consumer reading the dataset's `answer` "
+                         "for T17 would get a target naming phrases the model "
+                         "cannot see.  Pass a NEW directory: the stage-3 artefact "
+                         "stays immutable and the rewrite is auditable as a diff.")
+    args = ap.parse_args()
+
+    try:
+        run(dataset=args.dataset, out=args.out, store=args.store,
+            k_mwe=args.k_mwe, k_colloc=args.k_colloc, types=args.types,
+            dataset_out=args.dataset_out)
+    except StageError as e:
+        raise SystemExit(str(e))
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ import collections
 import numpy as np
 
 from qa.store import open_store
+from lib.errors import StageError
 from lib.paths import GENERATED_DIR, EXTRACTOR_PROMPT
 
 DEFAULT_MODEL = "cjvt/GaMS3-12B-Instruct"
@@ -192,25 +193,21 @@ def score(dump, model=None, prompt=None):
             "by_type": {t: dict(c) for t, c in rows.items()}}
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default=DEFAULT_MODEL)
-    ap.add_argument("--prompt", default=EXTRACTOR_PROMPT)
-    ap.add_argument("--dataset", default=os.path.join(GENERATED_DIR, "v1"))
-    ap.add_argument("--n", type=int, default=40, help="items per type (0 = all)")
-    ap.add_argument("--batch-size", type=int, default=32)
-    ap.add_argument("--max-new-tokens", type=int, default=64)
-    ap.add_argument("--out", default=None)
-    ap.add_argument("--dump", default=None, help="per-item JSONL of raw outputs")
-    ap.add_argument("--num-shards", type=int, default=1,
-                    help="split the item list N ways for data-parallel runs")
-    ap.add_argument("--shard", type=int, default=0, help="which shard, 0-based")
-    ap.add_argument("--score-only", nargs="+", default=None,
-                    help="re-score existing dump JSONLs; no model is loaded")
-    ap.add_argument("--balance-flavours", action="store_true",
-                    help="stratify on negative flavour too (inflates the "
-                         "negative share; use for per-frame diagnosis only)")
-    args = ap.parse_args()
+def run(model=DEFAULT_MODEL, prompt=EXTRACTOR_PROMPT,
+        dataset=GENERATED_DIR, n=40, batch_size=32,
+        max_new_tokens=64, out=None, dump=None, num_shards=1, shard=0,
+        score_only=None, balance_flavours=False, store=None):
+    """Run the extractor over a dataset (or re-score dumps).  The summary dict.
+
+    Called both by `main()` below and by `data/pipeline/`, which runs one of
+    these per GPU as a subprocess and then re-enters here with `score_only` to
+    score the merged result off the GPU.
+    """
+    args = argparse.Namespace(
+        model=model, prompt=prompt, dataset=dataset, n=n,
+        batch_size=batch_size, max_new_tokens=max_new_tokens, out=out,
+        dump=dump, num_shards=num_shards, shard=shard, score_only=score_only,
+        balance_flavours=balance_flavours, store=store)
 
     if args.score_only:
         dump = [json.loads(l) for p in args.score_only
@@ -223,11 +220,11 @@ def main():
             with open(args.out, "w", encoding="utf-8") as f:
                 json.dump(summary, f, ensure_ascii=False, indent=2)
             print(f"\n[wrote] {args.out}")
-        return
+        return summary
 
     template = open(args.prompt, encoding="utf-8").read()
     if "{question}" not in template:
-        raise SystemExit(f"{args.prompt}: no {{question}} placeholder")
+        raise StageError(f"{args.prompt}: no {{question}} placeholder")
 
     items = load_items(args.n, args.dataset, args.balance_flavours)
     if args.num_shards > 1:
@@ -243,7 +240,7 @@ def main():
                                  for r in items],
                     args.batch_size, args.max_new_tokens)
 
-    store = open_store(verbose=False)
+    store = open_store(args.store, verbose=False)
     codes = np.asarray(store.codes)
     idx = store.surface_index()
 
@@ -285,6 +282,41 @@ def main():
             for d in dump:
                 f.write(json.dumps(d, ensure_ascii=False) + "\n")
         print(f"[wrote] {args.dump}")
+    return summary
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--prompt", default=EXTRACTOR_PROMPT)
+    ap.add_argument("--dataset", default=GENERATED_DIR)
+    ap.add_argument("--store", default=None,
+                    help="the graph store the extracted strings are resolved "
+                         "against; omit to find the one in data/stores")
+    ap.add_argument("--n", type=int, default=40, help="items per type (0 = all)")
+    ap.add_argument("--batch-size", type=int, default=32)
+    ap.add_argument("--max-new-tokens", type=int, default=64)
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--dump", default=None, help="per-item JSONL of raw outputs")
+    ap.add_argument("--num-shards", type=int, default=1,
+                    help="split the item list N ways for data-parallel runs")
+    ap.add_argument("--shard", type=int, default=0, help="which shard, 0-based")
+    ap.add_argument("--score-only", nargs="+", default=None,
+                    help="re-score existing dump JSONLs; no model is loaded")
+    ap.add_argument("--balance-flavours", action="store_true",
+                    help="stratify on negative flavour too (inflates the "
+                         "negative share; use for per-frame diagnosis only)")
+    args = ap.parse_args()
+
+    try:
+        run(model=args.model, prompt=args.prompt, dataset=args.dataset,
+            n=args.n, batch_size=args.batch_size,
+            max_new_tokens=args.max_new_tokens, out=args.out, dump=args.dump,
+            num_shards=args.num_shards, shard=args.shard,
+            score_only=args.score_only,
+            balance_flavours=args.balance_flavours, store=args.store)
+    except StageError as e:
+        raise SystemExit(str(e))
 
 
 if __name__ == "__main__":

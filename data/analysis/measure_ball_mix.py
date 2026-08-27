@@ -32,7 +32,7 @@ other end of the pairing.
 Run on a compute node (it opens the store):
 
     srun --partition=dev --nodelist=ana --time=30 --mem=32G \
-        python3 analysis/measure_ball_mix.py datasets/generated/v1
+        python3 analysis/measure_ball_mix.py datasets/generated
 """
 import os
 import json

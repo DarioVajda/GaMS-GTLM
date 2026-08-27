@@ -6,8 +6,8 @@ model names the word, the surface index resolves it, and the union of matches is
 the model's input.  Generation cannot know what the extractor will return, so the
 label cannot be final at generation time.  This stage closes that gap.
 
-    python -m qa.relabel datasets/generated/v1 \\
-        analysis/results/extraction_v1_items.jsonl datasets/generated/v2
+    python -m qa.relabel datasets/work/generated_raw \\
+        datasets/work/extraction/items.jsonl datasets/work/relabelled
 
 For every item, in order:
 
@@ -43,6 +43,7 @@ import numpy as np
 from qa import spec
 from qa.build_dataset import NEGATIVE_GROUP
 from qa.store import open_store
+from lib.errors import StageError
 
 WORD = re.compile(r"\w+", re.UNICODE)
 # A word in this share of all questions is template boilerplate, not content.
@@ -138,17 +139,14 @@ def to_negative(r):
     return r
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("dataset")
-    ap.add_argument("extraction", help="JSONL from analysis/measure_extraction.py")
-    ap.add_argument("out")
-    ap.add_argument("--wrong-rate", type=float, default=0.015,
-                    help="share of resolvable items turned into wrong-ball "
-                         "negatives; the measured wrong-anchor rate is 1.1 %%")
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--store", default=None)
-    args = ap.parse_args()
+def run(dataset, extraction, out, wrong_rate=0.015, seed=0, store=None):
+    """Relabel `dataset` against a real extraction run, writing to `out`.
+
+    The body `main()` used to hold, so the pipeline can call this stage as a
+    function while the command line keeps behaving exactly as it did.
+    """
+    args = argparse.Namespace(dataset=dataset, extraction=extraction, out=out,
+                              wrong_rate=wrong_rate, seed=seed, store=store)
 
     ext = {}
     with open(args.extraction, encoding="utf-8") as f:
@@ -205,6 +203,12 @@ def main():
         if key_rng(gk, args.seed).random() < args.wrong_rate:
             flip.update(ids)
 
+    # Which extraction run produced these labels, recorded on every item.  The
+    # last two path components rather than the basename: the dumps used to be
+    # named `extraction_v2_items.jsonl` and identified themselves, and are now
+    # `<somewhere>/extraction/items.jsonl`, where the basename says nothing.
+    run_name = "/".join(args.extraction.rstrip("/").split(os.sep)[-2:])
+
     # ---- pass 2: apply -------------------------------------------------------
     for split, rows in splits.items():
         with open(os.path.join(args.out, f"{split}.jsonl"), "w",
@@ -237,7 +241,7 @@ def main():
                 r["extraction"] = {"strings": ext[r["id"]].get("parsed") or [],
                                    "resolved": bool(resolved),
                                    "policy": policy,
-                                   "run": os.path.basename(args.extraction)}
+                                   "run": run_name}
                 if decoy:
                     r["extraction"]["decoy"] = decoy
                     r["extraction"]["decoy_tier"] = tier
@@ -264,6 +268,26 @@ def main():
               f"passed through unchanged -- run the extractor over the whole "
               f"dataset before trusting this output")
     print(f"\n[wrote] {args.out}")
+    return stats
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("dataset")
+    ap.add_argument("extraction", help="JSONL from analysis/measure_extraction.py")
+    ap.add_argument("out")
+    ap.add_argument("--wrong-rate", type=float, default=0.015,
+                    help="share of resolvable items turned into wrong-ball "
+                         "negatives; the measured wrong-anchor rate is 1.1 %%")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--store", default=None)
+    args = ap.parse_args()
+
+    try:
+        run(dataset=args.dataset, extraction=args.extraction, out=args.out,
+            wrong_rate=args.wrong_rate, seed=args.seed, store=args.store)
+    except StageError as e:
+        raise SystemExit(str(e))
 
 
 if __name__ == "__main__":

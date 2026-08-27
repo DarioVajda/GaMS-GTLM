@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """C18 (d) on the real thing: is every gold item actually inside the ball?
 
-    python -m qa.check_balls datasets/generated/v2_relabelled datasets/balls/v2
+    python -m qa.check_balls datasets/generated datasets/balls
 
 `qa/selftest.py` checks containment against `colloc_sampling.sample(store, a)` -- the
 collocation slice, at the sampler's default K, for one anchor.  That validated a
@@ -152,12 +152,14 @@ def load(d):
     return out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("dataset")
-    ap.add_argument("balls")
-    ap.add_argument("--show", type=int, default=8, help="example misses to print")
-    args = ap.parse_args()
+def run(dataset, balls, show=8):
+    """Is every gold item of every positive present in that item's own ball?
+
+    0 if the corpus is sound, 1 if any membership item's contract fails to cover
+    a member node its ball contains -- the model would be marked wrong for using
+    evidence it was shown.
+    """
+    args = argparse.Namespace(dataset=dataset, balls=balls, show=show)
 
     gen = load(args.dataset)
     balls = load(args.balls)
@@ -242,9 +244,19 @@ def main():
               "to the ball (qa/build_balls.py); see the set rule in qa/spec.py.")
         for iid, t, ex, k in gaps[:args.show]:
             print(f"  {iid} ({t}) {k} not allowed, e.g. {ex}")
-        sys.exit(1)
+        return 1
     print("every membership item's contract covers every member node in its ball")
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("dataset")
+    ap.add_argument("balls")
+    ap.add_argument("--show", type=int, default=8, help="example misses to print")
+    args = ap.parse_args()
+    return run(dataset=args.dataset, balls=args.balls, show=args.show)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

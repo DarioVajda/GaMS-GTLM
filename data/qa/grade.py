@@ -207,24 +207,22 @@ def read_jsonl(path):
         return [json.loads(l) for l in f if l.strip()]
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("items", help="the dataset .jsonl")
-    ap.add_argument("--predictions", help="jsonl of {'id':..., 'prediction':...}; "
-                                          "omit to grade the gold against itself (C9)")
-    ap.add_argument("--json", action="store_true", help="dump the summary as JSON")
-    args = ap.parse_args()
+def run(items, predictions=None, verbose=True):
+    """Grade `items` (a .jsonl path) and return the summary dict.
 
-    items = read_jsonl(args.items)
-    if args.predictions:
-        preds = {r["id"]: r["prediction"] for r in read_jsonl(args.predictions)}
+    With no `predictions`, grades the gold against itself -- C9, which must come
+    out at 100 % on every split.  The pipeline calls this per split and reads
+    `success`; `verbose=False` keeps the per-type tables out of its log.
+    """
+    items = read_jsonl(items)
+    if predictions:
+        preds = {r["id"]: r["prediction"] for r in read_jsonl(predictions)}
     else:
         preds = {it["id"]: it["answer"] for it in items}
 
     rows, s = grade_all(items, preds)
-    if args.json:
-        print(json.dumps(s, ensure_ascii=False, indent=2))
-        return
+    if not verbose:
+        return s
     print(f"items: {s['n']:,}   success: {s['success']:.2f}%   "
           f"(positives {s['success_positive']:.2f}%, "
           f"negatives {s['success_negative']:.2f}%)")
@@ -235,6 +233,21 @@ def main():
     for b, v in sorted(s["by_band"].items()):
         print(f"  {b:5s} {v:6.2f}%")
     print("\nfailure reasons:", s["reasons"])
+    return s
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("items", help="the dataset .jsonl")
+    ap.add_argument("--predictions", help="jsonl of {'id':..., 'prediction':...}; "
+                                          "omit to grade the gold against itself (C9)")
+    ap.add_argument("--json", action="store_true", help="dump the summary as JSON")
+    args = ap.parse_args()
+
+    s = run(items=args.items, predictions=args.predictions,
+            verbose=not args.json)
+    if args.json:
+        print(json.dumps(s, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

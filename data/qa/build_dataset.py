@@ -2,7 +2,7 @@
 """Generate the QA dataset: questions, answers, and everything the grader needs.
 
     python -m qa.build_dataset --store data/stores/kg_graph_gemma3 \
-                               --out   data/datasets/generated/v1
+                               --out   data/datasets/work/generated_raw
 
 Writes `train.jsonl`, `dev.jsonl`, `test.jsonl`, plus `pool.jsonl` (the seed pool
 with its bands) and `report.json` (the realised type x band x split matrix, the
@@ -38,6 +38,7 @@ import collections
 
 from qa import sl, seeds, gen, spec, templates
 from qa.store import open_store
+from lib.errors import StageError
 
 TYPES = [t for t in spec.SPEC]
 TARGET = {"train": 9000, "dev": 1000, "test": 2000}
@@ -358,7 +359,14 @@ def allocate(want_total, per_band_quota, capacity):
     return take
 
 
-def generate(ctx, out_dir, seed=20260821, types=None, verbose=True):
+def generate(ctx, out_dir, seed=20260821, types=None, verbose=True, scale=1.0):
+    """Generate the dataset.  `scale` shrinks every split's target proportionally.
+
+    `scale` exists so the pipeline can be exercised end to end without building a
+    full corpus: `--types` narrows the type MIX but not the size, because each
+    split's budget is divided among whatever types were asked for.  At the
+    default 1.0 the arithmetic below is exactly what it always was.
+    """
     types = types or TYPES
     # A follower must run after its leader or the replay is not there yet, and
     # C17 would fail exactly as silently as before.  Ordering it here rather than
@@ -387,7 +395,7 @@ def generate(ctx, out_dir, seed=20260821, types=None, verbose=True):
         for split, total in TARGET.items():
             if tier_c and split != "test":
                 continue
-            per_type = total / len(types)
+            per_type = total * scale / len(types)
             # entries available for this type AND on this side of the split
             cap_entries = {b: [e for e in by_band.get(b, []) if e.split == split]
                            for b in seeds.BAND_NAMES}
@@ -615,20 +623,29 @@ def _mwe_seeds(ctx, limit=6000):
 
 
 # --------------------------------------------------------------------------
-def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--store", default=None)
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--seed", type=int, default=20260821)
-    ap.add_argument("--types", default="", help="comma-separated subset")
-    args = ap.parse_args()
+def run(store=None, out=None, seed=20260821, types="", scale=1.0):
+    """Generate the dataset into `out`.  Returns (items by split, the report).
+
+    The body `main()` used to hold, so the pipeline can call this stage as a
+    function while the command line keeps behaving exactly as it did.
+    """
+    args = argparse.Namespace(store=store, out=out, seed=seed, types=types,
+                              scale=scale)
 
     store = open_store(args.store)
     print(f"[store] {store.path}  convention={store.convention}  "
           f"{store.n:,} nodes", flush=True)
-    if store.convention != "v7":
-        print(f"    !! expected a v7 store, got {store.convention!r}", flush=True)
+    # The generator reads collocation nodes expecting a curated phrase, and noun
+    # anchors expecting their gender, so it warns when the store was built
+    # without either.  It used to compare against the literal "v7", which stopped
+    # matching when stores began recording their text convention instead of a
+    # version -- and so warned on every run, about the correct store.
+    missing = [c for c in ("collocation-phrases", "entry-gender")
+               if c not in (store.convention or "")]
+    if missing:
+        print(f"    !! this store's text convention is {store.convention!r}; "
+              f"the generator expects {missing} -- T15/T18 and noun gender will "
+              f"be wrong", flush=True)
 
     def prog(i, n, kept):
         print(f"[pool] {i:,}/{n:,} anchors, {kept:,} kept", flush=True)
@@ -643,13 +660,35 @@ def main():
                                      for k, v in ctx.aux.items()), flush=True)
     for k, v in ctx.aux.items():
         if len(v) != 9:
-            raise SystemExit(f"the {k} auxiliary table has {len(v)} of 9 cells -- "
+            raise StageError(f"the {k} auxiliary table has {len(v)} of 9 cells -- "
                              f"T5/T6 would emit gaps in every composed tense")
 
     types = [t.strip() for t in args.types.split(",") if t.strip()] or None
-    items, report = generate(ctx, args.out, seed=args.seed, types=types)
+    items, report = generate(ctx, args.out, seed=args.seed, types=types,
+                             scale=args.scale)
     for s, rows in items.items():
         print(f"[out] {s}: {len(rows):,} items", flush=True)
+    return items, report
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--store", default=None)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--seed", type=int, default=20260821)
+    ap.add_argument("--types", default="", help="comma-separated subset")
+    ap.add_argument("--scale", type=float, default=1.0,
+                    help="shrink every split's target by this factor, e.g. 0.02 "
+                         "for a fast end-to-end test (default: 1.0, the real "
+                         "corpus). --types narrows the type MIX, not the size.")
+    args = ap.parse_args()
+
+    try:
+        run(store=args.store, out=args.out, seed=args.seed, types=args.types,
+            scale=args.scale)
+    except StageError as e:
+        raise SystemExit(str(e))
 
 
 if __name__ == "__main__":
