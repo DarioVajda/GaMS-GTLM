@@ -2,7 +2,9 @@
 #
 # Build the graph store: stream-parse the raw N-Triples, reshape them into the
 # untyped text graph GTLM reads, tokenize every node text, and save the result as
-# memory-mappable arrays.  ~20-35 min, ~70 GB peak RSS.
+# memory-mappable arrays.  ~15-35 min, ~48 GB peak (29 GB in the builder itself;
+# the rest is worker processes and page cache for the 41 GB of N-Triples, which
+# Slurm's cgroup accounting charges to the job).
 #
 # Usage:
 #     sbatch run_save.sbatch [gemma3|gams2b] [REFERENCE_STORE]
@@ -32,11 +34,16 @@
 #SBATCH --nodelist=aga,ana,apl
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-# Only the file parse is parallel, and CPUs past ~16 buy nothing.  Memory peaks
-# in the BUILD phase, where parsed triples still live as Python lists: ~71 GB,
-# plus ~0.5 GB for the 3.5M-entry phrase intern table.
+# Only the file parse is parallel, and CPUs past ~16 buy nothing.
+#
+# --mem was 110 G until it was measured.  The builder process peaks at 29 GB (an
+# in-process RSS sampler says so, and it sits at 19 GB for the whole tokenizer
+# tail); the job peaks at 48 GB, the difference being worker processes and the
+# page cache for 41 GB of N-Triples, which the cgroup charges to the job.  It
+# used to peak at 105 GB, but that was the parse pool prefetching without bound
+# -- see `_gated` in build_graph.py.  64 G is the measured 48 plus a third.
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=110G
+#SBATCH --mem=64G
 #SBATCH --time=01:30:00
 #SBATCH --job-name=kg_save
 #SBATCH --output=/shared/workspace/povejmo/gams_gtlm/data/logs/save_%j.out

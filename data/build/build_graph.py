@@ -46,6 +46,7 @@ import json
 import time
 import argparse
 import hashlib
+import threading
 import unicodedata
 from collections import defaultdict
 from multiprocessing import Pool
@@ -600,13 +601,45 @@ def _better_written_rep(new, old):
            (sum(1 for ch in old if ch.isupper()), old)
 
 
-def parse_all(files, workers, t0):
-    """Parse every file in parallel and merge the results into one `Parsed`."""
-    print(f"[parse] {len(files)} files x {workers} workers", flush=True)
+def _gated(items, sem):
+    """Yield `items`, blocking until the consumer has released a slot.
+
+    `Pool.imap_unordered` pulls its whole input as fast as workers free up and
+    buffers every finished result until the consumer asks for it -- there is no
+    bound on how far ahead it runs.  That matters here because the workers parse
+    far faster than this module's merge loop can absorb (the merge does ~50 M
+    dict inserts), so finished results pile up in the parent.
+
+    Measured on the 2,594-file dump: 2, 4 and 8 workers all peak at 33 GB, and 16
+    peak at 91 GB -- the extra 58 GB is nothing but results waiting to be merged,
+    and 16 workers only buys 44 seconds of parse.  Gating the INPUT bounds the
+    number in flight, which decouples memory from the worker count and lets the
+    build keep all 16.
+
+    The pool's task-feeder thread is what iterates this, so blocking here stalls
+    submission rather than the merge.
+    """
+    for x in items:
+        sem.acquire()
+        yield x
+
+
+def parse_all(files, workers, t0, in_flight=3):
+    """Parse every file in parallel and merge the results into one `Parsed`.
+
+    `in_flight` is the prefetch depth, as a multiple of `workers`: at most
+    `workers * in_flight` files may be parsed but not yet merged.  Enough to
+    keep every worker busy through the jitter in file sizes, small enough that
+    the queue is not where the memory goes.
+    """
+    print(f"[parse] {len(files)} files x {workers} workers "
+          f"(<= {workers * in_flight} in flight)", flush=True)
     out = Parsed()
     agg = {k: [] for k in EDGE_KEYS}
+    sem = threading.Semaphore(max(1, workers * in_flight))
     with Pool(workers) as pool:
-        for i, res in enumerate(pool.imap_unordered(parse_file, files, chunksize=4)):
+        for i, res in enumerate(pool.imap_unordered(
+                parse_file, _gated(files, sem), chunksize=1)):
             for k in agg:
                 if res[k].shape[0]:
                     agg[k].append(res[k])
@@ -624,6 +657,8 @@ def parse_all(files, workers, t0):
             for c, p, v in res["feat"]: out.feat[c][p] = v
             for c, p, v in res["unit"]: out.unit[c][p] = v
             for c, p in res["pos"]:     out.pos[c] = p
+            del res                  # release before waiting on the next one
+            sem.release()            # ... and only then admit another file
             if (i + 1) % 200 == 0:
                 print(f"[parse] {i+1}/{len(files)}  {time.time()-t0:.0f}s", flush=True)
     for k in EDGE_KEYS:
@@ -1160,6 +1195,101 @@ def analyze_variant(G, seeds, max_hops, token_len, prompt_tokens, active):
     return per
 
 
+def tokenize_texts(texts, n, tokenizer, no_tokenizer=False):
+    """Fill `token_len` for every node text.  Returns (token_len, name).
+
+    Tokenizes each DISTINCT text once -- the graph has ~37.5 M nodes over far
+    fewer distinct strings, and the tokenizer is the slowest part of the build.
+    """
+    if no_tokenizer:
+        return (np.array([max(1, len(s) // 4) if s else 0 for s in texts],
+                         dtype=np.int32),
+                "char/4 proxy")
+
+    os.environ.setdefault("HF_HOME", HF_CACHE)
+    os.environ["HF_HUB_OFFLINE"] = "1"; os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(tokenizer)
+    print(f"[tok] {tokenizer} loaded (vocab {len(tok):,})", flush=True)
+    token_len = np.zeros(n, dtype=np.int32)
+    uniq = defaultdict(list)
+    for i, s in enumerate(texts):
+        if s:
+            uniq[s].append(i)
+    keys = list(uniq.keys())
+    print(f"[tok] {len(keys):,} unique node texts", flush=True)
+    B = 20000
+    for j in range(0, len(keys), B):
+        chunk = keys[j:j+B]
+        enc = tok(chunk, add_special_tokens=False)["input_ids"]
+        for s, ids in zip(chunk, enc):
+            L = len(ids)
+            for idx in uniq[s]:
+                token_len[idx] = L
+    del uniq, keys
+    return token_len, tokenizer
+
+
+def save_store(out_dir, G, token_len, stats, *, kg_dir, n_files, files_limit,
+               sense_snippet, sense_index, colloc_text, tok_name):
+    """Persist a built graph, recording what built it.  Returns the manifest."""
+    return graph_store.save_graph(
+        out_dir, G, token_len, stats=stats,
+        meta={"tokenizer": tok_name, "kg_dir": kg_dir,
+              "n_files": n_files, "files_limit": files_limit,
+              "sense_snippet": sense_snippet,
+              "sense_index": sense_index,
+              "colloc_text": colloc_text,
+              # A store declares which text convention built it, so a reader
+              # never has to infer it from the directory name.  Two switches
+              # move it: whether collocation nodes carry their curated phrase
+              # or a bare lemma pair, and whether noun entries render their
+              # gender on the anchor.  Derived from those switches rather
+              # than hard-coded, so a store built with either one turned off
+              # cannot claim to be current.
+              "text_convention": "+".join(
+                  ["collocation-phrases" if colloc_text == "phrase"
+                   else "collocation-pairs"]
+                  + (["entry-gender"] if "gender" in UNIT_PROPS else [])),
+              "feature_props": list(FEATURE_PROPS),
+              "unit_props": list(UNIT_PROPS),
+              "builder": os.path.basename(__file__),
+              "builder_sha256": hashlib.sha256(
+                  open(os.path.abspath(__file__), "rb").read()).hexdigest()})
+
+
+def build_store(out_dir, tokenizer=DEFAULT_TOKENIZER, kg_dir=KG_RAW_DIR,
+                workers=None, colloc_text="phrase",
+                sense_snippet=SENSE_SNIPPET_CHARS, sense_index=True,
+                files_limit=0, no_tokenizer=False):
+    """Parse the raw KG, tokenize it and save it as a store.  The manifest.
+
+    What `--save-graph ... --no-analysis` does from the command line, as one
+    call, so `data/pipeline/` can build the store without shelling out.  Both
+    paths run the same three steps below; neither reimplements the other.
+    """
+    if workers is None:
+        workers = int(os.environ.get("SLURM_CPUS_PER_TASK", "16"))
+    files = sorted(glob.glob(os.path.join(kg_dir, "*.nt")))
+    if files_limit:
+        files = files[:files_limit]
+    if not files:
+        raise FileNotFoundError(
+            f"no .nt files in {kg_dir} -- the raw KG is a separate 83 GB "
+            f"download, see the repo README")
+    print(f"KG dir: {kg_dir}  ({len(files)} .nt files)", flush=True)
+
+    stats = {}
+    G = build(files, workers, stats, snippet_chars=sense_snippet,
+              sense_index=sense_index, colloc_text=colloc_text)
+    token_len, tok_name = tokenize_texts(G["text"], G["n"], tokenizer,
+                                         no_tokenizer)
+    return save_store(out_dir, G, token_len, stats, kg_dir=kg_dir,
+                      n_files=len(files), files_limit=files_limit,
+                      sense_snippet=sense_snippet, sense_index=sense_index,
+                      colloc_text=colloc_text, tok_name=tok_name)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--kg-dir", default=KG_RAW_DIR)
@@ -1243,57 +1373,17 @@ def main():
 
     if args.load_graph:
         pass                      # token_len + tok_name came from the store
-    elif args.no_tokenizer:
-        token_len = np.array([max(1, len(s) // 4) if s else 0 for s in texts], dtype=np.int32)
-        tok_name = "char/4 proxy"
     else:
-        os.environ.setdefault("HF_HOME", HF_CACHE)
-        os.environ["HF_HUB_OFFLINE"] = "1"; os.environ["TRANSFORMERS_OFFLINE"] = "1"
-        from transformers import AutoTokenizer
-        tok = AutoTokenizer.from_pretrained(args.tokenizer)
-        print(f"[tok] {args.tokenizer} loaded (vocab {len(tok):,})", flush=True)
-        token_len = np.zeros(n, dtype=np.int32)
-        uniq = defaultdict(list)
-        for i, s in enumerate(texts):
-            if s:
-                uniq[s].append(i)
-        keys = list(uniq.keys())
-        print(f"[tok] {len(keys):,} unique node texts", flush=True)
-        B = 20000
-        for j in range(0, len(keys), B):
-            chunk = keys[j:j+B]
-            enc = tok(chunk, add_special_tokens=False)["input_ids"]
-            for s, ids in zip(chunk, enc):
-                L = len(ids)
-                for idx in uniq[s]:
-                    token_len[idx] = L
-        del uniq, keys
-        tok_name = args.tokenizer
+        token_len, tok_name = tokenize_texts(texts, n, args.tokenizer,
+                                             args.no_tokenizer)
 
     if args.save_graph:
-        graph_store.save_graph(
-            args.save_graph, G, token_len, stats=stats,
-            meta={"tokenizer": tok_name, "kg_dir": args.kg_dir,
-                  "n_files": n_files, "files_limit": args.files_limit,
-                  "sense_snippet": args.sense_snippet,
-                  "sense_index": not args.no_sense_index,
-                  "colloc_text": args.colloc_text,
-                  # A store declares which text convention built it, so a reader
-                  # never has to infer it from the directory name.  Two switches
-                  # move it: whether collocation nodes carry their curated phrase
-                  # or a bare lemma pair, and whether noun entries render their
-                  # gender on the anchor.  Derived from those switches rather
-                  # than hard-coded, so a store built with either one turned off
-                  # cannot claim to be current.
-                  "text_convention": "+".join(
-                      ["collocation-phrases" if args.colloc_text == "phrase"
-                       else "collocation-pairs"]
-                      + (["entry-gender"] if "gender" in UNIT_PROPS else [])),
-                  "feature_props": list(FEATURE_PROPS),
-                  "unit_props": list(UNIT_PROPS),
-                  "builder": os.path.basename(__file__),
-                  "builder_sha256": hashlib.sha256(
-                      open(os.path.abspath(__file__), "rb").read()).hexdigest()})
+        save_store(args.save_graph, G, token_len, stats,
+                   kg_dir=args.kg_dir, n_files=n_files,
+                   files_limit=args.files_limit,
+                   sense_snippet=args.sense_snippet,
+                   sense_index=not args.no_sense_index,
+                   colloc_text=args.colloc_text, tok_name=tok_name)
 
     if args.no_analysis:
         print("[done] --no-analysis: stopping after the build", flush=True)

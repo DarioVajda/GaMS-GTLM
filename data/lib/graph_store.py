@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """On-disk store for the built GTLM graph.
 
-`build_graph.build()` spends ~12 minutes (parse -> collapse -> reify -> CSR ->
-tokenisation) reconstructing the same 37M-node graph from 42 GB of N-Triples, and
-needs ~70 GB to do it.  This module persists the result, so everything downstream
-loads it in seconds and under a gigabyte.
+`build_graph.build()` spends ~13 minutes (parse -> collapse -> reify -> CSR ->
+tokenisation) reconstructing the same 37M-node graph from 41 GB of N-Triples, and
+needs ~48 GB to do it (29 GB in the process; the rest is worker processes and
+page cache).  This module persists the result, so everything downstream loads it
+in seconds and under a gigabyte.
 
 Layout of a store directory:
 
