@@ -113,18 +113,40 @@ def load_items(n_per_type, dataset, balance_flavours=False):
     return out
 
 
-def generate(model_name, prompts, batch_size, max_new_tokens):
+def load_extractor(model_name=DEFAULT_MODEL, device="cuda"):
+    """The loaded extractor `generate_with` runs on.
+
+    Split out of `generate` so a caller that asks many questions of one model
+    can load it once.  `ask/` is that caller: a serving session runs this
+    extractor per question, and loading a 12B model per question is not a thing
+    that can be done.  Nothing about the measurement changes -- `generate`
+    below is this plus `generate_with`, in that order, as it always was.
+    """
     import torch
     from transformers import AutoTokenizer, AutoModelForCausalLM
 
     tok = AutoTokenizer.from_pretrained(model_name)
+    # Left padding, because a right-padded batch would continue each short row
+    # on the far side of its own pads.
     tok.padding_side = "left"
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, torch_dtype=torch.bfloat16, device_map="cuda")
+        model_name, torch_dtype=torch.bfloat16, device_map=device)
     model.eval()
+    return {"tokenizer": tok, "model": model, "name": model_name,
+            "device": device}
 
+
+def generate_with(ex, prompts, batch_size, max_new_tokens, progress=True):
+    """Greedy continuations for `prompts`, on an already-loaded extractor.
+
+    `progress=False` for a caller answering one question at a time, where the
+    per-batch line is noise rather than reassurance.
+    """
+    import torch
+
+    tok, model, device = ex["tokenizer"], ex["model"], ex["device"]
     chats = [tok.apply_chat_template([{"role": "user", "content": p}],
                                      tokenize=False, add_generation_prompt=True)
              for p in prompts]
@@ -133,7 +155,7 @@ def generate(model_name, prompts, batch_size, max_new_tokens):
     for i in range(0, len(chats), batch_size):
         batch = chats[i:i + batch_size]
         enc = tok(batch, return_tensors="pt", padding=True,
-                  add_special_tokens=False).to("cuda")
+                  add_special_tokens=False).to(device)
         with torch.inference_mode():
             gen = model.generate(**enc, max_new_tokens=max_new_tokens,
                                  do_sample=False,
@@ -141,9 +163,15 @@ def generate(model_name, prompts, batch_size, max_new_tokens):
         for j in range(len(batch)):
             outs.append(tok.decode(gen[j][enc["input_ids"].shape[1]:],
                                    skip_special_tokens=True))
-        done = min(i + batch_size, len(chats))
-        print(f"  [{done}/{len(chats)}]  {time.time() - t0:.0f}s", flush=True)
+        if progress:
+            done = min(i + batch_size, len(chats))
+            print(f"  [{done}/{len(chats)}]  {time.time() - t0:.0f}s", flush=True)
     return outs
+
+
+def generate(model_name, prompts, batch_size, max_new_tokens):
+    return generate_with(load_extractor(model_name), prompts, batch_size,
+                         max_new_tokens)
 
 
 

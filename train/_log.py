@@ -20,10 +20,10 @@ PREFIX = "GTLM-Gemma3: packed sequence length"
 
 
 class _OnlyOnce(logging.Filter):
-    def __init__(self, prefix=PREFIX):
+    def __init__(self, prefix=PREFIX, seen=False):
         super().__init__()
         self.prefix = prefix
-        self.seen = False
+        self.seen = seen
 
     def filter(self, record):
         try:
@@ -41,13 +41,20 @@ class _OnlyOnce(logging.Filter):
 _INSTALLED = False
 
 
-def quiet_repeated_sliding_window_warning():
-    """Idempotent; safe to call from every entry point."""
+def quiet_repeated_sliding_window_warning(first=True):
+    """Idempotent; safe to call from every entry point.
+
+    `first=False` drops the first one too.  For `ask/`, which serves one answer
+    at a time into a terminal: the warning fires from inside `generate`, so the
+    one copy this keeps by default lands in the middle of the streamed answer.
+    The same fact is stated at startup there instead, in the tool's own words,
+    which is what the warning exists to accomplish.
+    """
     global _INSTALLED
     if _INSTALLED:
         return
     _INSTALLED = True
-    f = _OnlyOnce()
+    f = _OnlyOnce(seen=not first)
     try:
         from gtlm.models import modeling_gtlm_gemma3 as m
         m.logger.addFilter(f)
