@@ -14,8 +14,9 @@
 # them).  The job requests resources and enters the container; all of the build
 # logic is Python, in data/pipeline/.
 #
-# ~35 min when the store already exists, ~50 min when it has to be built.  The
-# GPUs sit idle through the CPU stages: at this scale that is around twenty
+# ~21 min when the store already exists, ~32 min when it has to be built --
+# measured on two B200s, job 133080; data/README.md carries the per-stage table.
+# The GPUs sit idle through the CPU stages: at this scale that is around twenty
 # GPU-minutes, which is a good trade for a build that is one job, one log and
 # one thing to wait for.
 #
@@ -32,7 +33,7 @@
 #
 # 16 CPUs is what build_graph's parallel parse can use -- past ~16 buys nothing
 # -- and is ample for extraction dataloading.  3 h covers a from-scratch run
-# including the store, which takes ~13 min here.
+# including the store, which takes ~11 min here (667 s in job 133080).
 #
 # Two GPUs is a default, not a requirement: stage 3 shards across however many
 # the job is given, so `sbatch --gres=gpu:1` and `--gres=gpu:8` both work and the

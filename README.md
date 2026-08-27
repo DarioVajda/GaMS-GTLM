@@ -15,7 +15,7 @@ here is Gemma 3, and the target is [**GaMS3-12B**](https://huggingface.co/cjvt/G
 # 0. the source KG: https://nas.cjvt.si/s/aJE6243jd8iRXfc
 #    unpack it to data/kg_raw/OntoLex DSB/ (83 GB, gitignored)
 sbatch data/run_pipeline.sbatch                      # 1. the store AND the QA
-                                                     #    dataset, one job, ~50 min
+                                                     #    dataset, one job, ~32 min
 .venv/bin/python -m sweep train train/configs/arms_v3.jsonc   # 2. train
 ```
 

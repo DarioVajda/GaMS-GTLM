@@ -57,10 +57,26 @@ sbatch data/run_pipeline.sbatch
 That builds the graph store if it is missing, generates the items, runs the
 entity linker on every GPU the job was given, relabels, extracts the balls,
 derives the two baselines, runs every check, and publishes the result into
-`datasets/`. **~35 minutes** when the store already exists, **~50** when it has
-to be built first. The only prerequisite it cannot supply is the raw KG — 83 GB
+`datasets/`. **~32 minutes including a full store rebuild**, ~21 when the store
+already exists. The only prerequisite it cannot supply is the raw KG — 83 GB
 from the link in the [repo README](../README.md), unpacked to
 `data/kg_raw/OntoLex DSB/`.
+
+Measured, not estimated — job 133080, 12,490 items over 19 types, two B200s:
+
+| stage | | seconds |
+|---|---|--:|
+| 1 store | rebuilt from 2,594 `.nt` files | 666.9 |
+| 2 generate | | 443.1 |
+| 3 extract | 2 shards, one per GPU | 396.7 |
+| 4 relabel | | 1.8 |
+| 5 balls | | 359.7 |
+| 6 variants | | 39.0 |
+| **total** | | **1907.2 (31.8 min)** |
+
+Stage 3 is the only stage that scales with the GPU count, and stage 1 is the
+only one that `--rebuild-store` adds; drop it and the same corpus rebuilds in
+about 21 minutes.
 
 | flag | |
 |---|---|
@@ -105,6 +121,15 @@ failing check is a judgement call and this path exists to hand you the artefacts
 plus the truth about them. A failing *stage* stops the run, since there is
 nothing downstream to build; nothing is published then, and `datasets/` is left
 untouched.
+
+A check runs against the dataset **as it is at that stage**, which is not the
+finished one. The membership positives (T17, T19) are scored against
+`grading.all_items`, an allow-list derived from the ball over all of an item's
+anchors — so it does not exist until stage 5 writes it. The stage 2 and stage 4
+checks therefore pass `pre_ball=True` and skip those items, saying how many;
+`grade-gold/final` after stage 5 grades them for real, with the guard armed. A
+final dataset that reaches the grader without an allow-list still raises, which
+is the case the guard is for.
 
 **Nothing lands in place until the whole run succeeds.** Stages write under
 `datasets/work/`; the four finished directories are moved into `datasets/` at
