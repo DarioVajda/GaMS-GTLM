@@ -21,6 +21,22 @@ def sl_key(s):
     return [_RANK.get(ch, len(_SL) + ord(ch)) for ch in s.casefold()]
 
 
+def sl_sort_key(s):
+    """`sl_key`, made a TOTAL order by breaking ties on the string itself.
+
+    `sl_key` casefolds, so `zastava` and `Zastava` collate equal.  Sorting a SET
+    by it therefore leaves their relative order to set iteration, which Python
+    varies per process with the hash seed -- and the same corpus rebuild then
+    emits `zastava, Zastava` one day and `Zastava, zastava` the next.  Observed
+    on exactly that word (T4-000439) and on `Gorenje/gorenje` (T4-000571).
+
+    Use this wherever a collated result is written to disk; `sl_key` alone is
+    fine for comparing two strings, or for sorting a list whose order is already
+    meaningful.
+    """
+    return (sl_key(s), s)
+
+
 # --------------------------------------------------------------------------
 # the grader's normalization (QA_TASKS.md 0.8) -- deliberately shallow
 # --------------------------------------------------------------------------

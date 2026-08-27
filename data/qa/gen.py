@@ -328,7 +328,7 @@ def gen_T4(ctx, e, rng, ambiguous=None):
     if not cands:
         return None
     form, owners = cands[rng.randrange(len(cands))]
-    lemmas = sorted({ctx.store.lemma(o) for o in owners}, key=sl.sl_key)
+    lemmas = sorted({ctx.store.lemma(o) for o in owners}, key=sl.sl_sort_key)
     return {"F": form, "L": e.lemma, "n_owners": len(owners)}, lemmas
 
 

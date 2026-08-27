@@ -32,6 +32,7 @@ Which check is which:
 """
 import os
 import re
+import sys
 import argparse
 import collections
 
@@ -139,15 +140,27 @@ def c10_regex(items):
 
 
 def c15_canonical(items):
+    """Set-valued golds must be in a TOTAL canonical order, not merely a sorted one.
+
+    Checked against `sl_sort_key`, not `sl_key`.  `sl_key` casefolds, so
+    `zastava` and `Zastava` tie under it -- and `sorted` is stable, so a list in
+    either order passes a comparison against `sorted(g, key=sl_key)`.  That is
+    precisely how a set-iteration-order dependency survived here: the check
+    could not see the thing it existed to catch.
+
+    These types are graded `multiset` or `membership`, never `sequence`, so an
+    unstable order never changed a score.  It changed whether the corpus could
+    be rebuilt byte-for-byte, which is what this asserts.
+    """
     print("\nC15 -- every set-valued gold is in canonical order")
     bad = collections.Counter()
     for it in items:
         if it["negative"] or it["type"] not in ("T4", "T15", "T16", "T17"):
             continue
         g = it["gold_items"]
-        if g != sorted(g, key=sl.sl_key):
+        if g != sorted(g, key=sl.sl_sort_key):
             bad[it["type"]] += 1
-    check("sl_key order", not bad, str(dict(bad)))
+    check("sl_sort_key order", not bad, str(dict(bad)))
 
 
 def c6_tier_c(splits):
@@ -255,12 +268,17 @@ def _anchor_of(store, item):
 
 
 # --------------------------------------------------------------------------
-def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dataset")
-    ap.add_argument("--store")
-    args = ap.parse_args()
+def run(dataset=None, store=None):
+    """Every check in QA_TASKS.md section 2.  0 if all passed, 1 if any failed.
+
+    `FAIL` is module state, so it is cleared on entry: the pipeline calls this
+    twice in one process -- once on the generated set, once on the relabelled
+    one -- and without the reset the second call would inherit the first's
+    failures and report them against the wrong dataset.
+    """
+    del FAIL[:]
+
+    args = argparse.Namespace(dataset=dataset, store=store)
 
     c16_sl_key()
     c7_agreement()
@@ -287,8 +305,17 @@ def main():
             c18_sampling(store, allitems)
 
     print("\nSELFTEST:", "PASS" if not FAIL else f"FAIL ({len(FAIL)}): {FAIL}")
-    raise SystemExit(0 if not FAIL else 1)
+    return 0 if not FAIL else 1
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dataset")
+    ap.add_argument("--store")
+    args = ap.parse_args()
+    return run(dataset=args.dataset, store=args.store)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
