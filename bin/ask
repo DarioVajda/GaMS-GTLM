@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# `ask ...` -> the ask/ package, from any working directory.
+#
+#     ask "Kaj pomeni beseda brahialen?"
+#     ask -i
+#     ask --demo -i --fast          # no GPU, no weights, simulated timings
+#
+# Put this directory on PATH once:
+#     echo 'export PATH="/shared/workspace/povejmo/gams_gtlm/bin:$PATH"' >> ~/.bashrc
+#
+# This script exists to own ONE seam (D13).  `train` is pip-installed and
+# resolves from the repo root; `qa` and `lib` resolve only with `data/` on the
+# path, and pyproject.toml deliberately refuses to install them -- names as
+# generic as `build` and `lib` do not belong on the global import path.  `ask`
+# is the first thing that needs both, so both go on PYTHONPATH here, in one
+# readable line, and no module does sys.path surgery.
+#
+# Interpreter choice mirrors bin/lookup: the venv is on the shared filesystem
+# but is NOT node-independent (see data/lib/pick_python.sh), so pick a python
+# that actually works on THIS node rather than trusting a shebang.
+set -euo pipefail
+
+here=$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
+repo=$(dirname -- "$here")
+
+[ -d "$repo/ask" ] || { echo "ask: missing $repo/ask" >&2; exit 127; }
+
+# --demo runs on the standard library alone, so it must not be blocked by a
+# node whose python3 cannot import numpy.
+demo=0
+for a in "$@"; do [ "$a" = "--demo" ] && demo=1; done
+
+has_numpy() { "$1" -c 'import numpy' >/dev/null 2>&1; }
+
+py=${KG_PYTHON:-}
+if [ -z "$py" ]; then
+    if [ "$demo" = 1 ] || has_numpy python3; then
+        py=python3
+    else
+        picker="$repo/data/lib/pick_python.sh"
+        if [ -x "$picker" ] && py=$("$picker" 2>/dev/null) && [ -n "$py" ]; then
+            :
+        else
+            echo "ask: no python3 with numpy on this node; set KG_PYTHON" >&2
+            exit 127
+        fi
+    fi
+fi
+
+export PYTHONPATH="$repo:$repo/data${PYTHONPATH:+:$PYTHONPATH}"
+cd -- "$repo"
+exec "$py" -m ask "$@"

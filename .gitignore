@@ -55,6 +55,13 @@ train/results/
 
 data/analysis/results/*_items.part*.jsonl
 
+# what a serving session leaves behind: the questions it was asked (D14) and
+# inductor's output for the GPU model it ran on (D17).  Both belong next to the
+# code that writes them and neither belongs in git -- the cache is tens of MB of
+# machine-specific kernels, and the log is a record of one person's session.
+ask/logs/
+ask/cache/
+
 # slurm job logs, all of them.  Every file here is job output: the GPU training
 # logs run 80 KB - 700 KB apiece (tqdm writes a progress bar per step) and the
 # CPU pipeline logs are small but equally reproducible -- rerunning the job that
