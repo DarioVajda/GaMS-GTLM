@@ -57,8 +57,8 @@ EXPERIMENT_NAME = "sl_qa"
 # answer; the dataset carries the answer and the grading contract, and the two
 # must agree -- `train/data.py:_read_items` asserts it.  Mixing generations is
 # self-consistent enough to run and produces numbers that are not comparable.
-DATA_ROOT = os.path.join(REPO_ROOT, "data", "datasets", "balls", "v2_clean")
-ITEMS_ROOT = os.path.join(REPO_ROOT, "data", "datasets", "generated", "v2_clean")
+DATA_ROOT = os.path.join(REPO_ROOT, "data", "datasets", "balls")
+ITEMS_ROOT = os.path.join(REPO_ROOT, "data", "datasets", "generated")
 # Checkpoints are ~500 MB per run and belong next to the results record rather
 # than wherever the job happened to cd to.
 CHECKPOINT_ROOT = os.path.join(REPO_ROOT, "checkpoints")

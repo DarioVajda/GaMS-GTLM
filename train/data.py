@@ -1,6 +1,6 @@
 """Read the extracted balls and hand back one ``Split`` per dataset split.
 
-Input is `datasets/balls/<version>/{train,dev,test}.jsonl`, written by
+Input is `datasets/balls/{train,dev,test}.jsonl`, written by
 `gams_gtlm/data/qa/build_balls.py`: one JSON object per item carrying the node
 texts, the edge list, and the question/answer pair.  Nothing here opens the
 37 M-node store — the ball is already an artefact, which is what makes a run
@@ -30,7 +30,7 @@ exact offsets, so the boundary is read off the string itself.
 
 Two things travel alongside the training dataset:
 
-  * **the grading contract**, joined on `id` from `datasets/generated/v2_clean`.
+  * **the grading contract**, joined on `id` from `datasets/generated`.
     The ball carries the answer; only the dataset carries the item-level
     `grading` facts (for T17 and T19: `quantity_band`, `n_asked`, `n_all`,
     `all_items`), and `qa.grade.grade` needs both.  The TYPE-level fields
@@ -147,9 +147,10 @@ def _read_items(path, rows):
         if src["answer"] != row["answer"]:
             raise ValueError(
                 f"item {row['id']}: the ball and the dataset disagree about the "
-                f"answer.  Rebuild both in one pass (qa/run_build_balls.sbatch "
-                f"writes datasets/balls/... and datasets/generated/v2_clean "
-                f"together); ONE artefact has to be the authority for the target.\n"
+                f"answer.  Rebuild both in one pass (data/run_pipeline.sbatch, "
+                f"or qa/run_build_balls.sbatch, writes datasets/balls and "
+                f"datasets/generated together); ONE artefact has to be the "
+                f"authority for the target.\n"
                 f"  ball:    {row['answer']!r}\n  dataset: {src['answer']!r}")
         items.append({"id": src["id"], "type": src["type"], "band": src["band"],
                       "negative": bool(src["negative"]), "answer": src["answer"],

@@ -1,8 +1,8 @@
 """The licence for left-padded training batches: same loss, a tiny logits slice.
 
-    .venv/bin/python -m train.checks.check_left_pad --data-root data/datasets/balls/v2_clean
+    .venv/bin/python -m train.checks.check_left_pad --data-root data/datasets/balls
     .venv/bin/python -m train.checks.check_left_pad \
-        --data-root data/datasets/balls/v2_clean_serialised --plain-llm \
+        --data-root data/datasets/balls_serialised --plain-llm \
         --no-spd --no-magnetic --max-length 17408
 
 `GraphCollatorV2` right-pads and has no `padding_side` option, so training

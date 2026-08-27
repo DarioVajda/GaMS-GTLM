@@ -25,9 +25,9 @@ from ..config import RunConfig
 from ..data import load_split
 
 ARMS = [
-    ("GTLM (graph ball)", "data/datasets/balls/v2_clean", 2048),
-    ("serialised graph", "data/datasets/balls/v2_clean_serialised", 17408),
-    ("no retrieval", "data/datasets/balls/v2_clean_noretrieval", 2048),
+    ("GTLM (graph ball)", "data/datasets/balls", 2048),
+    ("serialised graph", "data/datasets/balls_serialised", 17408),
+    ("no retrieval", "data/datasets/balls_noretrieval", 2048),
 ]
 PCTS = [50, 75, 90, 95, 99, 100]
 

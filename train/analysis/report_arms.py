@@ -37,8 +37,22 @@ import collections
 import statistics
 
 # (input tag, bias arm, stack) -> the name the run matrix uses.
+#
+# The input tag is the ball directory's basename, so it changed when the dataset
+# directories lost their version suffixes on 2026-08-26 (`v2_clean` -> `balls`).
+# Both spellings are listed: a record in `train/results/` was written by the run
+# that produced it and still says `v2_clean`, and rewriting a results file to
+# agree with a later rename would be editing the evidence.  New runs write the
+# `balls*` tags; both resolve to the same arm.
 ARM_NAMES = {
-    # arms_v3 — the six configurations.
+    # the six configurations, as named since 2026-08-26.
+    ("balls", "spd+magnetic", "gtlm"): "GTLM (spd + magnetic)",
+    ("balls", "no-bias", "gtlm"): "GTLM, no bias",
+    ("balls_serialised", "no-bias", "gtlm"): "serialised — GTLM stack",
+    ("balls_serialised", "no-bias", "plain"): "serialised — plain stack",
+    ("balls_noretrieval", "no-bias", "plain"): "no retrieval — plain stack",
+    ("balls_noretrieval", "no-bias", "gtlm"): "no retrieval — GTLM stack",
+    # arms_v3 as recorded at the time — the same six arms under the old names.
     ("v2_clean", "spd+magnetic", "gtlm"): "GTLM (spd + magnetic)",
     ("v2_clean", "no-bias", "gtlm"): "GTLM, no bias",
     ("v2_clean_serialised", "no-bias", "gtlm"): "serialised — GTLM stack",

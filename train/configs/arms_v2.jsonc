@@ -17,6 +17,13 @@
   // The data it names (`balls/v2`, and `generated/v2_graded` via the old
   // defaults) is also not the data arms_v3 uses: 76 of 2,184 test ANSWERS
   // differ.  See train/config.py's ITEMS_ROOT note.
+  //
+  // **This config can no longer be run as written.**  On 2026-08-26 the dataset
+  // directories lost their version suffixes -- there is one dataset now, at
+  // `data/datasets/balls` and `data/datasets/generated` -- and the superseded
+  // builds this file names were deleted with them.  The file is kept as the
+  // record of what arms_v2 actually ran, which is the only thing that makes
+  // `train/results/arms_v2/` readable; it is not a config to reach for.
   // ─────────────────────────────────────────────────────────────────────────
   //
   // The four arms of the encoding/retrieval comparison, over three seeds each.

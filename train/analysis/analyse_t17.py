@@ -1,4 +1,4 @@
-"""Re-check the T17 degenerate-repetition finding against `v2_clean`.
+"""Re-check the T17 degenerate-repetition finding against the current dataset.
 
     .venv/bin/python -m train.analysis.analyse_t17 train/results/arms_v3
 
@@ -9,8 +9,9 @@ argument *requires* — pass 1 declares an item correct on the grounds that gree
 decoding would have emitted gold, and any decoding fix invalidates that shortcut
 and makes every evaluation roughly 4x more expensive.
 
-**That diagnosis was made against single-item golds**, and `v2_clean` changed the
-T17 targets: 14 of 115 test answers differ and many now legitimately carry four
+**That diagnosis was made against single-item golds**, and the rebuild that
+followed it (the corpus arms_v3 trained on, and the one in `datasets/` today)
+changed the T17 targets: 14 of 115 test answers differ and many now carry four
 items.  A model that emits four items where gold has four is doing something
 quite different from one that emits four where gold has one, even when both are
 graded `repeated_item`.  So the rate is re-measured here, broken down by how many

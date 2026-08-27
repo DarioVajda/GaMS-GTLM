@@ -58,7 +58,7 @@ def build_parser():
     p.add_argument("--data-root", default=d.data_root)
     p.add_argument("--items-root", default=d.items_root,
                    help="the dataset directory carrying the GRADING contract "
-                        "(datasets/generated/v2_clean)")
+                        "(datasets/generated)")
     p.add_argument("--types", default=d.types,
                    help="comma-separated subset, e.g. T3,T4,T9,T10 ('' = all)")
     p.add_argument("--max-items", type=int, default=d.max_items,

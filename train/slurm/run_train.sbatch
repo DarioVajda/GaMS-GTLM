@@ -4,7 +4,7 @@
 #
 #     sbatch train/slurm/run_train.sbatch [EXTRA ARGS ...]
 #     sbatch train/slurm/run_train.sbatch --no-spd --no-magnetic         # control arm
-#     sbatch train/slurm/run_train.sbatch --data-root data/datasets/balls/v2_clean_noretrieval \
+#     sbatch train/slurm/run_train.sbatch --data-root data/datasets/balls_noretrieval \
 #            --plain-llm --no-spd --no-magnetic --batch-size 16 --accumulation-steps 1
 #
 # For the plumbing checks and the evaluator's acceptance tests use

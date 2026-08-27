@@ -10,13 +10,13 @@
   // exist and a single file removes the "change it in three places or the arms
   // stop being comparable" hazard.
   //
-  //   #  configuration              input                       stack  biases
-  //   1  GTLM (spd + magnetic)      balls/v2_clean              gtlm   spd+magnetic
-  //   2  GTLM, no bias              balls/v2_clean              gtlm   none
-  //   3  serialised — GTLM stack    balls/v2_clean_serialised   gtlm   none
-  //   4  serialised — plain stack   balls/v2_clean_serialised   plain  n/a
-  //   5  no retrieval — plain stack balls/v2_clean_noretrieval  plain  n/a
-  //   6  no retrieval — GTLM stack  balls/v2_clean_noretrieval  gtlm   none
+  //   #  configuration              input                stack  biases
+  //   1  GTLM (spd + magnetic)      balls               gtlm   spd+magnetic
+  //   2  GTLM, no bias              balls               gtlm   none
+  //   3  serialised — GTLM stack    balls_serialised    gtlm   none
+  //   4  serialised — plain stack   balls_serialised    plain  n/a
+  //   5  no retrieval — plain stack balls_noretrieval   plain  n/a
+  //   6  no retrieval — GTLM stack  balls_noretrieval   gtlm   none
   //
   // Arms 3-6 ship balls with ZERO graph nodes -- the subgraph is flattened into
   // the prompt (3, 4) or absent entirely (5, 6) -- so arms 4 and 5 differ in
@@ -72,15 +72,15 @@
   "mode": "train",
   "model_name": "google/gemma-3-1b-it",
   "types": "",
-  "items_root": "data/datasets/generated/v2_clean",
+  "items_root": "data/datasets/generated",
 
   "arm": [
-    {"data_root": "data/datasets/balls/v2_clean",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
-    {"data_root": "data/datasets/balls/v2_clean",             "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
-    {"data_root": "data/datasets/balls/v2_clean_serialised",  "plain_llm": false, "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
-    {"data_root": "data/datasets/balls/v2_clean_serialised",  "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
-    {"data_root": "data/datasets/balls/v2_clean_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1},
-    {"data_root": "data/datasets/balls/v2_clean_noretrieval", "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1}
+    {"data_root": "data/datasets/balls",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls",             "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_serialised",  "plain_llm": false, "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_serialised",  "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1},
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1}
   ],
   "seed": [0, 1, 2],
 
