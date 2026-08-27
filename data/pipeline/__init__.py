@@ -7,14 +7,14 @@ order, in one Slurm job, on one node.  `data/README.md` documents both this path
 and the stage-by-stage one; the per-stage `run_*.sbatch` scripts stay the way to
 rebuild a single stage while iterating on it.
 
-Why one job rather than a dependency chain.  The five QA stages take ~27 minutes
-end to end and the extraction stage's four shards already landed on one node in
-practice, so chaining six jobs with `--dependency=afterok` would buy back about
-twenty GPU-minutes in exchange for six queue waits and a failure mode -- a
-half-finished chain -- that this design does not have.  Everything runs in the
-pyxis container, which is a py3.10 base; that is also what frees the CPU stages
-from the `aga,ana,apl` pin they carry today, since those are only the last three
-nodes where the venv resolves bare.
+Why one job rather than a dependency chain.  The five QA stages take ~21 minutes
+end to end (measured, job 133080) and the extraction stage's shards already
+landed on one node in practice, so chaining six jobs with `--dependency=afterok`
+would buy back about twenty GPU-minutes in exchange for six queue waits and a
+failure mode -- a half-finished chain -- that this design does not have.
+Everything runs in the pyxis container, which is a py3.10 base; that is also
+what frees the CPU stages from the `aga,ana,apl` pin they carry today, since
+those are only the last three nodes where the venv resolves bare.
 
 Stages call the modules directly (`build_dataset.run(...)`, not a subprocess), so
 arguments are values rather than strings and a stage can hand back its own
@@ -356,17 +356,24 @@ def stage_variants(rec, balls, out_root):
 # --------------------------------------------------------------------------
 # checks
 # --------------------------------------------------------------------------
-def check_selftest(rec, name, dataset, store_dir):
+def check_selftest(rec, name, dataset, store_dir, pre_ball=False):
     from qa import selftest
     try:
-        rc = selftest.run(dataset=dataset, store=store_dir)
+        rc = selftest.run(dataset=dataset, store=store_dir, pre_ball=pre_ball)
     except Exception as e:                    # a check must not stop the build
         return rec.check(name, False, f"{type(e).__name__}: {e}")
     return rec.check(name, rc == 0, None if rc == 0 else "see the log above")
 
 
-def check_grade(rec, name, dataset):
-    """The grader over the gold itself -- C9.  100 % on every split, or say so."""
+def check_grade(rec, name, dataset, pre_ball=False):
+    """The grader over the gold itself -- C9.  100 % on every split, or say so.
+
+    `pre_ball=True` before stage 5, where the membership positives have no
+    allow-list yet and are therefore not gradeable.  Skipping them is the point:
+    grading them here would fail every run on a dataset that is exactly as it
+    should be at that stage, and a check that always fails is a check nobody
+    reads.  They are graded for real by `grade-gold/final`.
+    """
     from qa import grade
     ok, detail = True, []
     for split in ("train", "dev", "test"):
@@ -376,13 +383,15 @@ def check_grade(rec, name, dataset):
         try:
             # verbose=False: the per-type and per-band tables would be six of
             # them per run, and the only thing this check asserts is 100 %.
-            s = grade.run(items=p, verbose=False)
+            s = grade.run(items=p, verbose=False, pre_ball=pre_ball)
         except Exception as e:
             ok = False
             detail.append(f"{split}: {type(e).__name__}: {e}")
             continue
-        print(f"[grade] {split}: {s['success']:.2f} % over {s['n']:,} items",
-              flush=True)
+        skipped = s.get("skipped_pre_ball") or 0
+        print(f"[grade] {split}: {s['success']:.2f} % over {s['n']:,} items"
+              + (f"  ({skipped:,} membership positives await stage 5)"
+                 if skipped else ""), flush=True)
         if abs(s["success"] - 100.0) > 1e-9:
             ok = False
             detail.append(f"{split}: {s['success']:.2f} %")
@@ -487,8 +496,8 @@ def run(store=None, variant="gemma3", rebuild_store=False, seed=20260821,
         _banner("stage 2/6  generate the items")
         stage_generate(rec, store_dir, raw, seed, types, scale)
         rec.stage("generate", time.time() - t, "ok")
-        check_selftest(rec, "selftest/generated", raw, store_dir)
-        check_grade(rec, "grade-gold/generated", raw)
+        check_selftest(rec, "selftest/generated", raw, store_dir, pre_ball=True)
+        check_grade(rec, "grade-gold/generated", raw, pre_ball=True)
 
         t = time.time()
         _banner(f"stage 3/6  entity linking on {len(ids)} GPU(s)")
@@ -499,7 +508,8 @@ def run(store=None, variant="gemma3", rebuild_store=False, seed=20260821,
         _banner("stage 4/6  relabel against the extraction run")
         stage_relabel(rec, raw, dump, relabelled, store_dir)
         rec.stage("relabel", time.time() - t, "ok")
-        check_selftest(rec, "selftest/relabelled", relabelled, store_dir)
+        check_selftest(rec, "selftest/relabelled", relabelled, store_dir,
+                       pre_ball=True)
 
         t = time.time()
         _banner("stage 5/6  balls, and the dataset they re-verbalise")

@@ -160,7 +160,10 @@ def grade(item, prediction):
                 f"`membership` but its row carries no `all_items`. The "
                 f"allow-list is per-ITEM data derived from the ball, so it "
                 f"cannot come from `qa/spec.py` -- rebuild the dataset with "
-                f"`qa/build_balls.py` (stage 4), which writes it.")
+                f"`qa/build_balls.py` (stage 5), which writes it.  Grading a "
+                f"dataset that has not reached stage 5 yet is not an error: "
+                f"pass `pre_ball=True` to skip these items rather than "
+                f"raising on them.")
         allow = set(g["all_items"])
         outside = [p for p in pred if p not in allow]
         if outside:
@@ -173,17 +176,43 @@ def grade(item, prediction):
     raise ValueError(f"unknown grading mode {mode!r}")
 
 
-def grade_all(items, predictions):
-    """items: [dict], predictions: {item id -> str}.  -> (rows, summary)."""
+def needs_ball(item):
+    """True if this item cannot be graded until stage 5 has written its ball.
+
+    A membership POSITIVE is scored against `grading.all_items`, an allow-list
+    derived from the ball over all of the item's anchors -- so it does not exist
+    before `qa/build_balls.py` runs.  A negative is scored on the sentinel alone
+    and is gradeable from the moment it is generated.
+    """
+    if spec.SPEC[item["type"]]["mode"] != "membership":
+        return False
+    if item.get("negative"):
+        return False
+    return (item.get("grading") or {}).get("all_items") is None
+
+
+def grade_all(items, predictions, pre_ball=False):
+    """items: [dict], predictions: {item id -> str}.  -> (rows, summary).
+
+    `pre_ball=True` says the dataset has not reached stage 5, so the membership
+    positives have no allow-list yet: they are skipped and counted rather than
+    raising.  Everything else is graded exactly as it would be at the end.
+    """
+    skipped = 0
     rows = []
     for it in items:
+        if pre_ball and needs_ball(it):
+            skipped += 1
+            continue
         r = grade(it, predictions.get(it["id"]))
         r["id"] = it["id"]
         r["type"] = it["type"]
         r["band"] = it["band"]
         r["negative"] = bool(it.get("negative"))
         rows.append(r)
-    return rows, summarise(rows)
+    s = summarise(rows)
+    s["skipped_pre_ball"] = skipped
+    return rows, s
 
 
 def summarise(rows):
@@ -207,12 +236,14 @@ def read_jsonl(path):
         return [json.loads(l) for l in f if l.strip()]
 
 
-def run(items, predictions=None, verbose=True):
+def run(items, predictions=None, verbose=True, pre_ball=False):
     """Grade `items` (a .jsonl path) and return the summary dict.
 
     With no `predictions`, grades the gold against itself -- C9, which must come
     out at 100 % on every split.  The pipeline calls this per split and reads
     `success`; `verbose=False` keeps the per-type tables out of its log.
+    `pre_ball=True` skips the membership positives, which have no allow-list
+    before stage 5 -- see `needs_ball`.
     """
     items = read_jsonl(items)
     if predictions:
@@ -220,7 +251,7 @@ def run(items, predictions=None, verbose=True):
     else:
         preds = {it["id"]: it["answer"] for it in items}
 
-    rows, s = grade_all(items, preds)
+    rows, s = grade_all(items, preds, pre_ball=pre_ball)
     if not verbose:
         return s
     print(f"items: {s['n']:,}   success: {s['success']:.2f}%   "

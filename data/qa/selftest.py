@@ -101,15 +101,24 @@ def load(dataset):
     return out
 
 
-def c9_gold_grades(items):
+def c9_gold_grades(items, pre_ball=False):
     print("\nC9 -- the grader scores every gold answer as correct")
     bad = collections.Counter()
+    graded = skipped = 0
     for it in items:
+        if pre_ball and grade.needs_ball(it):
+            skipped += 1
+            continue
+        graded += 1
         r = grade.grade(it, it["answer"])
         if not r["success"]:
             bad[(it["type"], r["reason"])] += 1
+    detail = f"{graded:,} items"
+    if skipped:
+        detail += (f" ({skipped:,} membership positives not gradeable yet -- "
+                   f"stage 5 writes their allow-list)")
     check("gold == 100 % success", not bad,
-          str(dict(bad.most_common(8))) if bad else f"{len(items):,} items")
+          str(dict(bad.most_common(8))) if bad else detail)
 
 
 def c10_regex(items):
@@ -268,13 +277,17 @@ def _anchor_of(store, item):
 
 
 # --------------------------------------------------------------------------
-def run(dataset=None, store=None):
+def run(dataset=None, store=None, pre_ball=False):
     """Every check in QA_TASKS.md section 2.  0 if all passed, 1 if any failed.
 
     `FAIL` is module state, so it is cleared on entry: the pipeline calls this
     twice in one process -- once on the generated set, once on the relabelled
     one -- and without the reset the second call would inherit the first's
     failures and report them against the wrong dataset.
+
+    `pre_ball=True` for a dataset that has not reached stage 5: its membership
+    positives have no allow-list yet, so C9 skips them and says how many.  It is
+    the caller that knows which stage its dataset came from, not this module.
     """
     del FAIL[:]
 
@@ -294,7 +307,7 @@ def run(dataset=None, store=None):
         allitems = [it for v in splits.values() for it in v]
         print(f"\ndataset: {len(allitems):,} items "
               f"({', '.join(f'{s} {len(v):,}' for s, v in splits.items())})")
-        c9_gold_grades(allitems)
+        c9_gold_grades(allitems, pre_ball=pre_ball)
         c10_regex(allitems)
         c15_canonical(allitems)
         c6_tier_c(splits)
