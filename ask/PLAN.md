@@ -1,7 +1,14 @@
 # `ask/` — one question in, one grounded answer out
 
-**Status: design in progress.** Nothing is built yet. This file records what has
-been decided and why; it becomes `ask/README.md` once the package exists.
+**Status: built, and verified on the hardware.** This file is the record of what
+was decided and why, and of what the code said back once it existed — the
+decisions (D1–D22) as they were settled, then the findings (V1–V13) from
+checking each against the two repos and then against a GPU. `ask/README.md` is
+how to run the result; this is why it is shaped the way it is.
+
+Where a finding contradicts the decision above it, both are kept: the decision
+records what was intended and the finding records what turned out to be true,
+and deleting the first would hide a reason that is still load-bearing.
 
 The pipeline's three built halves — the graph store, the QA dataset, the trained
 GTLM — have only ever been driven as batch jobs over a corpus. `ask/` is the
@@ -363,7 +370,22 @@ interactively and pointless to repeat across sessions.
 The fallback is sound: `dispatch.py:24-27` — "Both paths share the same
 numerical core: the `gtlm_eager` dense function… dense (eager) math." Flex is an
 acceleration, not different maths. At batch 1 the dense bias is affordable even
-at the corpus maximum (L = 14,055 → ~6 GB transient).
+at the corpus maximum (L = 14,055 → ~6 GB transient). Measured, it is not even
+approximately different: 16/16 answers identical between the two backends
+(V12), and the same sentinel on the corpus's largest ball.
+
+**Three things building it changed.** *The sweep is enumerated from the ladders,
+not from the attested pairs* — with a `TOKENS_PER_NODE` band (6–40, from the
+corpus) filtering out the pairs no ball can produce, which is the same
+restriction reached without having to carry a table of observed shapes.
+*`--precompile` implies `--impl flex`*, because the default backend choice is
+"eager unless warm", and a sweep on an eager model compiles nothing while still
+writing the marker that says it worked — a flag that silently did nothing. And
+*the sweep aims at each bucket and then measures where it landed*: the first
+version sized its filler ball by guessing tokens-per-word, missed every bucket
+upward, and warmed shapes no question will ask for. `shapes.json` now records
+`asked`, `hit`, `missed` and `failed`, and `is_warm()` believes it only when
+`hit > 0`.
 
 `.gitignore` gains `ask/cache/` and `ask/logs/`.
 
@@ -478,6 +500,29 @@ otherwise hard to provoke on demand: `pokvarjeno` for the repair turn (D7) and
 *Rejected:* a `--demo` flag threaded through each real stage. It puts fake
 branches in the code that has to be trusted, and they never get deleted.
 
+### D22 — three flags cut the chain short, and skip what they do not need
+
+The chain is extractor → store → GTLM, and each of the three flags below drops
+a piece of it *including its load*, which is the point: a model nobody will call
+costs 20–60 seconds of startup for nothing.
+
+| flag | what it does | who it is for |
+|---|---|---|
+| `--words a,b` | supplies the headwords; no extraction, no 12B load | someone who already knows the lemma, and every test of the two stages after it |
+| `--retrieve-only` | stops at the ball; no GTLM load | inspecting what the model would be shown, and the fastest check that a word is in the base |
+| `--impl flex\|eager` | forces the attention backend | reproducing a number, and the parity check, which must pin both sides |
+
+They were added while building the real stages, for a reason worth recording:
+without `--words` there is no way to exercise retrieval and answering before
+extraction exists, and a build order that leaves each step runnable (below) has
+to have one. They earn their place afterwards — `--retrieve-only` answers "is
+this word in the base, and what would the model see?" in about three seconds,
+which is a lexicographer's question and not a debugging one.
+
+*Rejected:* a single `--stop-after STAGE`. Tidier as an enumeration, but the two
+flags do different things — one supplies an input, the other withholds an output
+— and folding them together would hide that `--words` still answers.
+
 ---
 
 ## Build order
@@ -491,18 +536,23 @@ Roughly dependency order, each step leaving something runnable:
    `--show-ball`, `--precompile`, `--quiet` — with nothing loaded. The output is
    settled before the expensive parts exist, and the module boundaries get their
    first real use.
-2. Move `LeftPadCollator` from `train/run.py` to `train/batching.py` (V4).
-3. `retrieve.py` + the real import seam — no model, prints the ball. Proves the
-   store, the surface index and the index/code distinction (D9) against the
-   printing that already exists.
-4. `backbone.py` + `answer.py` — load a checkpoint, answer from a ball supplied
-   on disk. Smaller than expected: one `from_pretrained` call restores base +
-   LoRA + bias. Nothing else depends on extraction working.
-5. `checks/check_parity.py` — before extraction, because it needs only steps 3–4
-   and it is what licenses trusting anything downstream.
-6. `extract.py` + the `measure_extraction` split (D15) — closes the chain.
-7. `precompile.py`'s `warm()` — the only piece the demo cannot stand in for,
-   since what it proves is that inductor's cache survives a new process.
+2. **Done.** `LeftPadCollator`, `PlainCollator` and `to_left_padding` moved from
+   `train/run.py` and `train/evaluate.py` into `train/batching.py` (V4), with
+   every caller and cross-reference repointed. `to_left_padding` came along
+   because `LeftPadCollator` is a one-line wrapper around it, and leaving it
+   behind would have made `batching` import the evaluator to do its own padding.
+3. **Done.** `retrieve.py` + `backbone.load_store` — verified against 600 corpus
+   balls, exactly (V8).
+4. **Done.** `backbone.load_gtlm` + `answer.py`. Smaller than expected: one
+   `from_pretrained` call restores base + LoRA + bias.
+5. **Done.** `checks/check_parity.py` — before extraction, because it needs only
+   steps 3–4 and it is what licenses trusting anything downstream.
+6. **Done.** `extract.py` + the `measure_extraction` split (D15) — closes the
+   chain.
+7. **Done.** `precompile.py`'s `warm()` — the piece the demo cannot stand in
+   for, since what it proves is that inductor's cache survives a new process.
+8. `ask/README.md`, and the acceptance stages under `ask/slurm/` that run all of
+   the above on the hardware.
 
 ---
 
@@ -561,10 +611,11 @@ Terms used above with a specific meaning, several of which are easy to conflate:
 
 ---
 
-## Verified against the code
+## Verified
 
-Every decision above was checked against this repo and the `graph_model`
-checkout before any of it was built. What the check changed:
+V1–V7 are what reading the two repos said before anything was built. V8–V13 are
+what the code said once it ran: against the corpus, then on a GPU through
+`ask/slurm/run_checks.sbatch`. Both are kept, in the order they were found.
 
 ### V1 — `magnetic_m` is not recorded in the checkpoint
 
@@ -653,10 +704,152 @@ And it is visible in the demo: `folklora` asks about *folklora*, the extractor
 returns *folklór*, and the served node reads `iztočnica: folklór (ni v bazi)` —
 the extractor's string, which is the only word serving actually has.
 
+### V8 — retrieval rebuilds the corpus ball exactly
+
+600 test items whose extraction resolved, run through `ask`'s own
+`resolve()` → `build()`: **600 of 600** match the ball
+`datasets/balls/test.jsonl` records for them — node count, edge count, token
+count and anchor positions, every one. The strongest available evidence that a
+served ball and a trained ball are the same object.
+
+Timing is the finding underneath it. Per question, cold: **p50 20 ms, p90
+222 ms, max 5.1 s.** The tail is hub anchors — `build_balls._mwe_sort_key` reads
+one node text per MWE candidate and a common verb has tens of thousands, capped
+at `MWE_SCAN_CAP = 20,000`. The dataset build pays this once per anchor across
+12,490 items; a session pays it per new word, and the session cache (`store`
+bundle) makes the second question about the same word free. Left alone: it is
+dataset policy, shared code, and 5 seconds on the tail of an answer that takes
+seconds anyway.
+
+### V9 — the surface index can outlive the store it indexes
+
+`qa/store.py` caches `qa_surface_index.json` beside the store's arrays with no
+staleness test, and it maps surfaces to **anchor indices** — the identity that
+does not survive a rebuild (D9). The current store was rebuilt on 2026-08-27 and
+the index file is from 2026-08-22; every lookup checked still resolves, because
+the build is reproducible and node order was preserved.
+
+The first version of this warned whenever the index was older than the manifest.
+That is a proxy for the question, and it answers it wrong in the ordinary case:
+the build is reproducible, so an older index is *expected*, and the warning fired
+at every startup about a file that was correct — the kind of alarm a user learns
+to read past, which is worse than none.
+
+So `ask` asks the question itself. When the mtimes are inverted it samples 256
+surfaces and checks that the anchor each entry names still carries that surface,
+as its lemma or one of its forms (`backbone.index_agrees`). Measured: 0.13 s
+against 911k entries, 3000/3000 agreeing on the current pair, and it returns
+False on an index whose anchors are shifted by one or whose surfaces have been
+reassigned. Reordering misplaces everything at once, so a sample this size is
+not a weak test of it — it either passes cleanly or fails on its first few.
+
+A passing probe now prints a dim note, not a warning; a failing one warns and
+names the file to delete. A fingerprint written *into* the index would still be
+better, since it would let `qa/store.py` invalidate rather than check — but it
+costs the pipeline a 2-minute rebuild on every store change and belongs there,
+not here.
+
+### V10 — only this repo's venv can run the real chain
+
+`ask` needs numpy *and* torch, transformers, peft and `gtlm`. A node's
+`/usr/bin/python3` has numpy alone; `graph_model/.venv` has everything except
+`gtlm`; `gams_gtlm/.venv` has all of it. So `bin/ask` prefers the repo venv,
+falls back to `pick_python.sh`, and refuses with a message naming
+`ask/slurm/run_ask.sbatch` — on a Blackwell host (python3.12) the container is
+the only way in. `--demo` skips the question entirely.
+
+It also defaults `HF_HOME` to `/shared/workspace/povejmo/huggingface_cache`,
+where `data/analysis/extract_in_container.sh` points: the 12B extractor is
+there and not in `~/.cache`.
+
+### V11 — library output has to be captured, not just quieted
+
+The first real answer came out with `datasets`' four progress bars, the
+loader's own `print`, and the sliding-window warning *inside the answer string*
+— it is logged from `generate`, on the worker thread, while tokens are
+streaming.
+
+Two mechanisms, because one is not enough. `ui.stage` redirects `sys.stdout`
+and `sys.stderr` into a buffer for the duration of a stage (`--debug` prints
+what it caught), which handles anything a stage provokes; and the sliding-window
+warning is suppressed outright via a new `first=False` on
+`train/_log.quiet_repeated_sliding_window_warning`, with the same fact stated on
+the GTLM startup line instead — it is the one message that escapes a stage.
+
+### V12 — the serving path is the evaluated path, on both backends
+
+`check_parity --n 16`, test split, `checkpoint-4400`, A100:
+
+| | result |
+|---|---|
+| eager: `ask` vs `evaluate.pass2` | **16/16 identical** |
+| flex: `ask` vs `evaluate.pass2` | **16/16 identical** |
+| flex vs eager, same items through `ask` | **16/16 identical** |
+
+The first two are what D11 exists for: the batch, the generation config and the
+decode that `ask/answer.py` assembles produce the same string, token for token,
+as the code every `arms_v3` number came out of.
+
+The third is the D17 fallback's price, and on these items it is zero. Not
+guaranteed in general — the two backends are the same arithmetic in a different
+order, and bf16 plus greedy decoding can turn a last-bit difference into a
+different token — but it does not happen here, which is what makes serving eager
+on a cold GPU an acceptable default rather than a quiet degradation.
+
+### V13 — the whole chain runs, and the memory ceiling is the biggest ball
+
+`ask/slurm/run_checks.sbatch`, A100-40GB, every stage exit 0.
+
+*The chain, nothing supplied by hand.* `ask "Navedi različne pomene besede
+brahialen."` → the 12B extractor returns `["brahialen"]` in ~1 s → 73 nodes →
+`ODGOVOR: glede na roko ali z roko povezane`, which is gold. Startup is 11.6 s
+in total: store 1.5 s, extractor 6.9 s, checkpoint 3.2 s. The 20 s estimate the
+demo carried for the extractor was three times too pessimistic; `demo.py`'s
+timings are now the measured ones.
+
+*The extractor is not deterministic across store builds.* Asked
+`Katere sklanjatvene oblike ima folklora?` it returned `folklora`, which
+resolves — where the corpus's own extraction run returned `folklór`, which does
+not, and the item became an `extract_miss`. Same model, same prompt, different
+run. Nothing is wrong; it is a reminder that the corpus's 4.5 % miss rate is a
+measurement of one run and not a property of the question.
+
+*The corpus's largest ball* (T21-000682, 529 nodes / 11,421 tokens) answers on
+both backends and agrees — both say `ODGOVOR: ni podatka v bazi`. Eager takes
+3.3 s. Flex took **339 s the first time and 6.6 s once the cache held its
+shape**, which is D17's entire argument in two numbers: the compile is real,
+it is paid once, and `--precompile` is where it should be paid.
+
+*The sweep, once it was aimed properly:* **21 shapes asked, 21 hit, 0 missed, 0
+failed, 27.7 s.** A second process then loaded the same checkpoint, found the
+cache, reported `flex (prefill) + eager (decode)` without being told to, and
+answered — which is the whole of D17 demonstrated end to end.
+
+*Getting there took three corrections, and the first sweep found all of them.*
+It ran on an eager model (so it compiled nothing), aimed its filler balls by
+guesswork (so it landed a rung low on the wide shapes — the per-node rounding
+loss multiplies, up to 511 tokens at `N = 512`), and keyed its record by the
+shape it landed on rather than the one it asked for (so two targets colliding on
+one landing site erased a row). It also OOMed on five shapes, asking for 9 to
+43 GiB on a 40 GB card, because a session that has just built balls from 1 k to
+14 k tokens leaves the caching allocator holding large unusable blocks;
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`, which is what torch's own
+OOM message recommends, is now set by `bin/ask`. After all four, nothing fails.
+
 ---
 
 ## Still open
 
 * Whether extraction should eventually be promoted out of `analysis/` into a
   shared stage module (noted under D15; deliberately not part of this work).
+  `measure_extraction.load_extractor` / `generate_with` are now the seam it
+  would move on.
 * The shared-backbone optimisation (D4), when a GaMS3-12B-based GTLM exists.
+* A fingerprint in `qa_surface_index.json`, so a rebuilt store *invalidates* it
+  rather than being sampled on load (V9). Belongs in `qa/store.py`, where it also
+  costs the pipeline a rebuild on every store change. The sampled probe is the
+  cheap standing answer, not a placeholder for a missing one.
+* The retrieval tail (V8): 5 s on hub anchors, from ranking tens of thousands of
+  MWE candidates by a text read each. Only worth touching if a session's first
+  question about a common verb starts feeling slow — the cache makes the second
+  one free, and the policy is the dataset's, not serving's.

@@ -48,13 +48,55 @@ class Extraction:
     attempts: list = field(default_factory=list)   # raw text of each turn
 
 
-def extract(question, extractor, ui):
+def given(strings):
+    """The extraction a caller supplied directly (`--words`), not a model's.
+
+    Same shape as a real one, so nothing downstream has to know the difference,
+    and `attempts` stays empty -- there was no turn to record.
+    """
+    return Extraction(strings=[s for s in strings if s], raw="", repaired=False)
+
+
+#: The corpus's own extraction run used 64.  The repair turn gets more, because
+#: the one unparseable output in 12,490 items was a repetition loop that this
+#: cap truncated -- retrying under the same cap would truncate it again.
+MAX_NEW_TOKENS = 64
+REPAIR_NEW_TOKENS = 128
+
+
+def extract(question, extractor, ui=None):
     """Run the extractor over `question`, repairing once if it must.
 
-    `extractor` is the loaded model bundle from `backbone.load_extractor()`;
-    parsing is `measure_extraction.parse()`, imported rather than reimplemented,
-    so the serving path and the corpus that trained it cannot drift.
+    `extractor` is the loaded bundle from `backbone.load_extractor()`; the
+    prompt template, the decoding and the parsing are all
+    `analysis.measure_extraction`'s, imported rather than reimplemented, so the
+    serving path and the corpus that trained the model cannot drift apart.
+
+    The repair turn announces itself while it is running (D20) -- only this
+    function knows the moment, and a warning printed after the fact reads as
+    though the tool discovered the problem too late to act on it.
     """
-    raise NotImplementedError(
-        "ask.extract.extract is a stub; run with --demo, or see build step 5 "
-        "in ask/PLAN.md")
+    from analysis.measure_extraction import parse, generate_with
+
+    prompt = extractor["template"].replace("{question}", question)
+    raw = generate_with(extractor, [prompt], 1, MAX_NEW_TOKENS,
+                        progress=False)[0]
+    got, ok = parse(raw)
+    if ok:
+        return Extraction(strings=got, raw=raw, attempts=[raw])
+
+    if ui is not None:
+        ui.warn("ekstraktor ni vrnil veljavnega seznama; poskušam znova")
+        ui.relabel("luščim iztočnice (2/2)…")
+    again = generate_with(
+        extractor,
+        [REPAIR_PROMPT.format(output=raw.strip(), question=question)],
+        1, REPAIR_NEW_TOKENS, progress=False)[0]
+    got, ok = parse(again)
+    if not ok:
+        raise ExtractionError(
+            f"the extractor returned nothing parseable, twice.\n"
+            f"  first:  {raw.strip()[:200]!r}\n"
+            f"  repair: {again.strip()[:200]!r}")
+    return Extraction(strings=got, raw=again, repaired=True,
+                      attempts=[raw, again])

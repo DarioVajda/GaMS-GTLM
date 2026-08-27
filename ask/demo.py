@@ -7,10 +7,12 @@ before a single weight is loaded.  Every stage here has the signature its real
 counterpart will have; filling one in is deleting a method from `DemoStages` and
 pointing `stages.py`'s wiring at the real module.
 
-**The delays are estimates, not measurements** -- deliberately in the ballpark of
-production so the pacing is honest, capped at 20 s so watching it is bearable.
-Each is replaced by a measured number as the real stage lands.  `--fast` divides
-them all by 8 for when you are iterating on the output and not the pacing.
+**The delays are measured**, on an A100-40GB with a warm page cache, from the
+acceptance run in `ask/slurm/`.  They were estimates while the real stages were
+being built and are not any more -- the estimates were badly wrong in one
+direction (the 12B extractor loads in 7 s, not the minute-plus assumed) and
+roughly right in the others.  `--fast` divides them all by 8 for when you are
+iterating on the output and not the pacing.
 
 **The fixtures are real.**  Questions, extracted strings, ball sizes, anchor
 texts and answers are lifted from `datasets/balls/test.jsonl` -- the same test
@@ -29,30 +31,32 @@ from ask.answer import PREFIX, SENTINEL
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BALLS = os.path.join(REPO, "data", "datasets", "balls", "test.jsonl")
 
-# ── how long each step is expected to take, in seconds ──────────────────────
+# ── how long each step takes, in seconds (A100-40GB, warm page cache) ───────
 TIMINGS = {
-    # A 12B model in bf16 is ~24 GB off a shared filesystem; the real number is
-    # a minute or more cold, which is past the point of a watchable demo.
-    "load_extractor": 20.0,
+    # 24 GB of bf16 weights off the shared filesystem.  The estimate here was
+    # 20 s and the guess behind it was "a minute or more, capped so the demo
+    # stays watchable"; it is 7.
+    "load_extractor": 7.0,
     # gemma-3-1b plus LoRA plus the bias tensors, one `from_pretrained`.
-    "load_gtlm": 8.0,
+    "load_gtlm": 3.2,
     # mmap of the store arrays, then the surface index (911,404 surfaces).
-    "load_store": 4.0,
+    "load_store": 1.5,
     # 64 new tokens, batch of one, on the 12B extractor.
-    "extract": 3.5,
-    "repair": 3.0,
+    "extract": 1.0,
+    "repair": 1.5,
     # Dictionary lookup; nothing but hashing.
-    "lookup": 0.15,
-    # hop-2 induced subgraph with the K_MWE / K_COLLOC caps applied.
-    "build": 0.5,
+    "lookup": 0.02,
+    # hop-2 induced subgraph with the K_MWE / K_COLLOC caps applied.  p50 is
+    # 20 ms and p90 222 ms; the tail is hub anchors and runs to 5 s (V8).
+    "build": 0.2,
     # SPD, RRWP and the magnetic Laplacian, plus the per-question HF `.map()`
     # overhead V6 flagged.
-    "features": 1.5,
-    # Flex prefill over ~1.5k tokens, i.e. time to the first token.
-    "prefill": 0.9,
-    # Eager decode, single sequence: ~22 tokens/s for the 1b backbone.
-    "token": 0.045,
-    # One (L, N) shape through inductor, autotune included.
+    "features": 0.4,
+    # Prefill, i.e. time to the first token.
+    "prefill": 0.5,
+    # Eager decode, single sequence: ~35 tokens/s for the 1b backbone.
+    "token": 0.03,
+    # One (L, N) shape through inductor.
     "compile": 1.2,
 }
 
@@ -198,12 +202,16 @@ class DemoStages:
 
     def load_gtlm(self, checkpoint):
         self.wait("load_gtlm")
+        # The same keys `backbone.load_gtlm` returns, so `--demo --debug` prints
+        # the same lines: a simulated stage that carries fewer keys than the real
+        # one only pretends to exercise the printing.
         out = {"base": "google/gemma-3-1b-it", "magnetic_m": 0,
+               "max_length": 2048,
                "attn": "flex (prefill) + eager (decode)"}
         if not self.precompiled:
             # D17: no compiled cache for this GPU, so flex would recompile per
             # shape.  Fall back rather than make the first question pay for it.
-            out["attn"] = "eager (brez prevedenega predpomnilnika)"
+            out["attn"] = "eager (flex attention kernels not compiled)"
             out["hint"] = ("za hitrejši prefill prevedi oblike vnaprej: "
                            "`ask --precompile`")
         return out

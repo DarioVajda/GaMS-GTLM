@@ -15,9 +15,12 @@
 # is the first thing that needs both, so both go on PYTHONPATH here, in one
 # readable line, and no module does sys.path surgery.
 #
-# Interpreter choice mirrors bin/lookup: the venv is on the shared filesystem
-# but is NOT node-independent (see data/lib/pick_python.sh), so pick a python
-# that actually works on THIS node rather than trusting a shebang.
+# Interpreter choice, in one place.  `ask` needs more than `lookup` does: the
+# store side wants numpy, and the model side wants torch, transformers, peft and
+# `gtlm` -- and only THIS repo's venv carries all four (graph_model's has no
+# `gtlm`, and a node's /usr/bin/python3 has none of it).  So the repo venv is
+# preferred, with the same node-dependence caveat bin/lookup documents; --demo
+# skips the whole question, since it runs on the standard library alone.
 set -euo pipefail
 
 here=$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
@@ -25,28 +28,49 @@ repo=$(dirname -- "$here")
 
 [ -d "$repo/ask" ] || { echo "ask: missing $repo/ask" >&2; exit 127; }
 
-# --demo runs on the standard library alone, so it must not be blocked by a
-# node whose python3 cannot import numpy.
 demo=0
 for a in "$@"; do [ "$a" = "--demo" ] && demo=1; done
 
-has_numpy() { "$1" -c 'import numpy' >/dev/null 2>&1; }
+works() { "$1" -c 'import numpy, torch, gtlm' >/dev/null 2>&1; }
 
 py=${KG_PYTHON:-}
 if [ -z "$py" ]; then
-    if [ "$demo" = 1 ] || has_numpy python3; then
+    if [ "$demo" = 1 ]; then
         py=python3
+    elif works "$repo/.venv/bin/python"; then
+        py="$repo/.venv/bin/python"
     else
+        # Node-dependent fallback: pick_python.sh finds a 3.10 that can see the
+        # shared venv's site-packages on THIS node.
         picker="$repo/data/lib/pick_python.sh"
-        if [ -x "$picker" ] && py=$("$picker" 2>/dev/null) && [ -n "$py" ]; then
+        if [ -x "$picker" ] && py=$("$picker" 2>/dev/null) && [ -n "$py" ] \
+           && works "$py"; then
             :
         else
-            echo "ask: no python3 with numpy on this node; set KG_PYTHON" >&2
+            echo "ask: no python on this node can import numpy, torch and gtlm." >&2
+            echo "     On a Blackwell host (python3.12) use the container:" >&2
+            echo "     sbatch $repo/ask/slurm/run_ask.sbatch ARGS..." >&2
+            echo "     Or set KG_PYTHON to an interpreter that can." >&2
             exit 127
         fi
     fi
 fi
 
+# The extractor (cjvt/GaMS3-12B-Instruct) lives in the shared cache, not in
+# ~/.cache -- data/analysis/extract_in_container.sh points there for the same
+# reason.  Only a default: an HF_HOME already in the environment wins.
+export HF_HOME="${HF_HOME:-/shared/workspace/povejmo/huggingface_cache}"
+
+# One session asks questions of wildly different sizes -- 1.3 k tokens at the
+# median, 14 k at the top -- so the caching allocator ends up holding large
+# reserved-but-unusable blocks, and a big ball then OOMs against memory that is
+# free.  Measured: the `--precompile` sweep died on shapes it had the room for.
+# torch's own remedy, and the one its OOM message names.
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+
+# D13's seam, the whole reason this file exists: `train` resolves from the repo
+# root and `qa`/`lib` only from `data/`, and pyproject.toml deliberately refuses
+# to install the latter two.
 export PYTHONPATH="$repo:$repo/data${PYTHONPATH:+:$PYTHONPATH}"
 cd -- "$repo"
 exec "$py" -m ask "$@"

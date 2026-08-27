@@ -22,6 +22,7 @@ import itertools
 from dataclasses import dataclass, field
 
 from ask import ui as ui_mod
+from ask import extract as extract_mod
 from ask import answer as answer_mod
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
@@ -88,13 +89,14 @@ class Pipeline:
     """The chain, warm.  `load()` once, then `run()` per question."""
 
     def __init__(self, stages, ui=None, checkpoint="", store="", extractor="",
-                 show_ball=False):
+                 show_ball=False, retrieve_only=False):
         self.s = stages
         self.ui = ui or ui_mod.UI()
         self.checkpoint = checkpoint
         self.store = store
         self.extractor = extractor
         self.show_ball = show_ball
+        self.retrieve_only = retrieve_only
         self.last = None            # partial Result, for error reporting (D19)
 
     def _dump_ball(self, ball):
@@ -105,39 +107,70 @@ class Pipeline:
             u.cont(f"{mark} {i:>3}  {u.clip(text, reserve=8)}")
 
     # ── startup ─────────────────────────────────────────────────────────────
-    def load(self):
-        """Load the store and both models, announcing provenance (D10)."""
+    def load(self, with_extractor=True, with_gtlm=True):
+        """Load the store and the models, announcing provenance (D10).
+
+        Either model can be skipped, because either half of the chain can be
+        the part a caller does not need: `--words` supplies the headwords a
+        12B extractor would have named, and `--retrieve-only` stops at the ball.
+        Loading a model nobody will call is 20-60 seconds spent on nothing.
+        """
         u = self.ui
         t0 = time.perf_counter()
         with u.stage("odpiram bazo…"):
             info = self.s.load_store(self.store)
-        self.store = info["path"]      # so the report names it even on default
-        u.field("baza", info["path"])
+        self.store = os.path.abspath(info["path"])   # named even on the default
+        u.field_path("baza", self.store)
         u.cont(f"graph_version {info['graph_version']} · "
                f"{info['n_nodes']:,} vozlišč · zgrajena {info['created']}")
+        if info.get("note"):
+            u.cont(info["note"])
+        if info.get("warn"):
+            u.warn(info["warn"])
 
-        with u.stage("nalagam ekstraktor…"):
-            self.s.load_extractor(self.extractor)
-        u.field("ekstraktor", self.extractor)
+        if with_extractor:
+            with u.stage("nalagam ekstraktor…"):
+                self.s.load_extractor(self.extractor)
+            u.field("ekstraktor", self.extractor)
+        else:
+            u.field("ekstraktor", u.dim("preskočen (--words)"))
 
-        with u.stage("nalagam GTLM…"):
-            gt = self.s.load_gtlm(self.checkpoint)
-        u.field("GTLM", os.path.basename(self.checkpoint.rstrip("/")))
-        u.cont(f"{gt['base']} · {gt['attn']} · magnetic_m={gt['magnetic_m']}")
-        if gt.get("hint"):
-            u.note(gt["hint"])
+        if with_gtlm:
+            with u.stage("nalagam GTLM…"):
+                gt = self.s.load_gtlm(self.checkpoint)
+            # The full path, not the basename: every arm of a sweep ends in a
+            # `checkpoint-NNNN`, and which arm produced this one -- the seed, the
+            # features, the data root -- is written in the run directory's name
+            # and nowhere else.  `checkpoint-4400` alone does not say what was
+            # loaded, and this line is the record of what answered.
+            self.checkpoint = os.path.abspath(self.checkpoint.rstrip("/"))
+            u.field_path("GTLM", self.checkpoint)
+            u.cont(f"{gt['base']} · {gt['attn']}")
+            if u.debug:
+                # Feature-level provenance: worth having when an answer looks
+                # wrong, worth nothing to someone about to ask a question.
+                u.cont(f"magnetic_m={gt['magnetic_m']} · "
+                       f"max_length={gt['max_length']} · brez drsečega okna")
+            if gt.get("hint"):
+                u.note(gt["hint"])
+        else:
+            u.field("GTLM", u.dim("preskočen (--retrieve-only)"))
         u.field("pripravljeno", f"{time.perf_counter() - t0:.1f}s")
 
     # ── one question ────────────────────────────────────────────────────────
-    def run(self, question):
+    def run(self, question, words=None):
+        """One question.  `words` skips extraction and uses those strings."""
         u, t = self.ui, {}
         res = Result(question=question, checkpoint=self.checkpoint,
                      store=self.store)
         self.last = res
 
         t0 = time.perf_counter()
-        with u.stage("luščim iztočnice…"):
-            res.extraction = self.s.extract(question, u)
+        if words:
+            res.extraction = extract_mod.given(words)
+        else:
+            with u.stage("luščim iztočnice…"):
+                res.extraction = self.s.extract(question, u)
         t["extract"] = time.perf_counter() - t0
         # A repair turn announces itself from inside the stage, while it is
         # happening -- only the stage knows the moment (D7, D20).
@@ -160,6 +193,11 @@ class Pipeline:
             else:
                 for text in b.anchor_texts():
                     u.cont("▸ " + u.clip(text, reserve=2))
+
+        if self.retrieve_only:
+            res.timings = t
+            u.note(f"({t['extract']:.1f}s + {t['retrieve']:.1f}s)")
+            return res
 
         t0 = time.perf_counter()
         # The prefill happens inside the stage; the spinner stops the moment the
