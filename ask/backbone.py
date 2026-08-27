@@ -311,7 +311,10 @@ def load_gtlm(checkpoint, ui=None, graph_attn_impl=None, magnetic_m=None,
         warm = pc.is_warm()
         impl = "flex" if warm else "eager"
         if not warm:
-            hint = ("za hitrejši prefill prevedi oblike vnaprej: "
+            # English, with the line above it: the reason and its remedy are one
+            # sentence split across two lines, and half a sentence in each
+            # language is worse than either.
+            hint = ("compile the shapes first for a faster prefill: "
                     "`ask --precompile`")
     if impl == "flex":
         # Inductor's default cache lives in a node-local /tmp that is wiped

@@ -212,7 +212,7 @@ class DemoStages:
             # D17: no compiled cache for this GPU, so flex would recompile per
             # shape.  Fall back rather than make the first question pay for it.
             out["attn"] = "eager (flex attention kernels not compiled)"
-            out["hint"] = ("za hitrejši prefill prevedi oblike vnaprej: "
+            out["hint"] = ("compile the shapes first for a faster prefill: "
                            "`ask --precompile`")
         return out
 

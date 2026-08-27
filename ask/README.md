@@ -106,7 +106,7 @@ shape, and the first question of a cold session would pay for it. So `ask` serve
 ```
   GTLM       …/checkpoint-4400
              google/gemma-3-1b-it · eager (flex attention kernels not compiled)
-  za hitrejši prefill prevedi oblike vnaprej: `ask --precompile`
+  compile the shapes first for a faster prefill: `ask --precompile`
 ```
 
 `--precompile` walks every shape the corpus actually lands on — 21 of them,
