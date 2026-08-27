@@ -11,7 +11,7 @@ produced it.
 
 | file | resolved | used by |
 |---|---|---|
-| `extractor_prompt.txt` | 95.5 % | the extraction run behind `generated/v2_clean` (job 130298) |
+| `extractor_prompt.txt` | 95.5 % | the extraction run behind the current `datasets/generated` (job 130298) |
 | `archive/extractor_prompt_v2.txt` | — | job 130286, a 1,520-item comparison |
 | `archive/extractor_prompt_v1.txt` | — | jobs 130175 and 130285, `results/extraction_v1.json` |
 

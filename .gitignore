@@ -33,11 +33,23 @@ CLAUDE_CONTEXT.md
 CLAUDE.md
 TODO.md
 
-# built artefacts: the store (~4 GB), and the dataset the pipeline generates from
-# it.  `reference/` is NOT ignored -- it is small, and it is an input.
+# built artefacts: the store (~4 GB), and everything the pipeline generates from
+# it -- the dataset, the two baseline inputs, the intermediates under work/, and
+# the one-slot rollback in previous/.  `reference/` is NOT ignored -- it is
+# small, and it is an input.
 data/stores/kg_graph_*/
 data/datasets/generated/
 data/datasets/balls/
+data/datasets/balls_serialised/
+data/datasets/balls_noretrieval/
+data/datasets/work/
+data/datasets/previous/
+
+# kept corpora, one directory per build worth going back to (~210 MB each,
+# including the extraction dump without which stage 3 cannot be re-derived).
+# `previous/` is a single rotating slot the next publish overwrites; this is
+# where a corpus goes when it has results attached to it.
+data/datasets/archive/
 
 train/results/
 

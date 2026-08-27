@@ -64,9 +64,9 @@ files on disk:
 
 | artefact | what it is |
 |---|---|
-| `data/datasets/balls/v2_clean` | one text graph per item — node texts verbatim from the KG, plus an edge list |
-| `data/datasets/generated/v2_clean` | the items: the same answer, plus the **grading contract** |
-| `data/datasets/balls/v2_clean_{serialised,noretrieval}` | the two baseline inputs, derived from the ball file itself |
+| `data/datasets/balls` | one text graph per item — node texts verbatim from the KG, plus an edge list |
+| `data/datasets/generated` | the items: the same answer, plus the **grading contract** |
+| `data/datasets/balls_{serialised,noretrieval}` | the two baseline inputs, derived from the ball file itself |
 
 Nothing here opens the 37.5 M-node store. `data.py` joins ball and item on `id` and
 asserts the two answers are identical, so a mismatched pairing raises rather than
@@ -211,12 +211,12 @@ sweep call, one `runs.jsonl`.
 
 | # | configuration | input | stack | biases |
 |---|---|---|---|---|
-| 1 | **GTLM (spd + magnetic)** | `balls/v2_clean` | GTLM | spd + magnetic |
-| 2 | **GTLM, no bias** | `balls/v2_clean` | GTLM | none |
-| 3 | **serialised — GTLM stack** | `balls/v2_clean_serialised` | GTLM | none |
-| 4 | **serialised — plain stack** | `balls/v2_clean_serialised` | plain | n/a |
-| 5 | **no retrieval — plain stack** | `balls/v2_clean_noretrieval` | plain | n/a |
-| 6 | **no retrieval — GTLM stack** | `balls/v2_clean_noretrieval` | GTLM | none |
+| 1 | **GTLM (spd + magnetic)** | `balls` | GTLM | spd + magnetic |
+| 2 | **GTLM, no bias** | `balls` | GTLM | none |
+| 3 | **serialised — GTLM stack** | `balls_serialised` | GTLM | none |
+| 4 | **serialised — plain stack** | `balls_serialised` | plain | n/a |
+| 5 | **no retrieval — plain stack** | `balls_noretrieval` | plain | n/a |
+| 6 | **no retrieval — GTLM stack** | `balls_noretrieval` | GTLM | none |
 
 Arms 3–6 ship a ball with **zero graph nodes** — the subgraph is flattened into the
 prompt (3, 4) or absent (5, 6) — so arms 4 and 5 differ in exactly one thing:
@@ -255,7 +255,22 @@ three seeds, all carrying `"prompt_format": "chat_template"`. Read them with
 ```
 
 which prints the per-arm table, the per-type breakdown, the five contrasts paired by
-seed, and the convergence verdict. The pre-registered convergence rule **passes**:
+seed, and the convergence verdict.
+
+> **These records name directories that have since been renamed.** They were
+> written on 2026-08-23, when the dataset carried a version suffix; on 2026-08-26
+> the suffixes went away, because there is one dataset and numbering it was only
+> ever confusing. `data_root` in those 18 records therefore reads:
+>
+> | recorded | now |
+> |---|---|
+> | `data/datasets/balls/v2_clean` | `data/datasets/balls` |
+> | `data/datasets/balls/v2_clean_serialised` | `data/datasets/balls_serialised` |
+> | `data/datasets/balls/v2_clean_noretrieval` | `data/datasets/balls_noretrieval` |
+>
+> The files were left exactly as the runs wrote them — a results file records what
+> happened, and editing it to agree with a later rename would be editing the
+> evidence. `report_arms` knows both spellings, so the tables print either way. The pre-registered convergence rule **passes**:
 the best checkpoint was the final one in 4 of 18 runs (22 %), under the 33 % limit,
 so the sweep is measuring where the arms end up rather than how fast they learn.
 

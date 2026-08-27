@@ -14,10 +14,15 @@ here is Gemma 3, and the target is [**GaMS3-12B**](https://huggingface.co/cjvt/G
 ```bash
 # 0. the source KG: https://nas.cjvt.si/s/aJE6243jd8iRXfc
 #    unpack it to data/kg_raw/OntoLex DSB/ (83 GB, gitignored)
-sbatch data/build/run_save.sbatch gemma3             # 1. build the graph store
-# ...five stages in data/README.md                   # 2. generate the QA dataset
-.venv/bin/python -m sweep train train/configs/arms_v3.jsonc   # 3. train
+sbatch data/run_pipeline.sbatch                      # 1. the store AND the QA
+                                                     #    dataset, one job, ~50 min
+.venv/bin/python -m sweep train train/configs/arms_v3.jsonc   # 2. train
 ```
+
+Step 1 is six stages in one job — graph store, items, entity linking, relabel,
+balls, baselines — and it is the preferred way to build the data. Each stage can
+also be run on its own while you iterate on it; both paths are documented in
+[`data/README.md`](data/README.md).
 
 A fresh clone carries code and documentation only — the raw KG, the built store,
 the generated dataset and the checkpoints are all gitignored, and steps 0–2 above
@@ -33,11 +38,12 @@ are what produce them.
 ## Where it stands
 
 * **Graph store** — built. 37.5 M nodes / 50.1 M edges of untyped, self-describing
-  text nodes, persisted so the half-hour, ~70 GB rebuild is paid once and loads in
+  text nodes, persisted so the ~15-minute, ~48 GB rebuild is paid once and loads in
   seconds under a gigabyte.
 * **QA dataset** — built. 12,490 items over 19 types, each paired with the subgraph
   holding its evidence, plus two baseline inputs (the same graph flattened into the
-  prompt, and no graph at all).
+  prompt, and no graph at all). There is one dataset and it carries no version
+  suffix: `data/datasets/generated` and `data/datasets/balls` are it.
 * **Training** — the six-arm × three-seed study has run to completion on B200, and
   passes its pre-registered convergence rule. `train/analysis/report_arms` prints the
   tables from `train/results/arms_v3/runs.jsonl`. See `train/README.md`.
