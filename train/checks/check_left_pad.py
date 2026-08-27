@@ -6,8 +6,8 @@
         --no-spd --no-magnetic --max-length 17408
 
 `GraphCollatorV2` right-pads and has no `padding_side` option, so training
-batches are rolled after collation (`run.LeftPadCollator`).  Two things have to
-be true for that to be a fix rather than a change of results:
+batches are rolled after collation (`batching.LeftPadCollator`).  Two things
+have to be true for that to be a fix rather than a change of results:
 
   1. **the loss must not move.**  A roll relabels absolute positions but the
      structural mask reads padding from `attention_mask` alone, `node_ids`
@@ -38,8 +38,8 @@ from gtlm.utils import GraphCollatorV2
 
 from ..config import RunConfig
 from ..data import load_split
-from ..batching import packed_lengths
-from ..run import LeftPadCollator, PlainCollator, answer_tail_inputs
+from ..batching import packed_lengths, LeftPadCollator, PlainCollator
+from ..run import answer_tail_inputs
 
 # How the loss tolerance is set, and why it is not a guessed constant.
 #

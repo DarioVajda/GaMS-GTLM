@@ -186,7 +186,7 @@ Identical in every arm, so that the matrix below measures the arms and nothing e
 
 ## Memory: three things that make long balls trainable
 
-* **Batches are LEFT-padded** (`run.LeftPadCollator`). `compute_loss` slices the
+* **Batches are LEFT-padded** (`batching.LeftPadCollator`). `compute_loss` slices the
   logits to the answer tail using the earliest supervised position in the batch, so
   right-padded, one short row drags that slice back for everyone: the worst mixed
   GTLM batch needed `logits_to_keep = 8,166` and peaked at 82.8 GiB, against **13**

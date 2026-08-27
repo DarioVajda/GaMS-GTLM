@@ -30,7 +30,7 @@ from gtlm.utils import GraphCollatorV2
 from ..config import RunConfig
 from ..data import load_split
 from ..evaluate import GradeEvaluator, scaled_budgets
-from ..run import LeftPadCollator, PlainCollator
+from ..batching import LeftPadCollator, PlainCollator
 
 
 def build_parser():

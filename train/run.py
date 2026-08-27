@@ -28,7 +28,8 @@ from gtlm.train import (select_active_params, print_trainable_parameters,
 
 from .config import EXPERIMENT_NAME, CHECKPOINT_ROOT
 from .data import load_data, load_dev_subsample
-from .evaluate import GradeEvaluator, scaled_budgets, to_left_padding
+from .batching import LeftPadCollator, PlainCollator
+from .evaluate import GradeEvaluator, scaled_budgets
 from ._io import append_jsonl
 
 EXPERIMENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -66,51 +67,6 @@ def answer_tail_inputs(inputs):
     inputs["labels"] = labels[:, L - k:]
     inputs["logits_to_keep"] = k
     return inputs
-
-
-class LeftPadCollator:
-    """Wrap a collator and move every row's padding to the FRONT.
-
-    `GraphCollatorV2` right-pads and has no `padding_side` option, so this is a
-    post-collation roll -- see `evaluate.to_left_padding` for why it is safe.
-
-    It exists for the answer-tail logits slice.  `GradeTrainer.compute_loss`
-    slices to the tail using the EARLIEST supervised position in the batch;
-    right-padded, a shorter row's answer span sits earlier in the padded sequence
-    and drags that slice back for every row -- on the worst GTLM batch at packed
-    L=16,384 that is `logits_to_keep=6,880` and a 100.5 GiB peak.  Left padding
-    makes every row end at `L-1`, so the same `min` collapses to
-    `longest answer + 1` with no extra slicing logic.
-
-    One collator object serves both training and evaluation, which also makes
-    `to_left_padding` in pass 2 a no-op -- it is idempotent by construction.
-    """
-
-    def __init__(self, inner):
-        self.inner = inner
-
-    def __call__(self, features):
-        return to_left_padding(self.inner(features))
-
-
-class PlainCollator:
-    """Wrap GraphCollatorV2 and keep only what a stock causal LM reads.
-
-    The graph collator ships `node_ids`, `prompt_node`, `num_nodes` and the bias
-    feature tensors; stock Gemma-3 accepts none of them.  `position_ids` is
-    dropped too -- a baseline ball has exactly one node, so the graph collator's
-    per-node reset produces a plain `arange`, and letting the model derive its
-    own keeps left-padded generation correct.
-    """
-
-    KEEP = ("input_ids", "attention_mask", "labels")
-
-    def __init__(self, inner):
-        self.inner = inner
-
-    def __call__(self, features):
-        batch = self.inner(features)
-        return {k: v for k, v in batch.items() if k in self.KEEP}
 
 
 def assert_plain_arm(split, cfg):

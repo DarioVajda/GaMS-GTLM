@@ -38,7 +38,7 @@ from gtlm.utils import GraphCollatorV2
 from ..config import RunConfig
 from ..data import load_split
 from ..evaluate import GradeEvaluator
-from ..run import LeftPadCollator
+from ..batching import LeftPadCollator
 from ..qa_contract import contract
 
 
