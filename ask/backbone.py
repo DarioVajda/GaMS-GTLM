@@ -36,16 +36,18 @@ import collections
 # -- which is exactly how this was found.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# The checkpoint answered from unless --checkpoint says otherwise: the best test
-# accuracy of the arms_v3 sweep (0.7917, 1729/2184).  Seed 0 ties on test and
-# loses on dev (0.8683 vs 0.8769); the 0.0028 spread is within seed noise.
-# A path to a real checkpoint directory, loaded directly -- `ask` never searches
-# a run directory for a best-of.
-DEFAULT_CHECKPOINT = os.path.join(
-    REPO_ROOT, "checkpoints/sl_qa/"
-    "arms_v3_0002_data_rootdata-datasets-balls-v2_c_plain_llmFalse_spdTrue_"
-    "magneticTrue_max_length2048_batch_size4_accumulation_steps4_seed2/"
-    "checkpoint-4400")
+# The checkpoint answered from unless --checkpoint says otherwise: the best arm
+# the scaling study produced -- `scale_12b_gams_blr_gtlm`, GaMS3-12B-Instruct at
+# 16 epochs, Tier A 0.9362 where the 1b arm this default used to name reaches
+# 0.738 (train/SCALING.md).  It costs a second 22 GiB of weights, which is what
+# moved it off the 1b arm only once an 80 GB card was the ordinary place to run.
+#
+# An alias, not a path (D23): resolved through `ask/aliases.json` by
+# `read_checkpoint` below, so what the default carries and what a person types
+# after `--checkpoint` are the same kind of thing.  `ask` still never searches a
+# run directory for a best-of -- an alias names one `checkpoint-NNNN`, and that
+# is what loads.
+DEFAULT_CHECKPOINT = "gams"
 
 DEFAULT_EXTRACTOR = "cjvt/GaMS3-12B-Instruct"
 
@@ -200,13 +202,30 @@ def read_checkpoint(checkpoint):
     be retrieved, tokenised, padded -- and then ignored.  The answer would look
     grounded and would not be, which is the one failure this tool must not have.
     Refused at load, by name, rather than diagnosed later from a bad answer.
+
+    An alias is resolved here rather than only in `__main__` (D23) because the
+    checks take `--checkpoint` too, and this is the one function every path into
+    a checkpoint already goes through.  `resolve` is idempotent -- no alias name
+    can look like a path -- so `__main__` resolving first costs nothing.
     """
     import os
     import json
 
-    ck = checkpoint.rstrip("/")
+    from ask import aliases
+
+    ck = aliases.resolve(checkpoint).rstrip("/")
     path = os.path.join(ck, "config.json")
     if not os.path.exists(path):
+        # A bare word that reached here missed the table, so it is a mistyped
+        # alias far more often than a relative path -- and "not a run directory"
+        # is then advice about a problem nobody has.  Answer the question that
+        # was actually being asked: which names exist.
+        names = aliases.known()
+        if names and ck == checkpoint and "/" not in checkpoint:
+            raise FileNotFoundError(
+                f"{checkpoint!r} is neither a recorded alias nor a directory. "
+                f"--checkpoint takes an alias or a path; the aliases are: "
+                f"{', '.join(names)}")
         raise FileNotFoundError(
             f"{ck} has no config.json -- --checkpoint takes a path to a real "
             f"checkpoint directory (…/checkpoint-4400), not a run directory")

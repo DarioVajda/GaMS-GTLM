@@ -1,0 +1,6 @@
+{
+  "gams": "checkpoints/sl_qa/scale_12b_gams_blr_gtlm_0000/checkpoint-9264",
+  "gemma12b": "checkpoints/sl_qa/scale_12b_gemma_0000_data_rootdata-datasets-balls_plain_llmFalse_spdTrue_magneticTrue_batch_size4_accumulation_steps4/checkpoint-8800",
+  "gemma1b": "checkpoints/sl_qa/scale_1b_16ep_0000_data_rootdata-datasets-balls_plain_llmFalse_spdTrue_magneticTrue_batch_size4_accumulation_steps4/checkpoint-9200",
+  "gemma4b": "checkpoints/sl_qa/scale_4b_gemma_0000/checkpoint-8800"
+}

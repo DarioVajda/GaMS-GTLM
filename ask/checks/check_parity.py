@@ -41,7 +41,7 @@ import argparse
 
 import torch
 
-from ask import backbone
+from ask import backbone, aliases
 from ask.answer import answer, MAX_NEW_TOKENS
 from ask.retrieve import Ball
 
@@ -60,7 +60,8 @@ def ball_of(row):
 def build_parser():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--checkpoint", default=backbone.DEFAULT_CHECKPOINT)
+    p.add_argument("--checkpoint", default=backbone.DEFAULT_CHECKPOINT,
+                   help="an alias (ask --aliases) or a checkpoint directory")
     p.add_argument("--split", default="test")
     p.add_argument("--n", type=int, default=32, help="items to compare")
     p.add_argument("--impl", default="eager", choices=["flex", "eager"],
@@ -110,6 +111,9 @@ def drift(a, split, golds, first, cap):
 
 def main(argv=None):
     a = build_parser().parse_args(argv)
+    # Up front, so the line this check prints names the arm it ran on and not
+    # the alias it was reached by (D23).
+    a.checkpoint = aliases.resolve(a.checkpoint)
 
     from train.data import load_split
     from train.evaluate import GradeEvaluator, scaled_budgets

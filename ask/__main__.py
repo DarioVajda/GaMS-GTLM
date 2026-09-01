@@ -69,8 +69,14 @@ def parser():
     p.add_argument("-i", "--interactive", action="store_true",
                    help="stay warm and keep asking")
     p.add_argument("--checkpoint", default=backbone.DEFAULT_CHECKPOINT,
-                   help="path to a checkpoint directory (default: the best "
-                        "arms_v3 arm)")
+                   help="an alias (see --aliases) or a path to a checkpoint "
+                        f"directory (default: {backbone.DEFAULT_CHECKPOINT})")
+    p.add_argument("--alias", nargs=2, metavar=("NAME", "CHECKPOINT"),
+                   help="record NAME as a shortcut for CHECKPOINT, then exit")
+    p.add_argument("--unalias", metavar="NAME",
+                   help="forget a recorded shortcut, then exit")
+    p.add_argument("--aliases", action="store_true",
+                   help="list the recorded shortcuts, then exit")
     p.add_argument("--store", default="", help="path to the processed graph store")
     p.add_argument("--extractor", default=backbone.DEFAULT_EXTRACTOR,
                    help="model that names the words a question is about")
@@ -105,6 +111,51 @@ def parser():
 
 def words_of(args):
     return [w.strip() for w in args.words.split(",") if w.strip()]
+
+
+def manage_aliases(args):
+    """`--alias`, `--unalias`, `--aliases`: edit the table, then exit (D23).
+
+    On stdout as plain text, like `--list-demos` and unlike everything the UI
+    prints: this is administration rather than a session, its output is worth
+    grepping, and `--quiet` swallowing a listing that was explicitly asked for
+    would be simply wrong.
+    """
+    from ask import aliases as al
+
+    try:
+        if args.alias:
+            name, checkpoint = args.alias
+            stored, base = al.record(name, checkpoint)
+            print(f"zapisano   {name} → {stored}")
+            print(f"           {base}")
+            return 0
+        if args.unalias:
+            gone = al.forget(args.unalias)
+            if gone is None:
+                known = ", ".join(al.known()) or "nobene"
+                print(f"ni take bližnjice: {args.unalias} (zapisane: {known})")
+                return 1
+            print(f"pozabljeno {args.unalias} → {gone}")
+            return 0
+    except Exception as e:              # noqa: BLE001 -- a CLI, not a session
+        if args.debug:
+            raise
+        print(f"{type(e).__name__}: {e}")
+        return 1
+
+    rows = al.listing()
+    if not rows:
+        print("nobene bližnjice; dodaj jo z: ask --alias IME POT")
+        return 0
+    w = max(len(name) for name, _p, _b in rows)
+    for name, path, base in rows:
+        print(f"{name:<{w}}  {path}")
+        # The base model, because that is what one alias is picked over another
+        # for; and its absence, because a gitignored `checkpoints/` means a
+        # recorded name can outlive the weights it was recorded for.
+        print(f"{'':<{w}}  {base or '(te kontrolne točke ni)'}")
+    return 0
 
 
 def ask_one(pipe, question, args, words=None):
@@ -166,6 +217,17 @@ def main(argv=None):
         from ask import demo
         print(demo.HELP)
         return 0
+    if args.alias or args.unalias or args.aliases:
+        return manage_aliases(args)
+
+    # Resolved here, before the Pipeline is built, so the startup line, the
+    # `--json` payload and `ask/logs/` all record the path that answered rather
+    # than the nickname it was reached by (D23).  The alias is kept only to be
+    # printed back, as the confirmation that it went where it was meant to.
+    from ask import aliases
+    resolved = aliases.resolve(args.checkpoint)
+    alias = args.checkpoint if resolved != args.checkpoint else ""
+    args.checkpoint = resolved
 
     u = ui_mod.UI(quiet=args.quiet, echo=not args.json, debug=args.debug)
 
@@ -185,7 +247,8 @@ def main(argv=None):
     pipe = ask.Pipeline(stages, ui=u, checkpoint=args.checkpoint,
                         store=args.store, extractor=args.extractor,
                         show_ball=args.show_ball,
-                        retrieve_only=args.retrieve_only)
+                        retrieve_only=args.retrieve_only,
+                        checkpoint_alias=alias)
 
     u.blank()
     u.line(u.bold(BANNER) + (u.dim("  (demo)") if args.demo else ""))

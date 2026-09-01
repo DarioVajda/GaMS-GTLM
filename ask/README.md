@@ -38,9 +38,9 @@ its result the moment it has one, under a live line naming what is running:
              graph_version 3 · 37,498,126 vozlišč · zgrajena 2026-08-27
   ekstraktor cjvt/GaMS3-12B-Instruct
   GTLM       /shared/workspace/povejmo/gams_gtlm/checkpoints/sl_qa/
-             arms_v3_0002_data_rootdata-datasets-balls-v2_c_plain_llmFalse_spdTrue_magneticTrue_max
-             _length2048_batch_size4_accumulation_steps4_seed2/checkpoint-4400
-             google/gemma-3-1b-it · flex (prefill) + eager (decode)
+             scale_12b_gams_blr_gtlm_0000/checkpoint-9264
+             bližnjica gams
+             cjvt/GaMS3-12B-Instruct · flex (prefill) + eager (decode)
   pripravljeno 9.9s
 
 > Navedi različne pomene besede brahialen.
@@ -54,7 +54,38 @@ ODGOVOR: glede na roko ali z roko povezane
 Both paths are printed in full, folded at `/` to the terminal's width: every arm
 of a sweep ends in a `checkpoint-NNNN`, and which arm this is — the seed, the
 features, the data root — is written in the run directory's name and nowhere
-else. The rows concatenate back into the path.
+else. The rows concatenate back into the path. `bližnjica` names the alias it was
+reached by, when it was reached by one.
+
+## Checkpoint aliases
+
+Those run directory names are up to 190 characters, so the four backbones of the
+scaling study answer to short names instead. The default is `gams`.
+
+```bash
+ask --checkpoint gemma4b "Kaj pomeni beseda brahialen?"
+ask --aliases                                   # what is recorded, and its base
+ask --alias mine checkpoints/sl_qa/…/checkpoint-9264
+ask --unalias mine
+```
+
+| alias | backbone | Tier A |
+|---|---|--:|
+| `gams` | `cjvt/GaMS3-12B-Instruct` — the study's best arm, and the default | 0.9362 |
+| `gemma12b` | `gemma-3-12b-it` text tower | — |
+| `gemma4b` | `gemma-3-4b-it` text tower | 0.8277 |
+| `gemma1b` | `google/gemma-3-1b-it`, 16 epochs — the same budget as the 12B | 0.7383 |
+
+The table is `ask/aliases.json`, a flat `{name: path}` map that is committed
+even though `checkpoints/` is gitignored: which name means which arm is the same
+knowledge [`train/SCALING.md`](../train/SCALING.md) carries in prose, and a
+fresh clone should get the names even though it gets none of the weights.
+
+`--alias` records nothing it cannot load. It validates through the same
+`read_checkpoint` a session runs, so a run directory instead of a checkpoint, or
+a `plain_llm` arm with no graph parameters at all (D3), is refused when the alias
+is written rather than 30 seconds into some later 12B load. A name is a bare
+word, and it is looked up before the filesystem — see `ask/aliases.py`.
 
 Measured on an A100: startup is ~10 s in total — the store opens in ~1.5 s, the
 12B extractor loads in ~7 s, the checkpoint in ~3 s. Per question, extraction is
@@ -85,7 +116,9 @@ library alone. `bin/ask --list-demos` says what it can be asked.
 
 | | |
 |---|---|
-| `--checkpoint PATH` | a real checkpoint directory; defaults to the best `arms_v3` arm |
+| `--checkpoint NAME\|PATH` | an alias or a real checkpoint directory; defaults to `gams` |
+| `--aliases` | list the recorded aliases, with the backbone each names |
+| `--alias N PATH` / `--unalias N` | record an alias / forget one |
 | `--store PATH` | the processed graph store; defaults to the one in `data/stores` |
 | `--extractor NAME` | the model that names the words a question is about |
 | `--words a,b` | supply the headwords; skips extraction *and* its 12B load |
@@ -143,11 +176,13 @@ ask/
   retrieve.py     strings -> anchors -> ball
   answer.py       question + ball -> answer, streamed
   precompile.py   the (L, N) sweep and the per-GPU cache
+  aliases.py      short names for checkpoints; the table is aliases.json
   ui.py           the progress line, the stage results, the stream
   demo.py         simulated stages, real fixtures, estimated delays
   __main__.py     the CLI, and which implementation each stage gets
   checks/         check_parity
   slurm/          run_ask, run_checks (+ check_stages.sh)
+  aliases.json    name -> checkpoint, repo-relative (committed)
   logs/           one JSONL line per question asked (gitignored)
   cache/          inductor's output, per GPU model (gitignored)
 ```

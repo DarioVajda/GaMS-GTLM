@@ -89,10 +89,13 @@ class Pipeline:
     """The chain, warm.  `load()` once, then `run()` per question."""
 
     def __init__(self, stages, ui=None, checkpoint="", store="", extractor="",
-                 show_ball=False, retrieve_only=False):
+                 show_ball=False, retrieve_only=False, checkpoint_alias=""):
         self.s = stages
         self.ui = ui or ui_mod.UI()
         self.checkpoint = checkpoint
+        # For printing only (D23): `checkpoint` is already the resolved path,
+        # and it is the path that gets logged.
+        self.checkpoint_alias = checkpoint_alias
         self.store = store
         self.extractor = extractor
         self.show_ball = show_ball
@@ -145,6 +148,11 @@ class Pipeline:
             # loaded, and this line is the record of what answered.
             self.checkpoint = os.path.abspath(self.checkpoint.rstrip("/"))
             u.field_path("GTLM", self.checkpoint)
+            if self.checkpoint_alias:
+                # The path above is four folded rows of generated run name; this
+                # is the one row that says which arm was asked for, and whether
+                # the alias went where it was meant to.
+                u.cont(f"bližnjica {self.checkpoint_alias}")
             u.cont(f"{gt['base']} · {gt['attn']}")
             if u.debug:
                 # Feature-level provenance: worth having when an answer looks

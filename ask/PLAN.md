@@ -92,24 +92,27 @@ code**, since that is where someone loading a 12B GTLM will be standing.
 
 ### D5 — the checkpoint is a flag with a default constant
 
-`--checkpoint` takes **the path to a real checkpoint directory** and loads it
-directly. No searching a run directory for the best step by some metric — that
-is overkill for a path that is written down once and updated by hand.
+`--checkpoint` takes **an alias or the path to a real checkpoint directory**
+(D23) and loads it directly. No searching a run directory for the best step by
+some metric — that is overkill for a path that is written down once and updated
+by hand.
 
 The default is a module-level constant, updated as better models are produced,
 matching `DEFAULT_MODEL = "cjvt/GaMS3-12B-Instruct"` at the top of
-`measure_extraction.py`. It points at the arm-1 run with the highest **test**
-accuracy:
+`measure_extraction.py`. It is now the alias `gams`:
 
 ```
-checkpoints/sl_qa/arms_v3_0002_data_rootdata-datasets-balls-v2_c_plain_llmFalse_
-spdTrue_magneticTrue_max_length2048_batch_size4_accumulation_steps4_seed2/checkpoint-4400
+checkpoints/sl_qa/scale_12b_gams_blr_gtlm_0000/checkpoint-9264
 ```
 
-Seeds 2 and 0 tied exactly at 0.791667 (1729/2184); seed 2 wins on dev accuracy
-(0.8769 vs 0.8683). The spread across the three seeds is 0.0028, within seed
-noise (sd 0.0016), so this is a choice of *which* model to serve and not a
-claim that it is better than its siblings.
+the scaling study's best arm — GaMS3-12B-Instruct at 16 epochs, Tier A 0.9362
+(`train/SCALING.md`). It replaced `arms_v3_0002_…/checkpoint-4400`, the
+`gemma-3-1b-it` arm with the highest test accuracy of that sweep (0.7917,
+1729/2184; Tier A 0.7383 at the matched 16-epoch budget), once an 80 GB card was
+the ordinary place to run this: the 12B default costs a second 22 GiB of weights
+beside the extractor, ~44 GiB static, which does not fit a 40 GB one. That older
+arm is not aliased — the ladder's 1b rung is `gemma1b`, the 16-epoch arm, which
+is the budget-matched comparison and not this one.
 
 The resolved real path is printed at startup and carried in the JSON output
 (D10).
@@ -522,6 +525,47 @@ which is a lexicographer's question and not a debugging one.
 *Rejected:* a single `--stop-after STAGE`. Tidier as an enumeration, but the two
 flags do different things — one supplies an input, the other withholds an output
 — and folding them together would hide that `--words` still answers.
+
+### D23 — checkpoints answer to short names, recorded in a committed table
+
+A run directory encodes its whole arm, which is why `ui.field_path` exists to
+fold one over four rows just to print it. `--checkpoint` therefore also takes an
+alias out of `ask/aliases.json`, a flat `{name: path}` map; a miss falls through
+unchanged, so a path still works and nothing that existed before it changed.
+
+The four the scaling study produced are recorded, and `gams` is the default —
+`DEFAULT_CHECKPOINT` is now an alias rather than a path, so the name the default
+carries and the name a person types are the same kind of thing.
+
+Three choices worth the ink:
+
+* **Resolution happens in `main()`, and again in `read_checkpoint`.** In
+  `main()` so that `Pipeline.checkpoint` — the startup line, the `--json`
+  payload, `ask/logs/` — records the path that answered rather than the nickname
+  it was reached by; a log of `gams` would be worthless the first time an alias
+  is repointed. In `read_checkpoint` too because `checks/` takes `--checkpoint`
+  without going through `main()`, and that is the one function every path into a
+  checkpoint already passes through. Resolving twice is safe: a name is a bare
+  word, no name can look like a path, so `resolve` is idempotent.
+* **`--alias` validates before recording**, through that same
+  `read_checkpoint` — two small JSON reads, no torch. So the table cannot hold a
+  run directory, or a `plain_llm` arm D3 refuses, and the failure lands on the
+  person writing the alias rather than 30 seconds into a later 12B load.
+* **A name beats a directory.** The table is consulted before the filesystem, so
+  a local directory named `gams` would go unseen. The collision is theoretical —
+  names are bare words, checkpoint directories are 190-character generated ones
+  — and resolving it the other way would let a stray directory silently redirect
+  a session to different weights, which is the failure worth avoiding.
+
+The file is committed even though `checkpoints/` is gitignored, with paths stored
+relative to the repo. Which name means which arm is the same knowledge
+`train/SCALING.md` carries in prose; a fresh clone gets the names, gets none of
+the weights, and fails at load naming the path, which is legible.
+
+*Rejected:* a `~/.config` table. Per-user state would make two people's `gams`
+different checkpoints while both read the same `SCALING.md`, and the names are
+worth more shared than private. *Rejected:* aliasing `--extractor` too — one
+model, named once, with no run directory to shorten.
 
 ---
 
