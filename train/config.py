@@ -16,6 +16,7 @@ Three things distinguish this from `graph_model`'s `our_tests` kg_qa arm:
     `GradeTrainer.compute_loss` in run.py.
 """
 import os
+import json
 
 from dataclasses import dataclass
 
@@ -41,13 +42,68 @@ BACKBONES = {
 }
 # Checkpoints that look like a wired backbone but are not.  Checked BEFORE the
 # substring match so the error names the real obstacle.
+#
+# The three multimodal entries are refused as PUBLISHED, not as architectures:
+# `train/extract_text_tower.py` writes their text tower out as a flat
+# `gemma3_text` directory, and such a directory loads through the adapter
+# exactly as `GaMS3-12B-Instruct` does.  `_is_text_only_dir` below is what tells
+# the two apart -- by reading the config, not by trusting a naming convention.
 UNWIRED_BACKBONES = {
     "gemma-2": ("Gemma-2 ships attn/final logit softcapping, which the GTLM stack "
                 "applies at neither site; GTLMGemma3ForCausalLM refuses it."),
-    "gemma-3-4b": "Multimodal Gemma-3 nests its text config under `text_config`.",
-    "gemma-3-12b": "Multimodal Gemma-3 nests its text config under `text_config`.",
-    "gemma-3-27b": "Multimodal Gemma-3 nests its text config under `text_config`.",
+    "gemma-3-4b": ("Multimodal Gemma-3 nests its text config under `text_config`. "
+                   "Run `python -m train.extract_text_tower <repo>` and point "
+                   "--model-name at the directory it writes."),
+    "gemma-3-12b": ("Multimodal Gemma-3 nests its text config under `text_config`. "
+                    "Run `python -m train.extract_text_tower <repo>` and point "
+                    "--model-name at the directory it writes."),
+    "gemma-3-27b": ("Multimodal Gemma-3 nests its text config under `text_config`. "
+                    "Run `python -m train.extract_text_tower <repo>` and point "
+                    "--model-name at the directory it writes."),
 }
+
+
+# What a checkpoint's own `model_type` says about which backbone wires it.  The
+# fallback when the NAME says nothing -- `cjvt/GaMS3-12B-Instruct` is a Gemma-3
+# model whose name contains no "gemma-3", and it is the study's target.
+MODEL_TYPE_BACKBONES = {
+    "gemma3_text": "gemma-3",   # flat text-only: what the adapter loads
+    "gtlm_gemma3": "gemma-3",   # a checkpoint this experiment already wrote
+    "llama": "llama",
+}
+
+
+def _config_dict(model_name):
+    """`config.json` for a local directory or a hub id; `{}` if unreadable.
+
+    A local read first, so an extracted text tower resolves without touching the
+    network.  `AutoConfig` behind it, because the target checkpoint
+    (`cjvt/GaMS3-12B-Instruct`) lives on the hub and names no backbone in its id.
+    Only ever called when the NAME alone has not settled the question, so the
+    common path stays offline and free.
+
+    Any failure answers `{}` rather than raising: the caller's job is to produce
+    a good error message about the backbone, not to surface a network fault as
+    one.
+    """
+    local = os.path.join(model_name, "config.json")
+    if os.path.isfile(local):
+        try:
+            with open(local, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+    try:
+        from transformers import AutoConfig
+        return AutoConfig.from_pretrained(model_name).to_dict()
+    except Exception:
+        return {}
+
+
+def _is_text_only(cfg):
+    """Is this config the flat `gemma3_text` the adapter can load directly?"""
+    return cfg.get("model_type") in ("gemma3_text", "gtlm_gemma3") \
+        and "text_config" not in cfg
 
 MODEL_NAME = "google/gemma-3-1b-it"
 # Names the EXPERIMENT, not the directory: it is baked into `run_name` and the
@@ -187,16 +243,50 @@ class RunConfig:
         return self.impl.split("-", 1)[1]
 
     def backbone(self):
+        """Which backbone wires this checkpoint -- by name, then by its config.
+
+        The name is tried first and settles the common cases offline
+        (`google/gemma-3-1b-it`).  The config is consulted only when the name
+        leaves something open, which is exactly twice:
+
+          * `cjvt/GaMS3-12B-Instruct`, a Gemma-3 model whose id contains no
+            "gemma-3".  It is the target of this whole study, and refusing it on
+            a substring match would be refusing it for its name.
+          * an extracted text tower, which keeps its multimodal source's name
+            and so trips the `UNWIRED_BACKBONES` guard that it exists to satisfy.
+
+        In both directions the config, not the name, is the authority.
+        """
         name = self.model_name.lower()
-        for key, reason in UNWIRED_BACKBONES.items():
-            if key in name:
-                raise ValueError(f"model_name={self.model_name!r} is not wired: {reason}")
-        for key in BACKBONES:
-            if key in name:
-                return key
+        unwired = [r for k, r in UNWIRED_BACKBONES.items() if k in name]
+        wired = [k for k in BACKBONES if k in name]
+        if wired and not unwired:
+            return wired[0]
+
+        cfg = _config_dict(self.model_name)
+        text_only = _is_text_only(cfg)
+        if unwired and not text_only:
+            raise ValueError(
+                f"model_name={self.model_name!r} is not wired: {unwired[0]}")
+        if wired:
+            return wired[0]
+        # A multimodal config whose NAME did not give it away -- same obstacle,
+        # same remedy, so it gets the same message rather than a vaguer one.
+        if "text_config" in cfg:
+            raise ValueError(
+                f"model_name={self.model_name!r} nests its text config under "
+                f"`text_config` (model_type={cfg.get('model_type')!r}), which "
+                f"GTLMGemma3Config cannot load.  Run "
+                f"`python -m train.extract_text_tower {self.model_name}` and "
+                f"point --model-name at the directory it writes.")
+        by_type = MODEL_TYPE_BACKBONES.get(cfg.get("model_type"))
+        if by_type:
+            return by_type
         raise ValueError(
             f"model_name={self.model_name!r} names no backbone this experiment "
-            f"wires (expected one of {tuple(BACKBONES)} in the name).")
+            f"wires (expected one of {tuple(BACKBONES)} in the name), and its "
+            f"config says model_type={cfg.get('model_type')!r}, which is not "
+            f"one of {tuple(MODEL_TYPE_BACKBONES)}.")
 
     def gtlm_classes(self):
         from gtlm import models

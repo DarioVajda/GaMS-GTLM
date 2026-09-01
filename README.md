@@ -58,11 +58,20 @@ pretrained weights. Gemma 3 sets both to `null`, so the omission is exact.
 
 | model | role |
 |---|---|
-| `gemma-3-1b-it` | current backbone — what the study runs on |
-| **GaMS3-12B** | the target; published as a text-only `gemma3_text` config, so it loads through the adapter as-is |
-| `gemma-3-4b/12b/27b` (multimodal) | not wired: they nest their text config under `text_config`, which needs an unwrap and weights from the `language_model` submodule |
+| `gemma-3-1b-it` | the backbone `arms_v3` ran on |
+| **GaMS3-12B-Instruct** | the target; published as a text-only `gemma3_text` config, so it loads through the adapter as-is |
+| `gemma-3-4b/12b/27b` (multimodal) | usable via `train/extract_text_tower.py`, which writes the text tower out as a flat `gemma3_text` directory once, offline |
 
-Scaling from the 1b backbone to GaMS3-12B is a config change, not a port.
+Scaling from the 1b backbone to GaMS3-12B-Instruct is a config change, not a port.
+The multimodal checkpoints nest their text fields under `text_config` and hide the
+weights behind a vision tower, so they are converted rather than special-cased in the
+loader — after which every backbone in the study loads through one code path.
+`RunConfig.backbone()` resolves a checkpoint by its config's `model_type` when its
+name does not say (`cjvt/GaMS3-12B-Instruct` contains no "gemma-3").
+
+[`train/SCALING.md`](train/SCALING.md) is the plan those backbones exist for: whether
+the generalisation gap `arms_v3` shows per tier (core 0.867 / unseen phrasing 0.711 /
+unseen relation 0.061) is capacity or supervision.
 
 ## Repository setup
 
