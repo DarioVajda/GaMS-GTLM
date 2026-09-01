@@ -1,0 +1,95 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_4b_gemma — STEP 3 of the scaling study (train/SCALING.md).
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_4b_gemma.jsonc
+  //
+  // GATED on step 1, and runs CONCURRENTLY with step 2: the two share one gate
+  // and one code dependency (the extracted text towers), so nothing is gained by
+  // serialising them.
+  //
+  // What it isolates: **scale within one family**, `gemma-3-4b-it` against
+  // `gemma-3-12b-it`.  This is the clean scale contrast, and `gemma-3-1b-it` is
+  // deliberately not the low end of it: 1b is natively text-only where 4b and
+  // 12b are vision-pretrained models with the text tower extracted, so 1b -> 12b
+  // would conflate scale with pretraining regime.  4b -> 12b does not.
+  //
+  // Its real job is the SHAPE of whatever Tier A recovery step 1 shows.  Two
+  // points cannot distinguish a saturating curve (the residual gap is data) from
+  // a threshold (the residual gap is scale), and that distinction is what
+  // decides whether the next round of work is frames or parameters.
+  //
+  // 34 layers, hidden 2560 -- 3.88 B of the 4.30 B multimodal checkpoint.  ONE
+  // arm: the no-retrieval control is pre-registered as skippable here, because
+  // the antonyms-from-weights trap it exists to catch is a property of the
+  // Slovene-native 12B, and this cell is neither.
+  //
+  // Cost: ~3.9 B against the 12B's 11.8 B, so roughly a third of step 2's
+  // ~20.7 h at the same 4 GPUs -- call it 7 h.  Kept at four GPUs rather than
+  // two because the study is optimising for time-to-result.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_4b_gemma",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 1,
+      "partition": "frida",
+      "account": "lkm",
+      "gpus": ["B200", "B300"],
+      "gpus_per_config": 4,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 32,
+      "mem": "512G",
+      // 10 h against an estimated ~7 h.  Honest walltimes backfill; over-declared
+      // ones do not, and cannot be raised later (SCALING.md decision 6).
+      "time": "10:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "/shared/workspace/povejmo/gams_gtlm/checkpoints/text_towers/gemma-3-4b-it-text",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls", "plain_llm": false, "spd": true, "magnetic": true, "max_length": 2048, "batch_size": 4, "accumulation_steps": 4}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  // 3e-4, held 11 % below the 1/sqrt(1152/2560) value of 3.35e-4 -- the declared
+  // LR width schedule (SCALING.md, "The LR width schedule"), applied to both groups
+  // and to every cell, including this one which has never been seen to diverge.
+  "lr": 3e-4,
+  // The declared bias-LR width schedule (SCALING.md, "The LR width schedule"): 6e-3, rounded
+  // down from the 1/sqrt(1152/2560) value of 6.71e-3.  Interpolates the 1b
+  // anchor (1e-2) and the 12B (4e-3).  Applied here even though 4b has not been
+  // observed to blow up, because a rule applied only where it is needed is a
+  // per-cell fit.
+  "bias_lr": 6e-3,
+  "train_token_budget": 0,
+  // 16, matching every other cell of the scaling series -- the 8-epoch schedule
+  // under-trains at 12B (see `scale_12b_gams_16ep.jsonc`), and the series is
+  // only readable if one budget covers all of it.
+  "num_epochs": 16,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

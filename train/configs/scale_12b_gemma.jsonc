@@ -1,0 +1,109 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_12b_gemma — STEP 2 of the scaling study (train/SCALING.md).
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_12b_gemma.jsonc
+  //
+  // GATED on step 1 (`scale_12b_gams`).  Do not submit until Tier A there has
+  // cleared 0.80; below 0.75 the Tier A gap is supervision rather than capacity
+  // and this run answers nothing.
+  //
+  // What it isolates: **Slovene adaptation at fixed size**.  Against step 1 this
+  // is as clean a contrast as the two checkpoints allow -- verified, not
+  // assumed, they agree on every structural field:
+  //
+  //     48 layers, hidden 3840, 16 heads, intermediate 15360, vocab 262208
+  //
+  // so the two cells differ in their WEIGHTS and in nothing else.  Both are
+  // instruction-tuned (`-Instruct` against `-it`), so the contrast does not
+  // also swap instruction tuning.
+  //
+  // The checkpoint is a local directory, not a hub id: `google/gemma-3-12b-it`
+  // is multimodal and nests its text fields under `text_config`, which
+  // `GTLMGemma3Config` cannot load.  `train/extract_text_tower.py` has written
+  // its text tower out as a flat `gemma3_text` directory (11.77 B of 12.19 B,
+  // 48 layers), which is the same shape GaMS3-12B-Instruct is published in --
+  // so both cells of this contrast go through one loader path and the contrast
+  // carries no code difference either.  Rebuild it with:
+  //
+  //     sbatch train/slurm/run_extract_towers.sbatch
+  //
+  // The no-retrieval control ships here for the same reason it ships at step 1:
+  // without it a Tier C number cannot be read as a retrieval result.
+  //
+  // Cost: the same architecture as step 1, at the doubled budget -- ~20.7 h at
+  // 4 GPUs (7.66 s/step measured, 9,264 steps, plus ~1 h of evaluation).
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_12b_gemma",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 2,
+      "partition": "frida",
+      "account": "lkm",
+      "gpus": ["B200", "B300"],
+      "gpus_per_config": 4,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 32,
+      "mem": "512G",
+      // 25 h against a measured 20.7 h for the GTLM arm.  Element _1, the
+      // no-retrieval control, is cut to 4 h after submission (measured 1.6 h) --
+      // an over-declared walltime cannot be backfilled and cannot be raised
+      // later.  Identify which array element is which from
+      // `train/results/scale_12b_gemma/sbatch_commands.sh`, NEVER from the
+      // `resolved/` filenames: the sweep's LABELS array is ordered independently
+      // of them, and assuming otherwise once cancelled the wrong run entirely
+      // (SCALING.md decision 9).
+      "time": "25:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "/shared/workspace/povejmo/gams_gtlm/checkpoints/text_towers/gemma-3-12b-it-text",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048, "batch_size": 16, "accumulation_steps": 1}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  // 2e-4, held 27 % below the 1/sqrt(1152/3840) value of 2.74e-4.  Same width as
+  // GaMS3-12B-Instruct, so necessarily the same value -- this cell's whole
+  // purpose is to differ from that one in the WEIGHTS and in nothing else.
+  "lr": 2e-4,
+  // The declared bias-LR width schedule (SCALING.md, "The LR width schedule"): 4e-3, held
+  // below the 1/sqrt(1152/3840) value of 5.48e-3.  `graph_bias` is 48 layers of
+  // freshly initialised weight matrices, not bias vectors; at the unscaled 1e-2
+  // the 12B blew up twice.  Same width as GaMS3-12B-Instruct, so the same value
+  // -- which is required anyway, since this cell's whole purpose is to differ
+  // from that one in the WEIGHTS and in nothing else.
+  "bias_lr": 4e-3,
+  "train_token_budget": 0,
+  // 16, matching `scale_12b_gams_16ep` and `scale_1b_16ep`.  The 8-epoch
+  // schedule under-trains a 12B (see that file), and every cell of the scaling
+  // series is compared at its own convergence under one shared budget.
+  "num_epochs": 16,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

@@ -1,0 +1,94 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_1b_16ep — the 1b half of the SCALING SERIES, at a doubled budget.
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_1b_16ep.jsonc
+  //
+  // Why this exists.  `scale_12b_gams` ran the 8-epoch schedule and came out
+  // WORSE than the 1b on every tier -- and its own convergence block says why:
+  // best checkpoint = the final one, dev still gaining +0.0139 per eval against
+  // the 1b's +0.0089, and the whole dev curve the 1b's shifted about two epochs
+  // to the right (12B at epoch 8 = 0.8406, where the 1b sat around epoch 6.4).
+  // The gap between them NARROWED over the last two evals, 0.055 -> 0.034.
+  //
+  // That is an under-trained run, not a worse model, and the pre-registered
+  // convergence rule exists to catch exactly it -- `arms_v2` was discarded for
+  // the same reason.  Reading a Tier A gate off it would repeat that mistake.
+  //
+  // So the step budget is DOUBLED, and doubled for **both** sizes -- which is
+  // what this file is for.  Holding optimizer steps fixed across model sizes
+  // sounded like the conservative choice and is not: a schedule that converges
+  // the 1b and not the 12B is not one treatment applied twice, it is a
+  // handicap that happens to fall on one cell.  What has to be held fixed is
+  // that every cell is compared AT ITS OWN CONVERGENCE.
+  //
+  // What is NOT changed: the learning rates.  `lr` is deliberately shared and
+  // untuned across arms (train/configs/arms_v3.jsonc), so that the study is not
+  // two tuned knobs against zero; tuning it per model size would reintroduce
+  // exactly that confound.  The budget is a schedule, applied identically
+  // everywhere; the LR would be a per-cell fit.
+  //
+  // Overfitting is not a new risk at 16 epochs: `load_best_model_at_end` selects
+  // on dev, so a cell that peaks at epoch 9 reports its epoch-9 checkpoint.
+  //
+  // This does NOT supersede `scale_1b`.  That six-arm, 8-epoch sweep stands as
+  // the corpus-refresh baseline and the arms/contrast table; this file is the
+  // scaling series, and the two must not be read across.  Only the two arms the
+  // scale contrast uses are here.
+  //
+  // Two GPUs per config: ~5 h rather than ~10 h, and 2-GPU allocations schedule
+  // promptly where 4-GPU ones queue behind the 12B runs.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_1b_16ep",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 2,
+      "partition": "frida",
+      "account": "lkm",
+      "gpus": ["H100", "B200", "B300"],
+      "gpus_per_config": 2,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 16,
+      "mem": "256G",
+      "time": "24:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "google/gemma-3-1b-it",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048, "batch_size": 16, "accumulation_steps": 1}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 5e-4,
+  "bias_lr": 1e-2,
+  "train_token_budget": 0,
+  "num_epochs": 16,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

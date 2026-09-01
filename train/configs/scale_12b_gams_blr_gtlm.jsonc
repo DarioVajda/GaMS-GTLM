@@ -1,0 +1,85 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_12b_gams_blr_gtlm — STEP 1, THE GATE.  The GTLM arm, on its own.
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_12b_gams_blr_gtlm.jsonc
+  //
+  // WHY THIS EXISTS.  `scale_12b_gams_blr.jsonc` holds both arms and was
+  // submitted as array 134045.  Array element `_1` was then cancelled in the
+  // belief that it was the no-retrieval control, because `resolved/0000...` is
+  // the GTLM arm and `resolved/0001...` is the control.  That mapping is WRONG.
+  // The sweep bakes its own ordering into the `--wrap`:
+  //
+  //     LABELS=(scale_12b_gams_blr_0001_...noretrieval  scale_12b_gams_blr_0000_...gtlm)
+  //     i="$SLURM_ARRAY_TASK_ID"; ... "${LABELS[$i]}"
+  //
+  // so task 0 is the CONTROL and task 1 is the GTLM arm.  Cancelling `_1`
+  // cancelled the gate.  **To map an array element to an arm, read
+  // `<results_dir>/sbatch_commands.sh`, never the `resolved/` filenames.**
+  //
+  // Everything else is unchanged from `scale_12b_gams_blr.jsonc`: same model,
+  // same data, same seed, same 16-epoch budget, and the declared LR width
+  // schedule (`lr` 2e-4, `bias_lr` 4e-3).  Only the arm list is narrowed, so
+  // this is the same run recovered, not a re-specified one.  The header of
+  // `scale_12b_gams_blr.jsonc` remains the record of WHY those values are what
+  // they are -- the two collapses, the schedule, the declared fallback.
+  //
+  // The no-retrieval control needs no resubmission: array element `_0` survived
+  // the mistake and runs it to completion on 4 x B200.  That is a better outcome
+  // than the plan it replaced, because both arms of the retrieval contrast now
+  // sit on the same GPU generation.
+  //
+  // Cost: 7.65 s/step measured x 9,264 = 19.7 h + ~1 h eval.  Declared at 25 h.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_12b_gams_blr_gtlm",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 1,
+      "partition": "frida",
+      "account": "lkm",
+      "gpus": ["B200", "B300"],
+      "gpus_per_config": 4,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 32,
+      "mem": "512G",
+      "time": "25:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "cjvt/GaMS3-12B-Instruct",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls", "plain_llm": false, "spd": true, "magnetic": true, "max_length": 2048, "batch_size": 4, "accumulation_steps": 4}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 2e-4,
+  "bias_lr": 4e-3,
+  "train_token_budget": 0,
+  "num_epochs": 16,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

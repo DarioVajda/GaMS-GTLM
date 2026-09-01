@@ -1,0 +1,95 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_12b_gams — STEP 1 of the scaling study (train/SCALING.md).
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_12b_gams.jsonc
+  //
+  // `cjvt/GaMS3-12B-Instruct` on the two arms the gate needs, at one seed.
+  // THIS RUN GATES STEPS 2 AND 3.  The pre-registered thresholds, set before
+  // any number existed (SCALING.md):
+  //
+  //   Tier A >= 0.80   -> the Tier A gap was capacity; run steps 2 and 3
+  //   Tier A <  0.75   -> it was supervision; stop, and spend the time on frames
+  //   Tier C <  0.15   -> unchanged
+  //   and the no-retrieval arm MUST stay at chance on Tier C, or the antonyms
+  //   are coming from the weights rather than from the `protipomenka:` node and
+  //   Tier C stops measuring retrieval at all.
+  //
+  // Two arms, and the second is not optional: it is the control that makes the
+  // first readable.  At 1b the no-retrieval baseline is 0.046 on Tier C against
+  // GTLM's 0.061, which is what licenses reading the GTLM number as a retrieval
+  // result.  A Slovene-native 12B is exactly the model that might answer
+  // antonyms out of its own weights, so the control ships at this cell too.
+  //
+  // Everything except the backbone is identical to `scale_1b.jsonc`: effective
+  // batch 16, 4,632 optimizer steps, 8 epochs, the same LoRA rank, the same LRs,
+  // the same dev subsample and seed.  The cells differ in the checkpoint alone.
+  //
+  // FOUR GPUs per config, measured not guessed.  `scale_12b_probe4` gives
+  // 302 s of training for 30 steps on 4xB200 = 10.08 s/step, so 4,632 steps is
+  // ~13.0 h plus ~0.7 h of evaluation.  That is an upper bound: the probe
+  // amortises torch.compile warm-up over 30 steps where the real run amortises
+  // it over 4,632.  The 16 h limit the 1b sweep uses would have been too tight,
+  // hence 24 h.
+  //
+  // Why not eight.  At the time of submission every B200/B300/H100 node in the
+  // partition was fully allocated with 33 jobs queued, so an 8-GPU allocation
+  // would have cost more in QUEUE time than the ~7 h it saves in compute.  Four
+  // is what the cluster can actually supply promptly.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_12b_gams",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 2,
+      "partition": "frida",
+      "account": "lkm",
+      // B200/B300: 12 B in bf16 is ~24 GB of weights before activations, and
+      // the probe that sized this run was measured on a B200.
+      "gpus": ["B200", "B300"],
+      "gpus_per_config": 4,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      // 8 per rank, matching the single-GPU jobs -- `num_workers` is per-rank.
+      "cpus": 32,
+      "mem": "512G",
+      "time": "24:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "cjvt/GaMS3-12B-Instruct",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048, "batch_size": 16, "accumulation_steps": 1}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 5e-4,
+  "bias_lr": 1e-2,
+  "train_token_budget": 0,
+  "num_epochs": 8,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

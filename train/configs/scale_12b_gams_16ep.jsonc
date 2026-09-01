@@ -1,0 +1,89 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_12b_gams_16ep — STEP 1, re-run at the doubled budget.  THE GATE.
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_12b_gams_16ep.jsonc
+  //
+  // `scale_12b_gams` (8 epochs) returned Tier A = 0.6447 against the 1b's
+  // 0.7325 -- below even the 0.75 "stop" threshold -- and is NOT the number the
+  // gate is read from, because its own convergence block disqualifies it:
+  //
+  //     best checkpoint  = step 4632 of 4632   (best_is_final: TRUE)
+  //     last three dev   = 0.8121, 0.8235, 0.8406   (still climbing)
+  //     terminal slope   = +0.0139/eval, against the 1b's +0.0089
+  //     gap to the 1b    = 0.055 -> 0.034 over the final two evals, narrowing
+  //
+  // The 12B's dev curve is the 1b's shifted ~2 epochs right, not a lower
+  // ceiling.  The pre-registered convergence rule was written to catch precisely
+  // this and `arms_v2` was thrown away under it; reading a capacity conclusion
+  // off a run that was still learning would be the same error with a bigger
+  // model attached.
+  //
+  // So the budget is doubled here and, identically, at 1b
+  // (`scale_1b_16ep.jsonc`).  The gate is read from THIS pair, both at their own
+  // convergence, and both are checked against the convergence rule first.  If
+  // this run is ALSO best_is_final, the budget is still short and the gate stays
+  // shut -- the answer then is not "scale does not help" but "this schedule
+  // cannot answer the question", which is a different and honest finding.
+  //
+  // Unchanged from step 1: the checkpoint, the arms, the effective batch of 16,
+  // the LoRA rank, both learning rates, the dev subsample, the seed.  The step
+  // budget is the single difference, and it moves in both cells together.
+  //
+  // Cost, from the completed 8-epoch run: 9.85 h for 4,632 steps on 4xB200 =
+  // 7.66 s/step, so 9,264 steps is ~19.7 h training plus ~1 h of evaluation.
+  // Hence the 30 h limit.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_12b_gams_16ep",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 2,
+      "partition": "frida",
+      "account": "lkm",
+      "gpus": ["B200", "B300"],
+      "gpus_per_config": 4,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 32,
+      "mem": "512G",
+      "time": "30:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "cjvt/GaMS3-12B-Instruct",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048, "batch_size": 16, "accumulation_steps": 1}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 5e-4,
+  "bias_lr": 1e-2,
+  "train_token_budget": 0,
+  "num_epochs": 16,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

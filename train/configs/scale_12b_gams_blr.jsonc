@@ -1,0 +1,129 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_12b_gams_blr — STEP 1, re-run under the LR width schedule.  THE GATE.
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_12b_gams_blr.jsonc
+  //
+  // The two previous attempts did not under-train.  They BLEW UP.
+  //
+  //     8 epochs  (`scale_12b_gams`)       collapsed at epoch 1.38, dev loss 3.96
+  //     16 epochs (`scale_12b_gams_16ep`)  collapsed at epoch 2.07, dev loss 6.79
+  //
+  // The 16-epoch run's training trace names the mechanism:
+  //
+  //     epoch 1.46  loss 0.7533  gnorm     12.9      <- grad norm climbing
+  //     epoch 1.67  loss 0.5652  gnorm    276.5      <- first excursion
+  //     epoch 1.74  loss 9.1662  gnorm     11.2      <- model destroyed
+  //     epoch 2.05  loss 7.6322  gnorm 132294.5      <- second excursion
+  //
+  // and it happened WITH gradient clipping already active (`max_grad_norm` is
+  // left at HF's default of 1.0), so it is not one bad batch: it is sustained
+  // oversized updates.  `graph_bias` is not a bias vector -- each of the 48
+  // layers carries an MLP stack (`deep_set`, `proj`, `lambda_lin`) of freshly
+  // initialised WEIGHT MATRICES over width-dependent dimensions, and it was
+  // running at 20x the LoRA rate on a value set at 1b and never rescaled.
+  //
+  // THE SCHEDULE.  Declared before it was run, anchored at 1b so the cells
+  // already in flight stay valid, and applied to BOTH optimizer groups -- lower
+  // learning rates at larger width is the standard result, and there is no
+  // principled reason to scale one group and pin the other.  Round values, one
+  // significant digit, each held at or BELOW the `sqrt(1152 / width)` curve:
+  //
+  //                        lr                          bias_lr
+  //              rule      adopted   margin    rule      adopted   margin
+  //     1b  1152  5e-4      5e-4     anchor    1.00e-2   1.00e-2   anchor
+  //     4b  2560  3.35e-4   3e-4     -11 %     6.71e-3   6.0e-3    -11 %
+  //     12b 3840  2.74e-4   2e-4     -27 %     5.48e-3   4.0e-3    -27 %
+  //
+  // The curve is an upper bound, not a fit, and the same margin is taken in both
+  // columns at a given width.  Two 12B runs have already been lost at ~20 h
+  // each, against which a slightly slow optimizer is cheap.
+  //
+  // WHAT THIS COSTS, stated plainly: `lr` is no longer shared across cells, so
+  // the 1b-to-12B comparison now moves scale AND both learning rates together.
+  // That is unavoidable once a width schedule is adopted at all -- it is the
+  // same trade muP makes -- but it means the honest claim from this series is
+  // "a 12B trained under the declared width schedule reaches X", not "a 12B
+  // reaches X at the 1b's hyperparameters".  The schedule is the treatment.
+  //
+  // THE RISK IT INTRODUCES: cutting `lr` 2.5x while holding the step budget at
+  // 16 epochs may under-train this cell -- which is the failure the doubled
+  // budget was meant to fix.  The pre-registered convergence rule is the guard:
+  // if the best checkpoint is the final one, this run is disqualified exactly as
+  // the 8-epoch one was, and the budget moves again rather than the LR.
+  //
+  // FALLBACK, declared in advance: if this still collapses, the exponent is
+  // wrong rather than the values, and the schedule becomes linear in width --
+  // `5e-4 * (1152/3840)` = 2e-4 (unchanged) and `1e-2 * (1152/3840)` = 3e-3.
+  // The next values are not to be chosen by looking at how far the run got.
+  //
+  // Selection is on TRAINING STABILITY only -- after warmup, no eval-loss rise
+  // across two consecutive evals, no training loss above 2.0, no grad norm above
+  // 100 -- never on dev or test accuracy, so it cannot bias the headline.
+  //
+  // BOTH ARMS RUN HERE.  The no-retrieval control was previously left in
+  // `scale_12b_gams_16ep`, valid because it has no `graph_bias` modules for the
+  // bias schedule to touch.  Scaling `lr` reaches it, so it is re-run: leaving
+  // it at 5e-4 would put the retrieval contrast between two arms at different
+  // learning rates, which is a confound inside the contrast itself.
+  //
+  // Cost: GTLM 7.66 s/step x 9,264 = 19.7 h + ~1 h eval; no-retrieval ~1.6 h.
+  // The array is submitted at 25 h and element _1 is then cut to 4 h, because
+  // one over-declared walltime cannot be backfilled and cannot be raised later.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_12b_gams_blr",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 2,
+      "partition": "frida",
+      "account": "lkm",
+      "gpus": ["B200", "B300"],
+      "gpus_per_config": 4,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 32,
+      "mem": "512G",
+      "time": "25:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "cjvt/GaMS3-12B-Instruct",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048, "batch_size": 16, "accumulation_steps": 1}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  // 2e-4, held 27 % below the 1/sqrt(1152/3840) value of 2.74e-4.  See header:
+  // a declared width schedule applied to every cell, not a value fitted here.
+  "lr": 2e-4,
+  // 4e-3, the same 27 % below its own 1/sqrt value of 5.48e-3.
+  "bias_lr": 4e-3,
+  "train_token_budget": 0,
+  "num_epochs": 16,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

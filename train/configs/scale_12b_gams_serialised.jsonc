@@ -1,0 +1,110 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_12b_gams_serialised — the BASELINE GTLM HAS TO BEAT, at 12B.
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_12b_gams_serialised.jsonc
+  //
+  // WHY THIS IS THE MOST IMPORTANT RUN LEFT.  At 1b, over 4 seeds each, the
+  // simplest retrieval baseline -- the graph serialised into the prompt, a plain
+  // LLM, none of the graph-bias machinery -- BEATS GTLM:
+  //
+  //                              overall            tier A
+  //     serialised, plain stack  0.8178 +- 0.0040   0.751 +- 0.016
+  //     GTLM (spd + magnetic)    0.7919 +- 0.0026   0.716 +- 0.019
+  //     serialised, GTLM stack   0.7647 +- 0.0102   0.657 +- 0.045
+  //
+  // by 0.026 overall and 0.035 on tier A, well outside the seed spread.  The
+  // headline "+0.0252 +- 0.0131 graph encoding" contrast in SCALING.md is GTLM
+  // against the *serialised GTLM stack*, which holds the stack fixed.  That is a
+  // legitimate contrast but it is not the one that decides whether GTLM earns its
+  // complexity, and on that one GTLM currently loses.
+  //
+  // The 12B GTLM arm reached 0.9217 overall / tier A 0.9362.  Nothing in steps 2
+  // or 3 gives it a baseline.  Without this run the honest reading of that number
+  // is "a 12B with retrieval does well on this task", NOT "GTLM works at 12B".
+  //
+  // COST, estimated rather than probed (no GPUs were free to probe with).  Both
+  // gemma-3 models interleave local and global attention 5:1
+  // (`sliding_window_pattern` 6), so only one layer in six is quadratic in
+  // sequence length and 8.5x the context is nowhere near 72x the cost.  Anchored
+  // on three completed runs in this project:
+  //
+  //     1b  plain @  2048, 1 rank   0.277 s/step -> 0.0173 s/seq
+  //     1b  plain @ 17408, 1 rank   5.672 s/step -> 0.3545 s/seq   (20.5x)
+  //     12B plain @  2048, 4 ranks  0.510 s/step -> 0.1275 s/seq   (7.37x the 1b)
+  //
+  // Fitting t(n) = A*n + B*n^2 to the two 1b points gives A = 0.0141 and
+  // B = 0.0033 s/seq at 2048, i.e. 19 % quadratic.  Scaling the quadratic term by
+  // global-layers x hidden, (8 x 3840) / (4.3 x 1152) = 6.16x, and the linear
+  // term by the measured 7.65x:
+  //
+  //     12B @ 17408 ~ 2.36 s/seq -> ~9.4 s/step on 4 GPUs
+  //
+  // Cross-check by the cruder route, 5.672 x 7.37 / 4 = 10.4 s/step.  So 9.5-10.5
+  // s/step, 24-27 h of training plus 2-3 h of evaluation at this context length.
+  // Declared at 36 h: the estimate carries real uncertainty, and a walltime cannot
+  // be raised after the fact.
+  //
+  // MEMORY: `batch_size` 4 over 4 ranks is micro-batch ONE, so the logits are
+  // 1 x 17408 x 262208 x 2 = 9.1 GB in bf16 plus the fp32 cross-entropy copy --
+  // comfortable on a 180 GiB B200, and the reason this is not run on A100s.
+  // Reason from the micro-batch, never from `batch_size` (SCALING.md decision 6).
+  //
+  // COMPARABILITY: 16 epochs, seed 0, effective batch 16, `lr` 2e-4 on the
+  // declared width schedule -- identical to the GTLM arm it is the baseline for.
+  // `bias_lr` is carried for the record but is inert: `plain_llm` builds no
+  // `graph_bias` modules.  The only differences from `scale_12b_gams_blr_gtlm`
+  // are the data encoding and the context length, which is the contrast.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_12b_gams_serialised",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 1,
+      "partition": "frida",
+      "account": "lkm",
+      "gpus": ["B200", "B300"],
+      "gpus_per_config": 4,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 32,
+      "mem": "512G",
+      "time": "36:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "cjvt/GaMS3-12B-Instruct",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls_serialised", "plain_llm": true, "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4, "accumulation_steps": 4}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 2e-4,
+  "bias_lr": 4e-3,
+  "train_token_budget": 0,
+  "num_epochs": 16,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

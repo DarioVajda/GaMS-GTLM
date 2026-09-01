@@ -1,0 +1,83 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_12b_probe4 — how long does a 12B step actually take, on 4 GPUs?
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_12b_probe4.jsonc
+  //
+  // Sizing the real 12B run by scaling the 1b measurement is a guess: the
+  // parameter ratio is ~12x but the layer count is 48 against 26, the hidden
+  // size 3,840 against 1,152, and none of that says what DDP's efficiency is on
+  // this model.  So it is measured, on the checkpoint and the arm the study
+  // actually runs, before ~4,632 optimizer steps are committed to it.
+  //
+  // 30 steps and no final evaluation.  One in-training eval fires at step 25
+  // over a 10 % dev subsample, which prices evaluation separately from
+  // training -- at 12B with a barely-trained adapter pass 2 generates for nearly
+  // every item, and that is the cost most likely to be underestimated.
+  //
+  // A run from this config has NO result and must never be read as one: it
+  // writes to its own results dir and `final_eval` is off.  Its twin
+  // `scale_12b_probe8.jsonc` is the same probe at 8 GPUs; the pair gives the
+  // DDP scaling factor, which is what decides how the real runs are sized.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_12b_probe4",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 1,
+      "partition": "frida",
+      "account": "lkm",
+      // B200/B300 only: a 12B in bf16 is ~24 GB of weights before activations,
+      // and the H100s here are the 80 GB part.  It would fit, but it would be
+      // measuring a different machine than the real runs use.
+      "gpus": ["B200", "B300"],
+      "gpus_per_config": 4,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      // 8 CPUs per rank, matching the single-GPU jobs: `num_workers: 4` is
+      // per-rank, so a 4-rank job with the old `cpus: 8` would contend for
+      // cores with its own dataloaders and mis-time the thing it is measuring.
+      "cpus": 32,
+      "mem": "512G",
+      "time": "02:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "cjvt/GaMS3-12B-Instruct",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls", "plain_llm": false, "spd": true, "magnetic": true, "max_length": 2048, "batch_size": 4, "accumulation_steps": 4}
+  ],
+  "seed": 0,
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 5e-4,
+  "bias_lr": 1e-2,
+
+  "train_token_budget": 0,
+  "num_epochs": 1,
+  "max_steps": 30,
+  "eval_steps": 25,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.1,
+  "num_workers": 4,
+  "final_eval": false
+}

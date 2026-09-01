@@ -1,0 +1,117 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUPERSEDED — DO NOT SUBMIT.  Kept only as the record of a mistake.
+  //
+  // This config was written to move the 12B control onto idle A100-80GBs so the
+  // GTLM gate could take the earlier Blackwell window.  The array element then
+  // cancelled to free that window was identified from the `resolved/` filenames,
+  // which do NOT match the sweep's array ordering: task `_0` is the control and
+  // task `_1` was the gate.  Cancelling `_1` cancelled the gate and left two
+  // copies of the control running.  See SCALING.md decision 9.
+  //
+  // The surviving array element ran the control to completion on 4 x B200, so
+  // the control this file describes is redundant and its job was cancelled.  The
+  // gate was resubmitted as `scale_12b_gams_blr_gtlm.jsonc`.  Both arms of the
+  // 12B retrieval contrast are on B200, which is better than this plan was.
+  //
+  // ── original header follows ──────────────────────────────────────────────
+  //
+  // scale_12b_gams_blr_ctrl — the 12B NO-RETRIEVAL CONTROL, peeled off the
+  // `scale_12b_gams_blr` array so it can run on idle A100-80GBs.
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_12b_gams_blr_ctrl.jsonc
+  //
+  // WHY IT IS SPLIT OUT.  `scale_12b_gams_blr` was submitted as a two-element
+  // array, both elements asking for 4x B200/B300.  Every Blackwell card in the
+  // partition is allocated, and the scheduler put the two elements in separate
+  // windows -- the control at ~07:51 and the GTLM gate at ~11:52.  Meanwhile
+  // `ana` has 5 free A100-80GBs.  Moving the control there does two things:
+  // it banks the control ~14 h earlier, and it frees the gate to take the
+  // EARLIER of the two Blackwell windows instead of the later one.
+  //
+  // WHAT IT COSTS.  The retrieval contrast at 12B is then measured across two
+  // GPU generations: GTLM on B200, control on A100-80GB.  That is not free, but
+  // it is the smallest available price and it is already paid at 1b, where the
+  // GTLM anchor ran on B200 and the no-retrieval control on axa's A100-40GBs.
+  // Everything that the comparison actually rests on is held fixed -- bf16,
+  // effective batch 16, 9,264 steps, seed 0, one code path, one dataset pair.
+  // The one real difference is that `[eval] token budgets` scales the eval and
+  // generation batch sizes by detected device memory (B200 178 GiB -> x2.26,
+  // A100 80 GiB -> x1.0), so evaluation batches differently.  Greedy decoding is
+  // batch-invariant up to floating-point associativity; `eval_oom_splits` and
+  // `final_eval_oom_splits` are recorded either way, and if they come back
+  // non-zero this run is repeated on Blackwell rather than reported.
+  //
+  // Resources: `gpus` is given as the gres TYPE `A100_80GB:4`, not a brand
+  // list.  A list renders as `--gres gpu:4 --constraint GPU_BRD:A100|...`, and
+  // `GPU_BRD:A100` also matches `axa`, whose cards are 40 GB and would OOM a
+  // 12B.  Naming the gres type pins it to the 80 GB partition of the cluster.
+  //
+  // Memory, from the micro-batch and never from `batch_size`: DDP factorises
+  // 16 over 4 ranks to micro-batch 4, so weights 23.5 GB (11.77 B bf16) + the
+  // 4 x 2048 x 262208 logits and their fp32 cross-entropy copy, with gradient
+  // checkpointing on (`config.py` default) holding activations down.  ~50 GB of
+  // 80.  At the configured `batch_size` of 16 it would not fit; at the
+  // post-DDP micro-batch it does.
+  //
+  // Cost: 0.51 s/step measured on 4x B200 (job 133595_1, 4,632 steps in 37:40).
+  // Ampere is roughly 3x slower for this shape, so ~4 h of training plus ~1 h of
+  // evaluation.  Declared at 8 h: honest enough to backfill, with room for the
+  // Ampere estimate to be wrong, and a walltime cannot be raised after the fact.
+  //
+  // Hyperparameters are exactly those of `scale_12b_gams_blr` element _1 -- the
+  // declared width schedule, `lr` 2e-4.  `bias_lr` is carried for the record but
+  // is inert here: `plain_llm` builds no `graph_bias` modules for it to touch.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_12b_gams_blr_ctrl",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 1,
+      "partition": "frida",
+      "account": "lkm",
+      "gpus": "A100_80GB:4",
+      "gpus_per_config": 4,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 32,
+      "mem": "256G",
+      "time": "08:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "cjvt/GaMS3-12B-Instruct",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": true, "spd": false, "magnetic": false, "max_length": 2048, "batch_size": 16, "accumulation_steps": 1}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 2e-4,
+  "bias_lr": 4e-3,
+  "train_token_budget": 0,
+  "num_epochs": 16,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}

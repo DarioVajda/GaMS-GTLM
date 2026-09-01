@@ -1,0 +1,106 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // scale_1b — STEP 0 of the scaling study (train/SCALING.md).
+  //
+  //     .venv/bin/python -m sweep train train/configs/scale_1b.jsonc
+  //
+  // The same six arms as `arms_v3`, at ONE seed, on the CURRENT corpus.
+  //
+  // Why this has to be re-run at all.  `arms_v3` was trained on the corpus
+  // archived at `data/datasets/archive/2026-08-23_arms_v3`, and the determinism
+  // work has changed it since.  Measured against that archive, item ids and
+  // splits are identical (9,266 / 1,040 / 2,184, nothing added or dropped) and
+  // the change is mostly cosmetic -- 8,712 of 8,728 differing train balls differ
+  // by EDGE ORDER alone, which a permutation-equivariant model does not see.
+  // Two parts of it are not cosmetic:
+  //
+  //   * the SERIALISED input is the flattened ball, so edge order IS content
+  //     there: 8,728 of 9,266 serialised training prompts differ textually;
+  //   * 128 train and 33 test items have different GOLD, 123 of them T21 (the
+  //     set-valued sort key), and T21 is one of the weaker types.
+  //
+  // So `arms_v3`'s T21 column is scored against gold that no longer exists, and
+  // its serialised arms trained on prompts that no longer exist.  Every number
+  // the scaling study is compared against has to come from the current corpus.
+  //
+  // ONE seed, deliberately: steps 0-3 are the research phase and every decision
+  // they gate is a large effect (see SCALING.md's pre-registered thresholds).
+  // Seeds 1 and 2 are step 4, and only if the findings are worth confirming.
+  //
+  // Six arms rather than the two the gate strictly needs.  The four extra ones
+  // are ~7 h of wall clock that runs CONCURRENTLY with the two, costing nothing
+  // in elapsed time, and they buy the whole contrast table on the current
+  // corpus -- including the headline, which is otherwise stranded on a corpus
+  // that no longer exists.
+  //
+  //   #  configuration              input                stack  biases
+  //   1  GTLM (spd + magnetic)      balls               gtlm   spd+magnetic
+  //   2  GTLM, no bias              balls               gtlm   none
+  //   3  serialised — GTLM stack    balls_serialised    gtlm   none
+  //   4  serialised — plain stack   balls_serialised    plain  n/a
+  //   5  no retrieval — plain stack balls_noretrieval   plain  n/a
+  //   6  no retrieval — GTLM stack  balls_noretrieval   gtlm   none
+  //
+  // One GPU per config, six at a time: these costs are known from
+  // `arms_v3_timing` (2,428 s/epoch for arm 1, 3,325 s for the long-context
+  // arms) and the whole sweep fits in one wall-clock afternoon without DDP.
+  // The GPU budget goes to the 12B cells, which need it and where it is
+  // measured rather than assumed.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "scale_1b",
+  "results_dir": "train/results",
+
+  "execution": {
+    "mode": "sbatch",
+    "sbatch": {
+      "granularity": "per_config",
+      "max_concurrent": 6,
+      "partition": "frida",
+      "account": "lkm",
+      "gpus": ["H100", "B200", "B300"],
+      "gpus_per_config": 1,
+      "container": "/shared/workspace/povejmo/containers/transformers_deepspeed_latest.sqsh",
+      "mounts": "/shared:/shared",
+      "cpus": 8,
+      "mem": "128G",
+      "time": "16:00:00"
+    }
+  },
+
+  "mode": "train",
+  "model_name": "google/gemma-3-1b-it",
+  "types": "",
+  "items_root": "data/datasets/generated",
+
+  "arm": [
+    {"data_root": "data/datasets/balls",             "plain_llm": false, "spd": true,  "magnetic": true,  "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls",             "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_serialised",  "plain_llm": false, "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_serialised",  "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 17408, "batch_size": 4,  "accumulation_steps": 4},
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": true,  "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1},
+    {"data_root": "data/datasets/balls_noretrieval", "plain_llm": false, "spd": false, "magnetic": false, "max_length": 2048,  "batch_size": 16, "accumulation_steps": 1}
+  ],
+  "seed": [0],
+
+  "rrwp": false,
+  "max_spd": 8,
+  "magnetic_dim": 32,
+  "magnetic_q": 0.25,
+  "magnetic_m": 0,
+  "k_hop": 0,
+
+  "impl": "v2-flex",
+  "flex_compile_mode": "default",
+  "flex_cache_size_limit": 512,
+  "dtype": "bf16",
+  "lora": true,
+  "lora_r": 32,
+  "lr": 5e-4,
+  "bias_lr": 1e-2,
+  "train_token_budget": 0,
+  "num_epochs": 8,
+  "eval_steps": 400,
+  "eval_max_batch": 16,
+  "dev_subsample": 0.5,
+  "num_workers": 4
+}
