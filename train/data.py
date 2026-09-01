@@ -153,6 +153,15 @@ def _read_items(path, rows):
                 f"authority for the target.\n"
                 f"  ball:    {row['answer']!r}\n  dataset: {src['answer']!r}")
         items.append({"id": src["id"], "type": src["type"], "band": src["band"],
+                      # The generalisation tier (QA_DATASET_DESIGN D12): "core"
+                      # (seen type, seen phrasing), "A" (unseen phrasing) or "C"
+                      # (unseen relation).  train and dev are 100 % core; the
+                      # whole generalisation claim lives in the test split's A
+                      # and C slices, so it travels with the item and is
+                      # reported per tier rather than being invisible inside the
+                      # aggregate.  Defaulted, so a corpus built before the
+                      # field existed still loads.
+                      "tier": src.get("tier") or "core",
                       "negative": bool(src["negative"]), "answer": src["answer"],
                       "gold_items": src.get("gold_items"),
                       "grading": src["grading"]})
