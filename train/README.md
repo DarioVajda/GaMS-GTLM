@@ -184,6 +184,42 @@ Identical in every arm, so that the matrix below measures the arms and nothing e
   end of training, so without `run.py`'s `EvaluateOnFinalStep` the last 232 steps
   would be trained and silently discarded.
 
+## Running on more than one GPU
+
+`execution.sbatch.gpus_per_config: N` in a sweep config launches the run under
+`torchrun --standalone --nproc_per_node N`. Everything above still holds, because two
+invariants are enforced rather than hoped for.
+
+* **The effective batch stays 16, whatever N is.** HF multiplies whatever it is given
+  by the world size, so `distributed.ddp_factorisation` divides the declared product
+  by N first and hands over the remainder: `4 × 4` on one GPU becomes `4 × 1 × 4` on
+  four and `2 × 1 × 8` on eight. `max_steps` is derived from the product, so the step
+  count and the LR schedule are unchanged too. A product that does not divide by N
+  raises instead of rounding.
+* **Evaluation is invariant item for item.** The evaluator's batching is a pure
+  function of the split's lengths, so every rank derives the *same* batch list and
+  runs a strided slice of it — nothing is re-padded, and the merged verdicts are the
+  single-GPU verdicts exactly. (Sharding *items* instead would have re-padded almost
+  every batch, and `evaluate.py` is explicit that a re-grouping can flip a bf16
+  near-tie.) Rank 0 alone writes the prediction dump and the run record.
+
+Verified, not assumed:
+
+```bash
+sbatch train/slurm/run_ddp_check.sbatch     # world=1 vs world=4 on the same node
+```
+
+It scores a 96-item slice at both world sizes and diffs `success`, `pass1`, `reason`
+and the decoded string, asserts the factorisation table for every rank count, and
+finishes with a 20-step DDP training smoke. On 4×B200 the two runs agreed on
+**96/96** items with pass-1 loss identical to six decimals.
+
+**Training is statistically, not bitwise, invariant.** HF's distributed sampler splits
+each global batch across ranks, so the same items land in different micro-batches and
+float addition is not associative. Step count, effective batch, LR schedule and data
+order are all preserved; the micro-batch composition is not. Runs meant to be compared
+should therefore share a harness — which is why `SCALING.md`'s cells all do.
+
 ## Memory: three things that make long balls trainable
 
 * **Batches are LEFT-padded** (`batching.LeftPadCollator`). `compute_loss` slices the

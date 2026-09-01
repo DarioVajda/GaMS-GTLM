@@ -23,9 +23,9 @@ from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           TrainerCallback, TrainingArguments, set_seed)
 
 from gtlm.utils import GraphCollatorV2, GraphTrainerV2, set_wandb_project
-from gtlm.train import (select_active_params, print_trainable_parameters,
-                        get_device)
+from gtlm.train import select_active_params, print_trainable_parameters
 
+from . import distributed as dd
 from .config import EXPERIMENT_NAME, CHECKPOINT_ROOT
 from .data import load_data, load_dev_subsample
 from .batching import LeftPadCollator, PlainCollator
@@ -242,6 +242,25 @@ def _per_type(metrics, prefix):
             if k.startswith(f"{prefix}_accuracy_T")}
 
 
+def _per_tier(metrics, prefix):
+    """Accuracy, item count and false-refusal rate, per generalisation tier.
+
+    The study's headline question is whether the model generalises, and the test
+    split is 73 % core / 22 % A / 5 % C -- so a total collapse on the unseen
+    relation costs the aggregate five points and is invisible in it.  Recorded
+    per run, so `report_arms` can table it without re-reading the prediction
+    dumps.
+    """
+    out = {}
+    for k, v in metrics.items():
+        for field, tag in (("accuracy", f"{prefix}_accuracy_tier_"),
+                           ("n", f"{prefix}_n_tier_"),
+                           ("false_sentinel", f"{prefix}_false_sentinel_tier_")):
+            if k.startswith(tag):
+                out.setdefault(k[len(tag):], {})[field] = v
+    return out
+
+
 def _convergence(trainer):
     """Was the run still improving when it stopped?  (The pre-registered rule.)
 
@@ -290,7 +309,11 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
     if cfg.wandb_project:
         set_wandb_project(cfg.wandb_project)
 
-    device = get_device()
+    # BEFORE the model is built: the weights are moved to a device below, and
+    # `TrainingArguments` -- which would otherwise be the thing that pins each
+    # rank's GPU -- is not constructed until well after that point.
+    dd.init_distributed()
+    device = dd.device()
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
     train, val, test = load_data(cfg, tokenizer)
     # A fixed, stratified ~50 % of dev, from a CONSTANT seed, for the in-training
@@ -358,9 +381,16 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
     steps_per_epoch = max(1, sizes[0] // effective)
     derived = steps_per_epoch * cfg.num_epochs
     max_steps = cfg.max_steps if cfg.max_steps > 0 else derived
+    # `effective` is world-size INVARIANT and everything above is derived from
+    # it, so the step count and the LR schedule are the same on any rank count.
+    # What the world size changes is only how that batch is split up, which is a
+    # memory/throughput choice -- see `distributed.ddp_factorisation`.
+    n_ranks = dd.world_size()
+    micro, accum = dd.ddp_factorisation(effective, cfg.batch_size, n_ranks)
     print(f"[schedule] effective batch {effective} "
-          f"({cfg.batch_size} x {cfg.accumulation_steps}), "
-          f"{steps_per_epoch} optimizer steps/epoch x {cfg.num_epochs} epochs "
+          f"({micro} x {accum}"
+          + (f" x {n_ranks} ranks" if n_ranks > 1 else "")
+          + f"), {steps_per_epoch} optimizer steps/epoch x {cfg.num_epochs} epochs "
           f"= {derived}"
           + (f", CAPPED at --max-steps {max_steps}" if max_steps != derived else "")
           + f"; eval every {cfg.eval_steps} + the final step", flush=True)
@@ -372,9 +402,9 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
         # write wherever the job happened to cd to.
         output_dir=os.path.join(CHECKPOINT_ROOT, EXPERIMENT_NAME, internal_run),
         logging_steps=5,
-        per_device_train_batch_size=cfg.batch_size,
-        per_device_eval_batch_size=cfg.batch_size,
-        gradient_accumulation_steps=cfg.accumulation_steps,
+        per_device_train_batch_size=micro,
+        per_device_eval_batch_size=micro,
+        gradient_accumulation_steps=accum,
         dataloader_drop_last=True,
         gradient_checkpointing=gc,
         gradient_checkpointing_kwargs={"use_reentrant": False} if gc else None,
@@ -392,6 +422,12 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
         metric_for_best_model=METRIC, greater_is_better=True,
         save_total_limit=1, load_best_model_at_end=True,
         seed=cfg.seed, data_seed=cfg.seed,
+        # Every trainable tensor -- the LoRA adapters on all layers, and the
+        # graph-bias tensors on the bias arm -- takes part in every forward, so
+        # the reducer needs no unused-parameter search.  Stated rather than left
+        # to HF's default, which infers it from `is_gradient_checkpointing` on a
+        # `PreTrainedModel` and this model is a PEFT wrapper.
+        ddp_find_unused_parameters=False,
     )
 
     trainer = GradeTrainer(
@@ -425,6 +461,7 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
         "test_accuracy": test_metrics.get("test_accuracy"),
         "test_f1": test_metrics.get("test_f1"),
         "test_accuracy_per_type": _per_type(test_metrics, "test"),
+        "test_per_tier": _per_tier(test_metrics, "test"),
         "test_accuracy_positive": test_metrics.get("test_accuracy_positive"),
         "test_accuracy_negative": test_metrics.get("test_accuracy_negative"),
         "test_reasons": {k[len("test_reason_"):]: v for k, v in test_metrics.items()
@@ -447,21 +484,37 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
         },
         "convergence": convergence,
     }
-    base = _baselines(cfg).get("test", {})
-    print(f"[results] {cfg.input_tag()} / {cfg.arm()} "
-          f"types={cfg.type_list() or 'ALL'} "
-          f"test_accuracy={results['test_accuracy']} "
-          f"(best-val={results['best_val_accuracy']}, "
-          f"majority-class baseline={base.get('majority_overall')})")
-    for t, v in sorted(results["test_accuracy_per_type"].items()):
-        print(f"    {t:>5}  {v:.4f}")
+    # ONE record per run, from rank 0.  Every rank holds the same `results` --
+    # the evaluator all-gathers -- so an unguarded append would file the run
+    # `n_ranks` times and silently weight it that much in every mean.
+    if dd.is_main():
+        base = _baselines(cfg).get("test", {})
+        print(f"[results] {cfg.input_tag()} / {cfg.arm()} "
+              f"types={cfg.type_list() or 'ALL'} "
+              f"test_accuracy={results['test_accuracy']} "
+              f"(best-val={results['best_val_accuracy']}, "
+              f"majority-class baseline={base.get('majority_overall')})")
+        for t, v in sorted(results["test_accuracy_per_type"].items()):
+            print(f"    {t:>5}  {v:.4f}")
+        for tier, d in sorted((results.get("test_per_tier") or {}).items()):
+            print(f"    tier {tier:>4}  acc {d.get('accuracy', float('nan')):.4f}"
+                  f"  n={int(d.get('n', 0))}"
+                  f"  false-sentinel(pos) "
+                  f"{d.get('false_sentinel', float('nan')):.4f}")
 
-    _save_train_record(cfg, internal_run, sizes, results, runs_jsonl=runs_jsonl,
-                       sweep_meta=sweep_meta,
-                       stack_meta={"dev_subsample": dev_subsample,
-                                   "eval_token_budget_used": eval_budget,
-                                   "gen_token_budget_used": gen_budget,
-                                   "device": budget_note})
+        _save_train_record(cfg, internal_run, sizes, results, runs_jsonl=runs_jsonl,
+                           sweep_meta=sweep_meta,
+                           stack_meta={"dev_subsample": dev_subsample,
+                                       "eval_token_budget_used": eval_budget,
+                                       "gen_token_budget_used": gen_budget,
+                                       "device": budget_note,
+                                       # The factorisation actually run, so a
+                                       # DDP run and a single-GPU one are
+                                       # distinguishable in the results file.
+                                       "world_size": n_ranks,
+                                       "per_device_batch_size": micro,
+                                       "accumulation_steps_per_rank": accum})
+    dd.barrier()
     del model
     if device.type == "cuda":
         torch.cuda.empty_cache()

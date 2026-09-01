@@ -55,10 +55,11 @@ import torch
 from torch.nn.attention import sdpa_kernel, SDPBackend
 from transformers import GenerationConfig
 
+from . import distributed as dd
 from .config import ANSWER_PREFIX
 from .chat import stop_token_ids
 from .batching import to_left_padding
-from .qa_contract import grade
+from .qa_contract import grade, SENTINEL
 from ._log import quiet_repeated_sliding_window_warning
 from .batching import packed_lengths
 
@@ -124,7 +125,7 @@ def _round_down(value, multiple=1024):
 
 
 def scaled_budgets(eval_budget=EVAL_TOKEN_BUDGET, gen_budget=GEN_TOKEN_BUDGET,
-                   device_index=0):
+                   device_index=None):
     """Rescale the A100-80GB reference budgets by THIS device's memory.
 
     `(eval_budget, gen_budget, note)`.  A constant token budget is a constant
@@ -141,6 +142,10 @@ def scaled_budgets(eval_budget=EVAL_TOKEN_BUDGET, gen_budget=GEN_TOKEN_BUDGET,
     """
     if not torch.cuda.is_available():
         return eval_budget, gen_budget, "cpu: budgets unscaled"
+    # THIS rank's card, not device 0.  Same answer on a homogeneous node, but
+    # reading device 0 from every rank is only accidentally right.
+    if device_index is None:
+        device_index = dd.local_rank()
     total_gib = torch.cuda.get_device_properties(device_index).total_memory / 2 ** 30
     scale = total_gib / REFERENCE_TOTAL_GIB
     ev = _round_down(min(max(eval_budget * scale, EVAL_BUDGET_CLAMP[0]),
@@ -428,10 +433,17 @@ class GradeEvaluator:
                 acc["loss_n"] += int(flat.sum())
             del out
 
-        for idxs in token_budget_batches(self.lengths(split, "ds"), self.eval_budget,
-                                         self.max_batch):
+        # The batch LIST is computed identically on every rank -- it is a pure
+        # function of the split's lengths -- and each rank runs a strided slice of
+        # it.  So every batch is padded exactly as it would have been on one GPU,
+        # and the merged verdicts are the single-GPU verdicts item for item.
+        batches = token_budget_batches(self.lengths(split, "ds"), self.eval_budget,
+                                       self.max_batch)
+        for idxs in dd.shard(batches):
             self._with_oom_retry(idxs, run, "pass 1")
-        return ok, (acc["loss_sum"] / acc["loss_n"] if acc["loss_n"] else float("nan"))
+        ok = dd.merge_flags(ok, len(ds))
+        loss_sum, loss_n = dd.sum_numbers(acc["loss_sum"], acc["loss_n"])
+        return ok, (loss_sum / loss_n if loss_n else float("nan"))
 
     # ── pass 2: greedy generation ──────────────────────────────────────────
     def pass2(self, model, split, idxs):
@@ -474,10 +486,14 @@ class GradeEvaluator:
                 # is not in the continuation; the grader parses a full line.
                 preds[i] = ANSWER_PREFIX.lstrip("\n") + text
 
-        for group in token_budget_batches(lengths, self.gen_budget, self.max_batch,
-                                          group_keys=keys):
+        # Sharded exactly as pass 1 is, and for the same reason: `idxs` is the
+        # gathered pass-1 miss list, so every rank forms the identical groups and
+        # runs a strided slice of them.  The per-rank `preds` have disjoint keys.
+        groups = token_budget_batches(lengths, self.gen_budget, self.max_batch,
+                                      group_keys=keys)
+        for group in dd.shard(groups):
             self._with_oom_retry([idxs[g] for g in group], run, "pass 2")
-        return preds, state["truncated"]
+        return dd.merge_dicts(preds), int(dd.sum_numbers(state["truncated"]))
 
     # ── the join, and the report ───────────────────────────────────────────
     def score(self, model, ds, fast=True, generate_all=False):
@@ -522,13 +538,20 @@ class GradeEvaluator:
                 r = {"success": False, "f1": 0.0, "reason": "token_mismatch",
                      "pass1": False, "prediction": None}
             r.update(id=item["id"], type=item["type"], band=item["band"],
+                     tier=item.get("tier", "core"),
                      negative=bool(item.get("negative")), gold=item["answer"])
             rows.append(r)
-        timing["oom_splits"] = self.oom_splits
-        print(f"[eval] {split.name}: pass1 {timing['pass1_s']:.1f} s, "
-              f"pass2 {timing['pass2_s']:.1f} s over {len(need)} items"
-              + (f", {self.oom_splits} OOM fallback(s)" if self.oom_splits else ""),
-              flush=True)
+        # Summed across ranks: an OOM fallback anywhere means the reported number
+        # depends on a grouping that was not pre-declared, and which rank hit it
+        # is not the interesting part.
+        timing["oom_splits"] = int(dd.sum_numbers(self.oom_splits))
+        if dd.is_main():
+            print(f"[eval] {split.name}: pass1 {timing['pass1_s']:.1f} s, "
+                  f"pass2 {timing['pass2_s']:.1f} s over {len(need)} items"
+                  + (f", {timing['oom_splits']} OOM fallback(s)"
+                     if timing["oom_splits"] else "")
+                  + (f" [{dd.world_size()} ranks]" if dd.is_distributed() else ""),
+                  flush=True)
         return rows, loss, len(need), truncated, timing
 
     def evaluate(self, model, ds, prefix="eval", fast=True, dump_tag=None,
@@ -542,6 +565,10 @@ class GradeEvaluator:
                              timing)
 
     def _dump(self, rows, tag):
+        # Rank 0 only.  `rows` is identical on every rank by this point, so the
+        # other ranks would write the same bytes to the same path concurrently.
+        if not dd.is_main():
+            return
         os.makedirs(self.dump_dir, exist_ok=True)
         path = os.path.join(self.dump_dir, f"{tag}.jsonl")
         with open(path, "w", encoding="utf-8") as f:
@@ -573,6 +600,23 @@ class GradeEvaluator:
              f"{prefix}_fast": int(fast)}
         for t in sorted({r["type"] for r in rows}):
             m[f"{prefix}_accuracy_{t}"] = pct(r for r in rows if r["type"] == t)
+        # Per TIER, which is the whole generalisation claim: the aggregate is
+        # ~76 % core by count, so a collapse on unseen phrasings (A) or the
+        # unseen relation (C) moves it by a couple of points and is invisible.
+        #
+        # `false_sentinel` alongside it, on POSITIVES only: the dominant Tier A
+        # failure is not a wrong answer but a refusal -- the model matches a
+        # question to a known frame and emits `ni podatka v bazi` when none
+        # fires.  Accuracy alone cannot tell that apart from ordinary error, and
+        # the two call for completely different fixes.
+        for tier in sorted({r.get("tier", "core") for r in rows}):
+            sel = [r for r in rows if r.get("tier", "core") == tier]
+            m[f"{prefix}_accuracy_tier_{tier}"] = pct(sel)
+            m[f"{prefix}_n_tier_{tier}"] = len(sel)
+            pos = [r for r in sel if not r["negative"]]
+            m[f"{prefix}_false_sentinel_tier_{tier}"] = (
+                sum(SENTINEL in (r["prediction"] or "") for r in pos) / len(pos)
+                if pos else float("nan"))
         for reason, c in collections.Counter(r["reason"] for r in rows).items():
             m[f"{prefix}_reason_{reason}"] = c
         return m
