@@ -28,6 +28,16 @@ repo=$(dirname -- "$here")
 
 [ -d "$repo/ask" ] || { echo "ask: missing $repo/ask" >&2; exit 127; }
 
+# A self-contained copy of this tree -- one staged for people who cannot read
+# the povejmo workspace -- is recognised by carrying its own `hf/`.  In one, the
+# umask is relaxed to 022, and it must happen HERE, above everything that runs a
+# python: the interpreter probe below imports numpy and torch, which writes
+# several hundred `__pycache__` files, and under the default 027 every one of
+# them lands unreadable to the next person.  Same reason the shared
+# `ask/cache/<gpu>` needs it -- what one session compiles, the next must read.
+shared_copy=0
+[ -d "$repo/hf" ] && { shared_copy=1; umask 022; }
+
 demo=0
 for a in "$@"; do [ "$a" = "--demo" ] && demo=1; done
 
@@ -59,7 +69,21 @@ fi
 # The extractor (cjvt/GaMS3-12B-Instruct) lives in the shared cache, not in
 # ~/.cache -- data/analysis/extract_in_container.sh points there for the same
 # reason.  Only a default: an HF_HOME already in the environment wins.
-export HF_HOME="${HF_HOME:-/shared/workspace/povejmo/huggingface_cache}"
+#
+# A self-contained copy of this tree carries its own `hf/` and that wins over the
+# shared cache -- the povejmo workspace is mode 2770 and root-owned, so a copy
+# staged for someone outside the group cannot read it.  Such a copy is offline by
+# construction (nothing else is downloadable into it), so HF_HUB_OFFLINE goes
+# with it: without it every load pays a hub round-trip that can only time out.
+#
+# `shared_copy` is decided at the top, where it also sets the umask -- the two
+# uses are the same question asked once.
+if [ "$shared_copy" = 1 ]; then
+    export HF_HOME="${HF_HOME:-$repo/hf}"
+    export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
+else
+    export HF_HOME="${HF_HOME:-/shared/workspace/povejmo/huggingface_cache}"
+fi
 
 # One session asks questions of wildly different sizes -- 1.3 k tokens at the
 # median, 14 k at the top -- so the caching allocator ends up holding large

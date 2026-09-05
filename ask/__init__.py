@@ -15,8 +15,11 @@ exercised end to end without a GPU, and filling in a real stage is a one-line
 swap.  See `ask/PLAN.md` for the decisions behind all of this.
 """
 import os
+import re
 import json
 import time
+import socket
+import getpass
 import datetime
 import itertools
 from dataclasses import dataclass, field
@@ -223,12 +226,79 @@ class Pipeline:
         return res
 
 
+def session_user():
+    """Who is asking -- as the *cluster* knows them, not as the process does.
+
+    `getpass.getuser()` is wrong in the one place it matters most.  A pyxis /
+    enroot container runs its shell as root and maps writes back to the
+    submitting user, so inside one every asker reports as `root`: they would
+    share a single log file, and the record of who asked what -- the reason this
+    is per-user at all -- would be lost precisely when several people are
+    testing.  Slurm sets `SLURM_JOB_USER` in the job environment and it survives
+    into the container, so it is asked first and is authoritative when present.
+
+    The fallbacks are for a plain shell: the passwd entry for our uid, then
+    `getpass`, then the bare uid.  A numeric answer is ugly but still
+    attributable, which an exception here would not be -- nothing about
+    identifying the asker is worth losing their question over.
+    """
+    def clean(name):
+        """A name safe to put in a filename, or `None`.
+
+        `SLURM_JOB_USER` is an ordinary environment variable, so it is whatever
+        the caller says it is -- `../../x` would put the day's log outside
+        `ask/logs/`.  Real accounts here look like `luka.dragar.rag`, so the
+        allowed set is letters, digits, dot, dash and underscore, with no
+        leading dot: enough for every username on this cluster and nothing that
+        can traverse.  Anything else falls through to the next source rather
+        than being silently mangled into a neighbouring user's file.
+        """
+        if name and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+            return name
+        return None
+
+    name = clean(os.environ.get("SLURM_JOB_USER"))
+    if name:
+        return name
+    try:
+        import pwd
+        name = clean(pwd.getpwuid(os.getuid()).pw_name)
+        if name:
+            return name
+    except Exception:                       # noqa: BLE001 -- container /etc/passwd
+        pass
+    try:
+        name = clean(getpass.getuser())
+        if name:
+            return name
+    except Exception:                       # noqa: BLE001 -- no passwd, no $USER
+        pass
+    return f"uid{os.getuid()}"
+
+
 def log(result, path=None):
-    """Append one line per question (D14).  `ask/logs/` is gitignored."""
+    """Append one line per question (D14).  `ask/logs/` is gitignored.
+
+    **One file per user per day**, not one per day.  A checkout can be shared
+    read-only with people outside the owning group, and then `ask/logs/` is the
+    one directory a session must write to.  A single `<date>.jsonl` makes the
+    first asker its owner at whatever their umask says -- 0644 in practice --
+    and the second asker of that day cannot append to it.  Putting the user in
+    the name means concurrent sessions never contend for one inode, and the
+    day's questions still glob together as `<date>.*.jsonl`.
+
+    The asker and the host go in the *record* as well as the filename.  The
+    filename is how the files stay separate on disk; the fields are what survive
+    `cat`, which is how these get read once there is more than one day of them.
+    """
     d = path or LOG_DIR
     os.makedirs(d, exist_ok=True)
     day = datetime.date.today().isoformat()
+    user = session_user()
     rec = result.to_json()
     rec["at"] = datetime.datetime.now().isoformat(timespec="seconds")
-    with open(os.path.join(d, f"{day}.jsonl"), "a", encoding="utf-8") as f:
+    rec["user"] = user
+    rec["host"] = socket.gethostname()
+    name = f"{day}.{user}.jsonl"
+    with open(os.path.join(d, name), "a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
