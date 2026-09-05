@@ -10,9 +10,12 @@
 set -uo pipefail
 ROOT=/shared/workspace/povejmo/gams_gtlm
 BALLS="$ROOT/data/datasets/balls"
-RUNS_JSONL="$ROOT/train/results/preflight_runs.jsonl"
+RUNS_JSONL="${RUNS_JSONL:-$ROOT/train/results/preflight_runs.jsonl}"
 STAGES=",${1:-1,2,3,4,5,6},"
-PY="$ROOT/.venv/bin/python"
+# Overridable so the same stages can run against the aarch64 venv on a GH200
+# (`.venv-aarch64`, no container -- gh1/gh2 are already py3.10).  Unset, this is
+# byte-identical to what it was: the x86 venv the sweep runs under.
+PY="${PY:-$ROOT/.venv/bin/python}"
 cd "$ROOT"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
 "$PY" -c "import torch;print(\"torch\",torch.__version__,torch.cuda.get_device_name(0))"
