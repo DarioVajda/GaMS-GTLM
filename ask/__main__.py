@@ -176,7 +176,14 @@ def ask_one(pipe, question, args, words=None):
         print(json.dumps(res.to_json(with_ball=args.show_ball),
                          ensure_ascii=False, indent=2))
     if not args.no_log:
-        ask.log(res)
+        # The log is a record, never a reason to lose an answer already given.
+        # D19 keeps a failed *question* from ending the session; this keeps a
+        # read-only or full `ask/logs/` from ending it either, which is what a
+        # checkout shared with someone outside the owning group runs into.
+        try:
+            ask.log(res)
+        except OSError as e:                     # noqa: BLE001 -- noted, not raised
+            u.note(f"vprašanja ni bilo mogoče zabeležiti: {e.strerror}")
     return res
 
 
@@ -237,6 +244,23 @@ def main(argv=None):
         stages = demo.DemoStages(speed=demo.FAST if args.fast else 1.0,
                                  precompiled=warm)
     else:
+        # D8 says this tool assumes a GPU in the terminal it runs in, and until
+        # now that was an assumption rather than a check: `backbone` falls back
+        # to `cpu` when CUDA is absent, so `ask` on a login node quietly starts
+        # pulling a 12B extractor and a 12B backbone into shared RAM.  That is
+        # not a slow answer, it is a login node someone else is also using.  The
+        # ordinary way to meet this is to forget the allocation, so say so and
+        # stop before anything loads.  `--demo` never gets here; it is the
+        # answer for a machine without a GPU.
+        import torch
+        if not torch.cuda.is_available():
+            u.fail("ni vidne GPU kartice -- `ask` nalozi dva 12B modela in "
+                   "tega na prijavnem vozliscu ne sme poceti.")
+            u.note("dodeli si GPU, npr.:  salloc -p dev -w ana "
+                   "--gres=gpu:A100_80GB:1 --cpus-per-task=8 --mem=128G "
+                   "-t 2:00:00")
+            u.note("brez GPU deluje simulacija:  ask --demo -i")
+            return 2
         # `--precompile` implies flex: the sweep's whole purpose is to fill
         # inductor's cache, and an eager model compiles nothing to fill it with.
         # Without this the default backend choice (no warm cache -> eager) makes
