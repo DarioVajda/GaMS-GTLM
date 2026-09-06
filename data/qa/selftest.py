@@ -4,18 +4,23 @@
     python -m qa.selftest                       # the store-free checks (C7, C16)
     python -m qa.selftest --dataset DIR         # everything, against a dataset
     python -m qa.selftest --dataset DIR --store S   # + the checks that need the graph
+    python -m qa.selftest --dataset DIR --balls DIR # + the checks that need the balls
 
 Which check is which:
 
   C6   Tier C leakage -- no training item anywhere contains `protipomenka`,
        `antonim` or `nasprotje`.  T16's entire value is that the relation is
-       unseen, so a leak does not degrade the result, it deletes it.
-  C7   the Slovene agreement table, the canonical orderings, and `sense_class`.
+       unseen, so a leak does not degrade the result, it deletes it.  Checked
+       over the WHOLE item, slot values included: Group H takes the relation as
+       a slot, so a held-out relation can enter training as a question's subject
+       rather than as its answer.
+  C7   the Slovene agreement table, the canonical orderings, the answer-label
+       renderers, `norm`'s idempotence, and `sense_class`.
   C9   run the grader over the gold answers themselves: every item must score
        success against its own gold.  Free, and the one test that validates the
        grading contract end to end.
-  C10  every gold matches its type's regex, and no multi-item gold contains its
-       own separator inside an item.
+  C10  every gold matches THE one shape of 0.9 -- there is no per-type regex
+       left -- no value contains ` | `, and no label contains a colon.
   C15  every gold is in its type's canonical order -- including the set-valued
        types whose order is not graded.  Grading tolerance is not a licence for
        non-canonical training data.
@@ -27,8 +32,17 @@ Which check is which:
   C18  D5b reproducibility: the pool is node-id sorted and the seed comes from
        the anchor's node code and nothing else.  Containment -- C18 (d) -- needs
        the written balls, so it lives in `qa/check_balls.py`.
-  C11  the split is lemma-disjoint (D11).
+  C11  the split is lemma-disjoint (D11), over EVERY lemma an item names rather
+       than over its seed.
   C13  the majority-class baseline for every type, reported beside the score.
+  C28  no POSITIVE item ships the single-node `ni v bazi` ball.  Needs --balls.
+
+C26 (constituent validity over T30/T34) and C27 (D5c is a no-op on word balls)
+are specified in QA_TASKS.md section 2 and are NOT here: neither has anything to
+assert yet.  C26 needs the MWE constituent accessor that does not exist, and C27
+needs D5c itself.  A check that runs over nothing passes over nothing, and would
+read in this list as coverage we do not have; each lands with the change that
+gives it something to check.
 """
 import os
 import re
@@ -36,7 +50,7 @@ import sys
 import argparse
 import collections
 
-from qa import sl, spec, grade, seeds, colloc_sampling
+from qa import sl, spec, grade, pairs, seeds, colloc_sampling
 
 FAIL = []
 
@@ -78,6 +92,37 @@ def c7_agreement():
     check("accusative frame", sl.pomen_agreement(3, "ima") == "ima 3 pomene")
 
 
+def c7_labels():
+    """The answer labels of 0.1, and the normalizer they are compared under.
+
+    These renderers used to produce a question's metalanguage, where a bug reads
+    as clumsy Slovene.  They now produce the ANSWER's labels, where the same bug
+    silently relabels gold -- so they get a fixture rather than a reviewer.
+    """
+    print("\nC7 -- the answer labels (0.1) and the normalizer")
+    check("nominal cell", sl.cell_label("tožilnik", "ednina") == "tožilnik ednine")
+    check("verb cell",
+          sl.person_label("preteklik", "1. oseba", "ednina") == "preteklik 1. osebe ednine")
+    check("verb cell, gendered",
+          sl.person_label("prihodnjik", "3. oseba", "množina", "ženski spol")
+          == "prihodnjik 3. osebe množine (ženski spol)")
+    check("18 nominal labels, all distinct", len(set(sl.GRID_LABELS)) == 18)
+    check("9 verb cells, all distinct", len(set(sl.PERSON_CELLS)) == 9)
+    # `rstrip(".")` can uncover whitespace the periods were hiding, and an
+    # allow-list is normalised once when written and again when compared -- so a
+    # normalizer that moves on the second application marks a correct answer
+    # wrong.  Observed on T19-000364.
+    fixture = ["  Ena   dva ...", "Trije.", "štiri", "Pet .. ", "ne-ni"]
+    check("norm is idempotent",
+          all(sl.norm(sl.norm(s)) == sl.norm(s) for s in fixture),
+          str([sl.norm(s) for s in fixture]))
+    # The round trip 0.1 rests on: render, parse, get the pairs back.
+    p = [["pomen 1", "razlaga: z dvopičjem"], ["pomen 2", "druga"]]
+    check("render/parse round-trips a value containing a colon",
+          grade.parse(pairs.render(p))
+          == sorted((sl.norm(k), sl.norm(v)) for k, v in p))
+
+
 def c7_sense_class(store):
     print("\nC7 -- sense_class fixture")
     # one placeholder, one fallback, one fallback-with-snippet, one defined
@@ -101,6 +146,33 @@ def load(dataset):
     return out
 
 
+def corpus_is_pairs(items):
+    """Precondition, not a numbered check: is this corpus in the 0.1 shape?
+
+    Every check below reads `gold_items` as `[oznaka, vrednost]` pairs.  Against
+    a pre-reformat corpus they do not fail cleanly -- they raise from inside a
+    comprehension, or worse, filter to nothing and pass over an empty list.  So
+    the shape is settled once, in one line, before anything is scored.
+    """
+    bad = collections.Counter()
+    for it in items:
+        if it.get("negative"):
+            continue
+        for g in it.get("gold_items") or []:
+            if not isinstance(g, (list, tuple)) or len(g) != 2:
+                bad[it["type"]] += 1
+                break
+    ok = check("gold_items are [oznaka, vrednost] pairs", not bad,
+               str(dict(bad.most_common(6))) if bad else "")
+    if not bad:
+        return True
+    print("    this corpus predates the labelled-pair rule (QA_TASKS.md 0.1). "
+          "Convert it with `python -m qa.migrate_pairs`, or rebuild it; the "
+          "checks below are skipped rather than run against a shape they cannot "
+          "read.")
+    return ok
+
+
 def c9_gold_grades(items, pre_ball=False):
     print("\nC9 -- the grader scores every gold answer as correct")
     bad = collections.Counter()
@@ -121,31 +193,34 @@ def c9_gold_grades(items, pre_ball=False):
           str(dict(bad.most_common(8))) if bad else detail)
 
 
-def c10_regex(items):
-    print("\nC10 -- every gold matches its type's regex, no separator inside an item")
+def c10_shape(items):
+    """One regex for all 34 types (0.9), and the two rules that keep it parseable.
+
+    There is no per-type regex left and no single-item exemption.  The value rule
+    is what the T19 and T33 seed filters must satisfy: a corpus sentence
+    containing ` | ` would split into two fields and take its label with it.
+    """
+    print("\nC10 -- THE one shape; no ` | ` inside a field, no colon inside a label")
+    shape = re.compile(spec.SHAPE)
     bad_re = collections.Counter()
     bad_sep = collections.Counter()
+    bad_label = collections.Counter()
     for it in items:
-        # Through `contract`, never off the row: the type-level fields live in
-        # `qa/spec.py` and a row carries only this item's own facts.
-        g = grade.contract(it)
         line = it["answer"].splitlines()[0]
         if it["negative"]:
             if line != spec.sentinel_line():
                 bad_re[it["type"]] += 1
             continue
-        if not re.match(g["regex"], line):
+        if not shape.match(line):
             bad_re[it["type"]] += 1
-        sep = g["sep"]
-        if sep and g["arity"] != 1:
-            seps = sep if isinstance(sep, (list, tuple)) else [sep]
-            for item in it["gold_items"]:
-                if any(s in item for s in seps):
-                    # a labelled block leader legitimately contains ": " but never
-                    # the separator itself
-                    bad_sep[it["type"]] += 1
-    check("regex", not bad_re, str(dict(bad_re)))
-    check("no separator inside an item", not bad_sep, str(dict(bad_sep)))
+        for oznaka, vrednost in it["gold_items"]:
+            if " | " in vrednost or " | " in oznaka:
+                bad_sep[it["type"]] += 1
+            if ":" in oznaka:
+                bad_label[it["type"]] += 1
+    check("the one shape", not bad_re, str(dict(bad_re)))
+    check("no ` | ` inside a field", not bad_sep, str(dict(bad_sep)))
+    check("no colon inside a label", not bad_label, str(dict(bad_label)))
 
 
 def c15_canonical(items):
@@ -157,39 +232,63 @@ def c15_canonical(items):
     precisely how a set-iteration-order dependency survived here: the check
     could not see the thing it existed to catch.
 
-    These types are graded `multiset` or `membership`, never `sequence`, so an
-    unstable order never changed a score.  It changed whether the corpus could
-    be rebuilt byte-for-byte, which is what this asserts.
+    An unstable order never changed a score -- and under 0.1 it cannot, because
+    nothing is positional any more.  It changed whether the corpus could be
+    rebuilt byte-for-byte, which is what this asserts.  Grading tolerance is not
+    a licence for non-canonical training data: the model must see exactly one
+    ordering for a given set, or it is being taught noise on a surface it is
+    forced to emit.
     """
     print("\nC15 -- every set-valued gold is in canonical order")
     bad = collections.Counter()
     for it in items:
-        if it["negative"] or it["type"] not in ("T4", "T15", "T16", "T17"):
+        if it["negative"] or it["type"] not in spec.VALUE_SORTED:
             continue
-        g = it["gold_items"]
+        # By VALUE: these types carry one repeated label (`sopomenka`), so
+        # sorting the pairs would sort on a constant and assert nothing.
+        g = [v for _oznaka, v in it["gold_items"]]
         if g != sorted(g, key=sl.sl_sort_key):
             bad[it["type"]] += 1
     check("sl_sort_key order", not bad, str(dict(bad)))
 
 
+def _slot_text(item):
+    """Every string the item's slots carry, as one casefolded blob.
+
+    A slot value is neither question nor answer and was checked as neither.  It
+    has to be: T23/T24/T25/T27 take the RELATION as a slot, so a held-out
+    relation reaches training as the question's subject -- and `Ali ima beseda X
+    protipomenko?` leaks T16 whether its gold says `da` or `ne`.  The slot is
+    also where a rendering bug hides one: a frame that drops a slot still leaves
+    it on the row.
+    """
+    return " ".join(str(v) for v in (item.get("slots") or {}).values()).casefold()
+
+
 def c6_tier_c(splits):
     print("\nC6 -- Tier C leakage")
     hard = collections.Counter()
+    hard_slot = collections.Counter()
     soft_q = collections.Counter()
     soft_a = collections.Counter()
     for s in ("train", "dev"):
         for it in splits[s]:
             q = it["question"].casefold()
             a = it["answer"].casefold()
+            sl_text = _slot_text(it)
             for w in spec.TIER_C_TAG_WORDS:
                 if w in q or w in a:
                     hard[w] += 1
+                elif w in sl_text:
+                    hard_slot[w] += 1
             for w in spec.TIER_C_SOFT_WORDS:
                 if w in q:
                     soft_q[w] += 1
                 elif w in a:
                     soft_a[w] += 1
     check("no antonym TAG WORD in train/dev, anywhere", not hard, str(dict(hard)))
+    check("no held-out relation as a train/dev SLOT VALUE", not hard_slot,
+          str(dict(hard_slot)))
     check("no 'opposite' vocabulary in a train/dev QUESTION", not soft_q,
           str(dict(soft_q)))
     # Reported, not asserted: these occur inside curated definitions and corpus
@@ -201,15 +300,39 @@ def c6_tier_c(splits):
           all(it["split"] == "test" for it in tc), f"{len(tc)} items")
 
 
+#: Slot keys that name a LEMMA the item is about, beyond its seed.  `L2` is
+#: Group H's second anchor (T25-T27); `L` and `F` are the seed's own lemma and
+#: one of its forms, and a form belongs to its lemma's entry, so it is the lemma
+#: behind it that has to be disjoint -- `lemma` already carries that.
+LEMMA_SLOTS = ("L2",)
+
+
+def item_lemmas(item):
+    """Every lemma this item names, not just the one it was seeded from.
+
+    T25, T26 and T27 name two.  A test item whose SECOND lemma is a training seed
+    breaks lemma-disjointness exactly as a duplicated seed would, and checking
+    only `lemma` would never see it -- the pair filter (H.3) is the generation
+    rule, this is the assertion that it held.
+    """
+    out = {item["lemma"]}
+    slots = item.get("slots") or {}
+    out |= {str(slots[k]) for k in LEMMA_SLOTS if slots.get(k)}
+    return out
+
+
 def c11_split(splits):
-    print("\nC11 -- the split is lemma-disjoint")
-    by = {s: {it["lemma"] for it in v} for s, v in splits.items()}
+    print("\nC11 -- the split is lemma-disjoint, over every lemma an item names")
+    by = {s: {l for it in v for l in item_lemmas(it)} for s, v in splits.items()}
     overlap = {}
     for a in ("train", "dev", "test"):
         for b in ("train", "dev", "test"):
             if a < b and by[a] & by[b]:
-                overlap[f"{a}/{b}"] = len(by[a] & by[b])
-    check("no lemma on two sides", not overlap, str(overlap))
+                overlap[f"{a}/{b}"] = sorted(by[a] & by[b])[:5]
+    second = sum(1 for v in splits.values() for it in v if len(item_lemmas(it)) > 1)
+    check("no lemma on two sides", not overlap,
+          str(overlap) if overlap else f"{sum(map(len, by.values())):,} lemmas, "
+          f"{second:,} items naming a second one")
 
 
 def c17_t12_t14(splits):
@@ -220,8 +343,9 @@ def c17_t12_t14(splits):
             if it["type"] == "T12":
                 t12[it["lemma"]] = (it["negative"], len(it["gold_items"]))
             elif it["type"] == "T14":
+                # `[["število pomenov", "3"]]` -- the VALUE is the count.
                 t14[it["lemma"]] = (it["negative"],
-                                    int(it["gold_items"][0]) if not it["negative"] else 0)
+                                    int(it["gold_items"][0][1]) if not it["negative"] else 0)
     shared = set(t12) & set(t14)
     bad_count = {l for l in shared
                  if not t12[l][0] and not t14[l][0] and t12[l][1] != t14[l][1]}
@@ -229,6 +353,48 @@ def c17_t12_t14(splits):
     check(f"count matches the list ({len(shared)} shared lemmas)", not bad_count,
           str(sorted(bad_count)[:5]))
     check("negative in both or in neither", not bad_neg, str(sorted(bad_neg)[:5]))
+
+
+def c28_balls_resolve(balls, items):
+    """C28 -- no POSITIVE item ships the single-node `ni v bazi` ball.
+
+    This is the check the phrase types would most have benefited from having
+    earlier.  A subject the surface index cannot resolve still produces a
+    well-formed ball, a well-formed question and a gold answer nothing in it
+    supports; `qa/build_balls.py` counts these as `empty_ball`, and this is the
+    assertion that the count is zero where it matters rather than merely printed.
+
+    For a NEGATIVE the single-node ball is correct and expected -- the entity is
+    not in the graph, which is what the item says.  So the check is over
+    positives, which is also what makes it non-vacuous before the phrase types
+    exist: 11,179 items today, every one of them a single word.
+
+    Multi-word subjects are reported separately.  They are the cohort that will
+    start failing this the moment a phrase type has positives, and today they are
+    42 items, all of them T8 negatives, 37 of which resolve to nothing at all.
+    """
+    print("\nC28 -- every positive item's ball resolves")
+    # A ball row carries no slots, so the subject comes from the generated record
+    # it was built from, joined on id.
+    subject = {it["id"]: str((it.get("slots") or {}).get("L") or "") for it in items}
+    bad = collections.Counter()
+    positives = 0
+    mw_total = mw_empty = 0
+    for r in balls:
+        nodes = r.get("nodes") or []
+        empty = len(nodes) == 1 and "(ni v bazi)" in nodes[0]
+        multiword = " " in subject.get(r["id"], "")
+        mw_total += multiword
+        mw_empty += multiword and empty
+        if r.get("negative"):
+            continue
+        positives += 1
+        if empty:
+            bad[r["type"]] += 1
+    check("no positive ships the `ni v bazi` ball", not bad,
+          str(dict(bad)) if bad else f"{positives:,} positives")
+    print(f"    multi-word subjects: {mw_total} items, {mw_empty} of them "
+          f"unresolved (reported -- the phrase cohort)")
 
 
 def c13_baselines(splits):
@@ -277,7 +443,7 @@ def _anchor_of(store, item):
 
 
 # --------------------------------------------------------------------------
-def run(dataset=None, store=None, pre_ball=False):
+def run(dataset=None, store=None, pre_ball=False, balls=None):
     """Every check in QA_TASKS.md section 2.  0 if all passed, 1 if any failed.
 
     `FAIL` is module state, so it is cleared on entry: the pipeline calls this
@@ -291,10 +457,11 @@ def run(dataset=None, store=None, pre_ball=False):
     """
     del FAIL[:]
 
-    args = argparse.Namespace(dataset=dataset, store=store)
+    args = argparse.Namespace(dataset=dataset, store=store, balls=balls)
 
     c16_sl_key()
     c7_agreement()
+    c7_labels()
 
     store = None
     if args.store:
@@ -307,12 +474,18 @@ def run(dataset=None, store=None, pre_ball=False):
         allitems = [it for v in splits.values() for it in v]
         print(f"\ndataset: {len(allitems):,} items "
               f"({', '.join(f'{s} {len(v):,}' for s, v in splits.items())})")
+        if not corpus_is_pairs(allitems):
+            print("\nSELFTEST:", f"FAIL ({len(FAIL)}): {FAIL}")
+            return 1
         c9_gold_grades(allitems, pre_ball=pre_ball)
-        c10_regex(allitems)
+        c10_shape(allitems)
         c15_canonical(allitems)
         c6_tier_c(splits)
         c11_split(splits)
         c17_t12_t14(splits)
+        if args.balls:
+            ballrows = [r for v in load(args.balls).values() for r in v]
+            c28_balls_resolve(ballrows, allitems)
         c13_baselines(splits)
         if store:
             c18_sampling(store, allitems)
@@ -326,8 +499,9 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dataset")
     ap.add_argument("--store")
+    ap.add_argument("--balls", help="the written balls, for C28")
     args = ap.parse_args()
-    return run(dataset=args.dataset, store=args.store)
+    return run(dataset=args.dataset, store=args.store, balls=args.balls)
 
 
 if __name__ == "__main__":

@@ -168,8 +168,8 @@ That property is easy to lose, and was lost twice:
   C15 could not catch this, because `sorted` is stable and a list in *either*
   order compared equal to `sorted(g, key=sl_key)`; it now checks the total key.
   One item in the corpus on disk (`T4-000439`, `zastava`) predates the fix and
-  will be reported by C15 until the next rebuild — T4 is graded `multiset`, so
-  no score ever depended on it.
+  will be reported by C15 until the next rebuild — T4's gold is order-blind under
+  `pairs`, so no score ever depended on it.
 * CSR adjacency used to come out in `imap_unordered` worker-completion order.
   `undirected_csr` now lexsorts within each node's slice.
 
@@ -410,8 +410,10 @@ cd data
 python -m qa.inspect  datasets/generated --stats
 python -m qa.inspect  datasets/generated -n 3
 python -m qa.selftest --dataset datasets/generated --store stores/kg_graph_gemma3
+python -m qa.selftest --dataset datasets/generated --balls datasets/balls   # + C28
 python -m qa.grade    datasets/generated/test.jsonl --predictions preds.jsonl
-python -m qa.check_balls datasets/generated datasets/balls
+python -m qa.check_balls  datasets/generated datasets/balls
+python -m qa.check_labels datasets/balls
 python -m qa.check_variants datasets/balls datasets/balls_{noretrieval,serialised}
 ```
 
@@ -421,10 +423,21 @@ corpus you built stage by stage, or to re-check one after a change.
 
 `qa/grade.py` is the grader — a script, not a judge. Every gradeable string appears
 verbatim in the model's input, so exact match after a fixed normalization is both
-fair and meaningful. Three modes, one constant per type in `qa/spec.py`, never
-inferred at run time: `sequence` (positions carry meaning), `multiset` (a set whose
-order is our convention), `membership` (any allowed subset, plus a count rule).
-Run against the gold it scores 100 %, on every split, type and band.
+fair and meaningful. **Two** modes since the labelled-pair reformat (QA_TASKS.md
+§0.1), one constant per type in `qa/spec.py`, never inferred at run time: `pairs`
+(the answer is a multiset of `oznaka: vrednost`) and `membership` (any allowed
+subset, plus a count rule). `sequence` and `multiset` are gone — they differed only
+in whether position was compared, and nothing is positional any more. Run against
+the gold it scores 100 %, on every split, type and band.
+
+A corpus generated **before** the reformat is converted in place of a rebuild:
+
+```bash
+python -m qa.migrate_pairs --out datasets/work/pairs datasets/generated datasets/balls
+```
+
+It calls the same `qa/pairs.py` the generator now calls, on the same positional
+list, so a converted item and a regenerated one are identical by construction.
 
 ### How a ball is extracted
 

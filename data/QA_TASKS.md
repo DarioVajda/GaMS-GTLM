@@ -53,7 +53,8 @@ copied off `protipomenka: boj ~ sodelovanje` in the ball.
 
 **Four clauses make the rule exact.**
 
-1. **The label vocabulary is the graph's own.** `iztočnica`, `oblika`, `pomen N`,
+1. **The label vocabulary is the graph's own**, down to the number in `pomen N` (see
+   T12). `iztočnica`, `oblika`, `pomen N`,
    `sopomenka`, `protipomenka`, `kolokacija` and `zgled` are the literal tags of §0.5.
    Feature bundles (`mestnik ednine`, `sedanjik 1. osebe ednine`, `presežnik`,
    `spol`) are rendered from the same parentheticals by `qa/sl.py`, which already
@@ -269,7 +270,7 @@ No embedding model, no LLM judge, no fuzzy similarity. The whole grader is a scr
 ```python
 def norm(s):
     s = unicodedata.normalize("NFC", s)
-    s = re.sub(r"\s+", " ", s).strip().rstrip(".")
+    s = re.sub(r"\s+", " ", s).strip().rstrip(".").strip()   # idempotent
     return s.casefold()
 
 def parse(line):                           # first ODGOVOR: line -> multiset of pairs
@@ -306,8 +307,15 @@ the model's input: these types are retrieval probes over an extracted subgraph, 
 open generation. A model that paraphrases has not done the task.
 
 The normalization is deliberately shallow — it folds case, collapses whitespace and
-drops one trailing period. No diacritic stripping (that would merge real Slovene
+drops trailing periods. No diacritic stripping (that would merge real Slovene
 distinctions), no stemming, no reordering.
+
+**The trailing `strip()` is load-bearing, not tidiness.** `rstrip(".")` can uncover
+whitespace the periods were hiding — a corpus sentence ending `… prestopka ...`
+normalises to `… prestopka ` — so without it `norm` moves on its second application. A
+membership item's allow-list is normalised when it is written and again when it is
+compared, so a normalizer that is not **idempotent** marks a correct answer wrong;
+observed on T19-000364, whose gold is its own only legal member. C7 holds the fixture.
 
 #### 0.8.1 Order: always generated, never graded
 
@@ -800,6 +808,21 @@ verbatim. Filtering them would change both the list and T14's count for a reason
 ```
 ODGOVOR: pomen 1: zgradba za bivanje | pomen 2: rodbina, družina
 ```
+
+**N is the graph's ordinal, never a 1…n renumbering of the kept senses.** The filters
+above drop the placeholder and fallback senses from the *answer*; the **ball** renders
+all of the anchor's senses under the store's own numbers, and the dropped ones keep
+theirs there. So `nakladnica`'s one real sense is `pomen 3` in the ball and would have
+been `pomen 1` in a renumbered answer. Under §0.1 the ordinal is part of the **label**,
+so renumbering makes the label name a node that is not in front of the model — in
+**623 of 623** positives, every one of which begins with at least one undefined sense.
+The generator reads the ordinal off `store.senses`, which already returns it and used
+to discard it; a sense the KG gives no number is labelled `pomen`, exactly as its node
+text spells it.
+
+C25 does not catch this — it treats the ordinal as positional noise and asks only
+whether `pomen` is in the ball. **C18 (d)** does, because containment is over every atom
+of the pair including the digit, and a wrong ordinal names a node that is not there.
 
 ### T14 — `pomen/stevilka_pomenov`
 
@@ -1494,7 +1517,7 @@ are in §1.
 | C15 | **Every gold is in its type's canonical order** — now including the paradigm types, whose order stopped being graded when §0.1 removed positions. Grading tolerance is not a licence for non-canonical training data: the model must see exactly one ordering for a given set, or it is being taught noise on a surface it is forced to emit. |
 | C16 | **`sl_key`** against a fixture including `č`, `š`, `ž` and a non-Slovene character. |
 | C17 | **`T14 gold == len(T12 gold)`** for every lemma in both, and a lemma is a negative in both or in neither. T12 records its choices and T14 replays them, which is exact rather than probable — drawing negatives from two random streams made their agreement a coincidence that held in one generation and broke in the next. |
-| C18 | **Sampler reproducibility and gold-in-ball**: the candidate pool is sorted by node id before drawing, the RNG seed derives from the anchor's node code and nothing else, and every gold item is inside its own ball. The first two are silent failures — CSR adjacency order is not stable across builds, so an unsorted pool or an order-dependent seed makes the dataset unreproducible without failing anything. T5/T6's composed auxiliary is the one enumerated exemption (§0.7). |
+| C18 | **Sampler reproducibility and gold-in-ball**: the candidate pool is sorted by node id before drawing, the RNG seed derives from the anchor's node code and nothing else, and every gold item is inside its own ball. The first two are silent failures — CSR adjacency order is not stable across builds, so an unsorted pool or an order-dependent seed makes the dataset unreproducible without failing anything. **§0.1 made (d) much stronger**: containment is over every atom of the `oznaka: vrednost` pair, so it now asserts that a paradigm cell holds *that* cell's surface and that T12's sense ordinal names a node the ball really has — neither of which the positional line could express. Three enumerated exemptions, all declared rather than inferred: the eight labels of §0.1's budget, which no ball carries by definition; T5/T6's composed auxiliary *and person*, which sit on the `biti` form and not on the participle (§0.7); and T14, whose **value** is composed too — a count is not a node, and the old check scored it 100 % only because a one-token gold of `3` matched any node containing a 3. |
 | C25 | **Label derivability.** Every `oznaka` in every gold is present in that item's own ball, or is one of the eight declared constants of §0.1 — `preteklik`, `prihodnjik`, `besedna vrsta`, `vid`, `število pomenov`, `več`, `manj`, `enako`. Matching is whole-word against node text only. Without it a generator can take a label from a per-type table instead of from the graph and emit **byte-identical** output, so the defect §0.1 exists to remove comes back invisibly, one type at a time; the two implementations differ by one line and look equally reasonable in review. The constant list is a **budget, not an exemption**: its length is how many labels the model must still memorise rather than read, and a ninth cannot be added without a diff that shows it. Run over Tier C the same check is the **fairness proof** that those items are unseen rather than unanswerable. |
 | C26 | **Constituent validity** (§1) asserted over T30/T34 gold: every constituent lemma the answer names has a surface — its own lemma or one of its `oblika:` forms — occurring in the phrase. It is a generation filter and a check, because the failure is silent: a wrong constituent is a well-formed lemma in the right shape. |
 | C27 | **D5c is a no-op on word balls.** Rebuilding a fixed sample of single-word anchors under the new cap must reproduce the old ball byte for byte — 300 / 300 today. D5c exists to make MWE balls finite; the day it changes a word ball, it has changed the corpus every published number was measured on. |
@@ -1504,10 +1527,19 @@ C25 lives in **`qa/check_labels.py`** rather than in `selftest.py`, for the same
 C18's containment half lives in `check_balls.py`: it needs the written balls, not the
 generated items. Its first run, against the pre-reformat corpus, produced the §0.1
 table — 119 labels derived, five constants, 104 / 104 on the Tier C label, and ten
-misses all explained. Until the reformat lands it runs `--legacy`, taking the label
-set from a per-type table; that set is a **superset** of what any one item emits, so
-the mode reports and does not fail. `--no-legacy` reads real pairs out of
-`gold_items` and is the pass/fail check.
+misses all explained, in `--legacy` mode, which takes the label set from a per-type
+table. That set is a **superset** of what any one item emits, so the mode reports and
+does not fail; it is now the flag rather than the default.
+
+Against the reformatted corpus it reads real pairs out of `gold_items` and is
+pass/fail: **179 labels derived from the ball, 76 hitting a declared constant, 0
+partial.** The ten misses are gone rather than explained — a gap is an absent key now,
+so a T7 item with no imperative emits no `velelnik` pair to fail on.
+
+The eight declared labels live in `qa/spec.py`, not here, because **C18 (d) has to
+excuse exactly the same eight**: one asks whether a label is in the ball and the other
+whether the pair is, and two copies of the budget would drift in the direction of a
+label being unreadable in one check and declared in the other.
 
 ---
 
@@ -1519,22 +1551,22 @@ analysis.
 
 ```json
 {
-  "id": "T12-000123",
+  "id": "T12-000002",
   "type": "T12",
   "type_name": "pomen/razlaga_pomena",
-  "lemma": "cistitis",
-  "lu_id": 23901,
-  "node_code": 72057594037951293,
-  "band": "B3",
-  "proxy": 42,
+  "lemma": "onomatopoija",
+  "lu_id": 75354,
+  "node_code": 72057594038003290,
+  "band": "B0",
+  "proxy": 0,
   "split": "train",
   "tier": "core",
-  "template_id": "T12/03",
-  "question": "Podaj razlago pomena za besedo cistitis.",
-  "answer": "ODGOVOR: pomen 1: vnetje sečnega mehurja in sečevodov | pomen 2: vnetje sečnega mehurja",
-  "gold_items": [["pomen 1", "vnetje sečnega mehurja in sečevodov"],
-                 ["pomen 2", "vnetje sečnega mehurja"]],
-  "slots": {"L": "cistitis"},
+  "template_id": "T12/11",
+  "question": "Naštej pomene besede onomatopoija.",
+  "answer": "ODGOVOR: pomen 2: uporaba besed, ki posnemajo zvok, ki ga označujejo | pomen 3: pesniško sredstvo",
+  "gold_items": [["pomen 2", "uporaba besed, ki posnemajo zvok, ki ga označujejo"],
+                 ["pomen 3", "pesniško sredstvo"]],
+  "slots": {"L": "onomatopoija"},
   "negative": false,
   "negative_flavour": null,
   "grading": {}
@@ -1547,7 +1579,7 @@ analysis.
 | `band` / `proxy` | results are reported per band, and the raw proxy is kept so a boundary can move without regenerating. |
 | `tier` | `core`, `A` (unseen phrasing), `B` (unseen question type over a seen relation — T28 and T29 are its first instances) or `C` (unseen relation — T16 and T36) — a headline result, so it is a field rather than a filename convention. |
 | `template_id` | which frame produced the question, so a per-frame breakdown is free and a badly worded frame can be found after the fact. |
-| `gold_items` | the answer already split into `[oznaka, vrednost]` pairs, so analysis never re-implements the parser. It is also the item's **key set** (§0.9) — which labels this question asked for — so a per-label breakdown is free and C25 has something to check against. |
+| `gold_items` | the answer already split into `[oznaka, vrednost]` pairs, so analysis never re-implements the parser. It is also the item's **key set** (§0.9) — which labels this question asked for — so a per-label breakdown is free and C25 has something to check against. The record above is a real one, and its `pomen 2` / `pomen 3` is the point: the ordinals are the graph's, not a 1…n renumbering of the two senses that survived filtering (§T12). |
 | `grading` | the item-level half of the contract — `{}` for most types, since the type-level constants live in `qa/spec.py`. T17, T19, T31 and T33 carry `all_items` (as pairs), `n_all`, `quantity_band` and `n_asked`. **The grader opens no store.** |
 | `negative_flavour` | `absent`, `mismatch` or `nonexistent`, so the §0.2 mix is measurable rather than assumed. |
 

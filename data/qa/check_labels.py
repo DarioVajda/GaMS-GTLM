@@ -32,16 +32,17 @@ okvariti vid`).
 
 Positives only -- a negative's answer is the sentinel and carries no labels.
 
-Two modes, because the reformat has not landed yet:
+Two modes.  The default takes each item's labels from its own `gold_items`
+pairs -- exact, per item, and pass/fail: this is C25 proper, and it is the
+default now that the corpus carries pairs.
 
-  * post-reformat, labels come from the item's own `gold_items` pairs -- exact,
-    per item.
-  * pre-reformat (`--legacy`, the default while `datasets/generated` is still in
-    the old shape), labels come from the per-type candidate table below.  That
-    is a SUPERSET of what any one item emits, so it can over-report a missing
-    label and never under-report one.  It does not, in fact, over-report: every
-    apparent miss is an item whose answer has no such pair (a `/` gap in T7 and
-    T11, a non-noun in T8), which is the check confirming itself.
+`--legacy` takes them from the per-type candidate table below instead, for a
+corpus still in the pre-reformat shape.  That table is a SUPERSET of what any one
+item emits, so it can over-report a missing label and never under-report one; it
+reports and does not fail.  Its one run against the pre-reformat corpus produced
+the table in QA_TASKS.md 0.1, and every apparent miss there was an item whose
+answer has no such pair (a `/` gap in T7 and T11, a non-noun in T8) -- the check
+confirming itself.
 """
 import argparse
 import collections
@@ -51,24 +52,18 @@ import re
 import sys
 import unicodedata
 
-# ── The five labels the graph does not carry (QA_TASKS.md 0.1) ──────────────
-# preteklik/prihodnjik: M2 -- the KG stores no past or future form, so the value
-#   is composed too.  `deležnik na -l` IS in 1,233/1,233 conjugation balls and
-#   would be derived, but it names a participle and the value is a periphrastic
-#   form, so it would be a true label of the wrong thing.
-# besedna vrsta / vid: the graph renders the VALUES (`samostalnik`, `dovršni`)
-#   and never names the property.  `spol` is not here: node text says
-#   `ženski spol`, so the label is present and only the suffix moves.
-# število pomenov: a count is a fact about the ball, not a node in it.
-# več / manj / enako: Group H's T27 compares two anchors, and a comparison is a
-#   relation between two ball facts rather than a third one.  They are the only
-#   three labels the fifteen Group H types add -- every other one of them answers
-#   with a label some existing type already uses, which is the property that
-#   makes those types indistinguishable from each other in output space.
-DECLARED = {
-    "preteklik", "prihodnjik", "besedna vrsta", "vid", "število pomenov",
-    "več", "manj", "enako",
-}
+# ── The eight labels the graph does not carry (QA_TASKS.md 0.1) ─────────────
+# The list itself lives in `qa/spec.py`, with the reasoning for each entry, so
+# that this check and the containment check (C18 d, `qa/check_balls.py`) excuse
+# exactly the same eight strings.  Two copies would drift, and the direction they
+# would drift in is a label quietly becoming unreadable in one check and declared
+# in the other.
+#
+# `več` / `manj` / `enako` are the only three labels the fifteen Group H types
+# add -- every other one of them answers with a label some existing type already
+# uses, which is the property that makes those types indistinguishable from each
+# other in output space.
+from qa.spec import DECLARED_LABELS as DECLARED
 
 CASES = ("imenovalnik", "rodilnik", "dajalnik", "tožilnik", "mestnik", "orodnik")
 NUMS = ("ednine", "dvojine", "množine")
@@ -105,10 +100,17 @@ def nfc(s):
 
 
 def atoms(oznaka):
-    """`sedanjik 1. osebe ednine` -> the words a ball must carry for it."""
+    """`sedanjik 1. osebe ednine` -> the words a ball must carry for it.
+
+    Parentheses come off with the punctuation.  A composed tense that agrees for
+    gender is labelled `preteklik 3. osebe ednine (ženski spol)`, mirroring how
+    0.5 renders a feature bundle in the node text -- and the node text writes the
+    bundle's own parentheses around a different set of words, so `(ženski` would
+    never be found as a literal.
+    """
     out = []
     for w in nfc(oznaka).split():
-        w = w.strip(".,")
+        w = w.strip(".,()")
         if not w or w.isdigit():          # the person ordinal is positional noise
             continue
         out.append(NORM.get(w, w))
@@ -143,10 +145,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("balls", type=pathlib.Path,
                     help="directory holding {train,dev,test}.jsonl WITH nodes")
-    ap.add_argument("--legacy", action=argparse.BooleanOptionalAction, default=True,
+    ap.add_argument("--legacy", action=argparse.BooleanOptionalAction, default=False,
                     help="take labels from the per-type table rather than from "
-                         "gold_items pairs (default while the corpus is "
-                         "pre-reformat)")
+                         "gold_items pairs, for a pre-reformat corpus; reports "
+                         "rather than fails")
     args = ap.parse_args(argv)
 
     hit = collections.Counter()

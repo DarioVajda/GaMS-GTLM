@@ -356,10 +356,11 @@ def stage_variants(rec, balls, out_root):
 # --------------------------------------------------------------------------
 # checks
 # --------------------------------------------------------------------------
-def check_selftest(rec, name, dataset, store_dir, pre_ball=False):
+def check_selftest(rec, name, dataset, store_dir, pre_ball=False, balls=None):
     from qa import selftest
     try:
-        rc = selftest.run(dataset=dataset, store=store_dir, pre_ball=pre_ball)
+        rc = selftest.run(dataset=dataset, store=store_dir, pre_ball=pre_ball,
+                          balls=balls)
     except Exception as e:                    # a check must not stop the build
         return rec.check(name, False, f"{type(e).__name__}: {e}")
     return rec.check(name, rc == 0, None if rc == 0 else "see the log above")
@@ -516,6 +517,12 @@ def run(store=None, variant="gemma3", rebuild_store=False, seed=20260821,
         stage_balls(rec, relabelled, st_balls, st_generated, store_dir, types)
         rec.stage("balls", time.time() - t, "ok")
         check_balls_(rec, "check_balls", st_generated, st_balls)
+        # The full selftest again, now with the balls: C28 asks whether every
+        # positive item's subject resolved, and before stage 5 there is no ball
+        # to ask it of.  An unresolved subject is otherwise silent -- the item
+        # still has a question and a gold answer, and only the ball is empty.
+        check_selftest(rec, "selftest/final", st_generated, store_dir,
+                       balls=st_balls)
         check_grade(rec, "grade-gold/final", st_generated)
 
         t = time.time()

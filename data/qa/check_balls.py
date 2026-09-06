@@ -56,32 +56,108 @@ AUX = frozenset("sem si je sva sta smo ste so "
 # An answer says "tožilnik MNOŽINE", the graph says "(tožilnik, MNOŽINA)".  The
 # grammatical-number vocabulary is three words, so the genitive is mapped back
 # rather than guessed at with a suffix rule.
-GEN2NOM = {"ednine": "ednina", "dvojine": "dvojina", "množine": "množina"}
+#: An answer declines its labels; the graph states them in the nominative.  The
+#: person joined this table with 0.1, which put the person/number of a verb cell
+#: into the LABEL (`sedanjik 1. osebe ednine`) where the old line left it
+#: implicit in the position.
+GEN2NOM = {"ednine": "ednina", "dvojine": "dvojina", "množine": "množina",
+           "osebe": "oseba"}
+
+WORD = re.compile(r"[^\W_]+", re.UNICODE)
 
 # Everything M2 COMPOSES rather than reads: the auxiliary, and the two tense
 # names themselves.  `preteklik` and `prihodnjik` are not `vform` values in this
 # KG -- that is the whole of M2 -- so no node can carry them, while `sedanjik`
-# is stored and stays in the predicate.  A T5 cell reads
-# `preteklik: sem cirkuliral`; its one graph atom is `cirkuliral`.
-COMPOSED = AUX | {"preteklik", "prihodnjik"}
+# is stored and stays in the predicate.
+#
+# `oseba` joins them for a composed cell and only there.  `preteklik 1. osebe
+# ednine: sem cirkuliral` is a *-l* participle plus an auxiliary, and a participle
+# has no person in Slovene -- the person is on the `sem`, which is not in the
+# ball.  The present-tense cells of the same two types DO carry it
+# (`oblika: naškrobim (sedanjik, 1. oseba, ednina)`), so this is decided per gold
+# item from its label, never per type: stripping it for all 27 cells would stop
+# the check from noticing a present cell labelled with the wrong person.
+COMPOSED = AUX | {"preteklik", "prihodnjik", "oseba"}
 
-WORD = re.compile(r"[^\W_]+", re.UNICODE)
+#: The eight declared labels of 0.1, as atoms.  A declared label is one the ball
+#: cannot carry -- that is what declaring it means -- so requiring it here would
+#: contradict C25, which excuses exactly these.  `qa/spec.py` holds the list and
+#: the reasoning; this is the same budget seen from the other side.
+DECLARED_ATOMS = frozenset(
+    w for label in spec.DECLARED_LABELS for w in WORD.findall(label.casefold()))
+
+#: Types whose VALUE is composed too, not just the label.  T14 answers with a
+#: count of the ball's defined senses; a count is not a node, so there is nothing
+#: to contain.  Recorded and reported rather than passed on a coincidence -- the
+#: old check scored T14 at 100 % because a one-token gold of `3` matched any node
+#: with a 3 in it.
+COMPOSED_VALUE = ("T14",)
 
 
-def atoms(gold, composed=False):
+def is_composed(gold):
+    """True for a cell M2 composes -- decided by the label, not by the type."""
+    return gold.split(":", 1)[0].startswith(("preteklik", "prihodnjik"))
+
+
+def atoms(gold):
     """The words a node must ALL carry for this gold item to be present.
 
     `nedoločnik: eksploatirati` -> {nedoločnik, eksploatirati}; the label is kept
     rather than stripped, because "the ball holds this surface" is a weaker claim
     than "the ball holds this surface under this label" and the second one is
-    what the question asked.
+    what the question asked.  0.1 made that distinction matter far more: the
+    label now carries what the position used to, so this is the check that a
+    paradigm cell is filled with the right cell's surface -- and it is the only
+    check that verifies T12's sense ordinal, which C25 sees only as `pomen`.
 
-    `composed` drops the M2 atoms, and is passed only for T5/T6 -- so a missing
-    *participle* still fails those types, which is the part of their gold the
+    Two atom sets come off: the eight declared labels, which no ball carries by
+    definition, and M2's composed material for the two periphrastic tenses.  What
+    remains for those is the participle, which is the part of their gold the
     graph really does own.
     """
-    parts = {GEN2NOM.get(p, p) for p in WORD.findall(gold.casefold())}
-    return (parts - COMPOSED) or parts if composed else parts
+    full = {GEN2NOM.get(p, p) for p in WORD.findall(gold.casefold())}
+    parts = full - DECLARED_ATOMS
+    if is_composed(gold):
+        # The person is two atoms, `1` and `oseba`, and BOTH sit on the auxiliary
+        # rather than on the participle -- so the ordinal goes with the noun.
+        parts -= COMPOSED
+        parts = {p for p in parts if not p.isdigit()}
+    # Never an empty set: `set() <= anything` is True, so a gold item that
+    # stripped down to nothing would pass against every ball ever built.
+    return parts or full
+
+
+def gold_strings(r):
+    """A positive's gold as `oznaka: vrednost` strings, for `atoms`.
+
+    0.1 made `gold_items` a list of PAIRS.  The old shape was a list of strings
+    and the old filter here was `isinstance(g, str)` -- which, against pairs,
+    quietly selects nothing and turns the whole containment check into a pass
+    over an empty list.  Rejecting the old shape outright is the only version of
+    this that cannot fail silently.
+    """
+    out = []
+    for g in r.get("gold_items") or []:
+        if not isinstance(g, (list, tuple)) or len(g) != 2:
+            raise TypeError(
+                f"{r['id']} has a pre-reformat `gold_items` ({g!r}). Convert the "
+                f"corpus with `python -m qa.migrate_pairs` -- containment cannot "
+                f"be checked against a positional line, and passing here would "
+                f"mean the check ran over nothing.")
+        if g[1]:
+            out.append(f"{g[0]}: {g[1]}")
+    return out
+
+
+def allowed_values(r):
+    """The VALUES of a membership item's allow-list, normalised.
+
+    `all_items` is a list of pairs under 0.1 (`["kolokacija", "mineralna voda"]`)
+    and the ball's member nodes are bare phrases, so the comparison is over the
+    value half.  The label half is checked by the grader, which is where it
+    belongs -- here the question is only whether the ball shows enough of them.
+    """
+    return {sl.norm(v) for _oznaka, v in (grade.contract(r).get("all_items") or [])}
 
 
 def membership_need(r):
@@ -124,7 +200,7 @@ def membership_have(r, b):
     and deduplicated -- an anchor can carry one phrase on two sense pairs
     (`Gadova Peč` / `Gadova peč`), which is two nodes and one gradeable answer.
     """
-    return len(member_nodes(r, b) & set(grade.contract(r)["all_items"]))
+    return len(member_nodes(r, b) & allowed_values(r))
 
 
 def contract_gap(r, b):
@@ -136,10 +212,9 @@ def contract_gap(r, b):
     allow-list FROM the ball, so this is empty by construction on a current
     dataset; it stays as a guard against one built by an older pipeline.
     """
-    g = grade.contract(r)
-    if r.get("negative") or g["mode"] != "membership":
+    if r.get("negative") or grade.contract(r)["mode"] != "membership":
         return set()
-    return member_nodes(r, b) - set(g.get("all_items") or [])
+    return member_nodes(r, b) - allowed_values(r)
 
 
 def load(d):
@@ -173,8 +248,9 @@ def run(dataset, balls, show=8):
     misses = []
     gaps = []
 
-    # Cheap, and it fails the whole check rather than one type: a set-valued
-    # type graded `sequence` makes every number below meaningless.
+    # Cheap, and it fails the whole check rather than one type: a type whose gold
+    # is a DRAW from a seeded sample but is graded against one fixed list makes
+    # every number below meaningless.
     spec.check_set_rule()
 
     for iid, b in balls.items():
@@ -184,7 +260,7 @@ def run(dataset, balls, show=8):
         gap = contract_gap(r, b)
         if gap:
             gaps.append((iid, r["type"], sorted(gap)[:3], len(gap)))
-        gold = [g for g in (r.get("gold_items") or []) if isinstance(g, str) and g]
+        gold = gold_strings(r)
         if not gold:
             continue
         t = r["type"]
@@ -202,15 +278,21 @@ def run(dataset, balls, show=8):
 
         nodes = [set(WORD.findall(x.casefold())) for x in b["nodes"]]
         nodes = [{GEN2NOM.get(w, w) for w in s} for s in nodes]
-        # `velelnik: /` asserts that the cell is EMPTY -- the verb has no
-        # imperative.  The ball is right to hold no such node, so the claim is
-        # satisfied by absence and there is nothing to contain.  Counted, not
-        # silently passed.
+        # A cell the KG does not fill is an ABSENT KEY under 0.9, so there is no
+        # gold item to contain and nothing reaches here.  The old positional line
+        # asserted the emptiness with `velelnik: /`; those are counted separately
+        # so the column does not silently go to zero and read as a regression.
         vacuous = [g for g in gold if g.rstrip().endswith("/")]
         gold = [g for g in gold if not g.rstrip().endswith("/")]
+        if t in COMPOSED_VALUE:
+            # The value is composed, not read (see COMPOSED_VALUE).  Counted as
+            # vacuous rather than scored on whichever node happens to hold the
+            # digit.
+            empty[t] += len(gold)
+            items_n[t] += 1
+            continue
         empty[t] += len(vacuous)
-        miss = [g for g in gold
-                if not any(atoms(g, t in ("T5", "T6")) <= s for s in nodes)]
+        miss = [g for g in gold if not any(atoms(g) <= s for s in nodes)]
         tot[t] += len(gold)
         hit[t] += len(gold) - len(miss)
         items_n[t] += 1
