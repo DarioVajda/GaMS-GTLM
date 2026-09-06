@@ -81,7 +81,7 @@ import collections
 import numpy as np
 
 from qa.store import open_store, K_ANCHOR, K_SENSE, K_COLLOC
-from qa import colloc_sampling, gen, grade, sl, spec
+from qa import colloc_sampling, gen, grade, pairs, sl, spec
 from lib.errors import StageError
 
 K_MWE = 10          # D5, upward `sestavina`
@@ -239,7 +239,7 @@ def member_contract(store, r, texts, targets, stats):
     # copies on disk is the thing that made T19 gradeable as `sequence` long
     # after the spec said otherwise.
     row = r.setdefault("grading", {})
-    for key in grade.TYPE_LEVEL:
+    for key in grade.TYPE_LEVEL + grade.RETIRED_ROW_FIELDS:
         if row.pop(key, None) is not None:
             stats["stale_type_fields_dropped"] += 1
 
@@ -250,11 +250,18 @@ def member_contract(store, r, texts, targets, stats):
     # The ball is drawn from the store under a K cap, so it is a subset -- but
     # union rather than assume, so a policy change upstream can never make a
     # visible member unnameable.
-    allow = sorted({*member_allow(store, r, targets),
-                    *(sl.norm(p) for p in pool)})
-    if set(row.get("all_items") or []) != set(allow):
+    # PAIRS, not bare phrases (0.8.3): under 0.1 the answer names its members as
+    # `kolokacija: mineralna voda`, so the allow-list has to check the label
+    # alongside the phrase or membership would accept a true phrase under a
+    # relation the item never asked about.
+    kind = spec.MEMBER_KIND[r["type"]]
+    allow = [[kind, v] for v in sorted({*member_allow(store, r, targets),
+                                        *(sl.norm(p) for p in pool)})]
+    was = {tuple(x) if isinstance(x, (list, tuple)) else (kind, x)
+           for x in (row.get("all_items") or [])}
+    if was != {tuple(x) for x in allow}:
         stats["contract_rebuilt"] += 1
-        stats["contract_items_delta"] += len(allow) - len(row.get("all_items") or [])
+        stats["contract_items_delta"] += len(allow) - len(was)
     # Written even when empty: an empty allow-list is a real, gradeable state
     # (nothing this item may name), and leaving the key absent would instead
     # make the item silently ungradeable.
@@ -288,10 +295,8 @@ def reverbalise(r, pool):
     want = min(want, len(pool))
     if want < 1:
         return None
-    items = pool[:want]
-    if g.get("arity") == 1 or not g.get("sep"):
-        return spec.PREFIX + items[0], items
-    return spec.PREFIX + g["sep"].join(items), items
+    line, gold = pairs.answer_of(r["type"], r.get("slots"), pool[:want])
+    return line, gold
 
 
 def build(store, targets, k_mwe, k_colloc, cache, stats):
@@ -424,7 +429,8 @@ def run(dataset, out, store=None, k_mwe=K_MWE, k_colloc=K_COLLOC_CAP, types="",
           f"({stats['contract_items_delta']:+,} member items vs what the row "
           f"carried -- the store over ALL anchors, not just the first)")
     print(f"stale type fields dropped:  {stats['stale_type_fields_dropped']:,} "
-          f"(mode/sep/arity/regex copies; qa/spec.py owns these)")
+          f"(mode copies, and the sep/arity/regex 0.1 retired; qa/spec.py owns "
+          f"what is left)")
     if stats["mwe_scan_capped"]:
         print(f"MWE scan cap hit on {stats['mwe_scan_capped']} anchors "
               f"(ranked a {MWE_SCAN_CAP:,}-candidate prefix by node id)")

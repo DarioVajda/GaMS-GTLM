@@ -18,11 +18,14 @@ The item record -- the first artefact everything downstream reads:
     template_id       "T12/03" -- which frame, so a per-frame breakdown is free
     question          plain prose, no delimiters (D3)
     answer            the gradeable line, and nothing else (0.1)
-    gold_items        the answer's items, pre-split, for analysis
+    gold_items        the answer as [oznaka, vrednost] pairs -- also the item's
+                      key set (0.9), so a per-label breakdown is free
     slots             the frame's slot values
     negative          bool, and negative_flavour when true
-    grading           the contract the grader reads: mode, sep, arity, regex,
-                      plus all_items/n_all/quantity_band/n_asked for T17
+    grading           the ITEM-level half of the contract: all_items / n_all /
+                      quantity_band / n_asked for the membership types, and
+                      nothing at all for the rest.  `mode` is per-TYPE and is
+                      read from `qa/spec.py`, never from the row
 
 Quotas follow D16 (~10 k train incl. <=1 k dev, ~2 k test) and D10's band shares,
 each capped by what the graph can actually supply and the shortfall redistributed
@@ -36,7 +39,7 @@ import hashlib
 import argparse
 import collections
 
-from qa import sl, seeds, gen, spec, templates
+from qa import sl, seeds, gen, spec, pairs, templates
 from qa.store import open_store
 from lib.errors import StageError
 
@@ -229,18 +232,14 @@ def make_item(ctx, type_key, e, slots, items, *, split, rng, negative=False,
         answer = spec.sentinel_line()
         gold = [spec.SENTINEL]
     else:
-        sep = sp["sep"]
-        if sp["arity"] == 1 or sep is None:
-            answer = spec.PREFIX + items[0]
-        elif isinstance(sep, (list, tuple)):
-            answer = spec.PREFIX + _join_grouped(type_key, items)
-        else:
-            answer = spec.PREFIX + sep.join(items)
-        gold = items
-    # ITEM-level facts only.  `mode`, `sep`, `arity` and `regex` are per-TYPE
-    # constants and are read from `qa/spec.py` at grading time (`grade.contract`)
-    # -- writing them here would put 12,490 stale copies on disk, which is how
-    # T19 kept being graded `sequence` after the spec said `membership`.
+        # One shape for all of them (0.1).  `qa/pairs.py` owns which label each
+        # cell carries, so the answer and `gold_items` cannot disagree and no
+        # type keeps a private output template here.
+        answer, gold = pairs.answer_of(type_key, slots, items)
+    # ITEM-level facts only.  `mode` is a per-TYPE constant and is read from
+    # `qa/spec.py` at grading time (`grade.contract`) -- writing it here would
+    # put 12,490 stale copies on disk, which is how T19 kept being graded
+    # `sequence` after the spec said `membership`.
     grading = {}
     # `all_items` is deliberately NOT set here.  It is the set of members the
     # model will be SHOWN, and no ball exists yet at generation time; deriving it
@@ -286,15 +285,6 @@ def _tier_c_safe(item):
     if any(w in q or w in a for w in spec.TIER_C_TAG_WORDS):
         return False
     return not any(w in q for w in spec.TIER_C_SOFT_WORDS)
-
-
-def _join_grouped(type_key, items):
-    """Re-insert the group separator for the two grouped types (spec.SPEC)."""
-    if type_key == "T1":
-        return "; ".join(", ".join(items[i:i + 6]) for i in (0, 6, 12))
-    if type_key == "T5":
-        return "; ".join(", ".join(items[i:i + 9]) for i in (0, 9, 18))
-    raise ValueError(type_key)
 
 
 # --------------------------------------------------------------------------

@@ -7,20 +7,23 @@ extracted subgraph), so exact match after a fixed shallow normalization is both
 fair and meaningful; a model that paraphrases has not done the task.
 
 One headline number: `success`, the percentage of items whose answer satisfies
-their type's condition.  `f1` is computed per item as a DIAGNOSTIC -- it
-separates "missed a sense" from "invented one" from "right content, wrong order"
--- and is never reported as a score.
+their type's condition.  `f1` is computed per item as a DIAGNOSTIC -- over PAIRS,
+so it now separates "right value under the wrong label" from "wrong value", which
+the positional version could not -- and is never reported as a score.
 
-Three modes, one constant per type, never inferred at run time:
+Two modes, one constant per type, never inferred at run time:
 
-    sequence     positions carry meaning (a paradigm cell, a tense)
-    multiset     a set whose order is our convention, not the data's
-    membership   collocations: subset of ALL, plus a count rule (0.8.3)
+    pairs        the answer is a multiset of `oznaka: vrednost` (0.1)
+    membership   a DRAW from a set: subset of ALL, plus a count rule (0.8.3)
+
+`sequence` and `multiset` are gone.  They differed only in whether position was
+compared, and under 0.1 nothing is positional: what a position used to carry, the
+label carries.  The one comparison covers a paradigm cell and a synonym list
+alike.
 
 The grader never opens the store.  Everything it needs -- including the full
 `ALL(anchor)` set for membership items -- travels inside the item.
 """
-import re
 import json
 import argparse
 import collections
@@ -33,13 +36,14 @@ PREFIX = "ODGOVOR:"
 # The contract has two layers, and confusing them is what produces a whole run
 # graded against a stale constant.
 #
-#   TYPE level   `mode`, `sep`, `arity`, `regex` -- one constant per type, the
-#                same for all 12,490 items.  These live in `qa/spec.py` and are
-#                read from there, NEVER from the row.  Copying them into every
-#                row is how T19 went on being graded `sequence` for a whole run
-#                after the spec said otherwise: a dataset on disk is a snapshot
-#                of what the spec said the day it was written, and there is no
-#                mechanism by which it learns otherwise.
+#   TYPE level   `mode` -- one constant per type, the same for all 12,490 items.
+#                It lives in `qa/spec.py` and is read from there, NEVER from the
+#                row.  Copying it into every row is how T19 went on being graded
+#                `sequence` for a whole run after the spec said otherwise: a
+#                dataset on disk is a snapshot of what the spec said the day it
+#                was written, and there is no mechanism by which it learns
+#                otherwise.  0.1 shrank this layer from four fields to one, which
+#                is most of the point.
 #
 #   ITEM level   `all_items`, `n_all`, `quantity_band`, `n_asked` -- facts about
 #                THIS item that the type cannot know.  These live in the row,
@@ -47,8 +51,13 @@ PREFIX = "ODGOVOR:"
 #
 # `spec` may supply a DEFAULT for an item-level field when the type fixes it for
 # every item (T19 asks for exactly one example), and the row always wins.
-TYPE_LEVEL = ("mode", "sep", "arity", "regex")
+TYPE_LEVEL = ("mode",)
 ITEM_DEFAULTS = {"quantity_band": "band", "n_asked": "n_asked"}
+
+#: The fields an older pipeline wrote into the row and 0.1 deleted.  Named here
+#: so `qa/build_balls.py` can strip them and say how many it stripped, rather
+#: than silently carrying a shape contract that no longer means anything.
+RETIRED_ROW_FIELDS = ("sep", "arity", "regex")
 
 
 def contract(item):
@@ -59,6 +68,8 @@ def contract(item):
     """
     sp = spec.SPEC[item["type"]]
     g = dict(item.get("grading") or {})
+    for k in RETIRED_ROW_FIELDS:
+        g.pop(k, None)
     g.update({k: sp[k] for k in TYPE_LEVEL})
     for field, key in ITEM_DEFAULTS.items():
         if g.get(field) is None and sp.get(key) is not None:
@@ -66,16 +77,19 @@ def contract(item):
     return g
 
 
-def parse(answer, sep=" | ", arity=None):
-    """The first ODGOVOR: line, split and normalized.  None if unparseable.
+def parse(answer):
+    """The first ODGOVOR: line as a sorted multiset of (oznaka, vrednost).
 
-    An `arity: 1` type is NEVER split: 65 % of usage examples contain a comma and
-    4 of 51,172 contain a `|`, so splitting a single-item answer would shred it
-    (QA_TASKS.md 0.9).
+    None if there is no such line or a field carries no label -- an unlabelled
+    field is unparseable rather than a value with an empty label, because the
+    whole content of 0.1 is that the answer says what each value IS.
 
-    `sep` may be a LIST, for the types whose line is grouped ("ednina; dvojina;
-    množina", "sedanjik; preteklik; prihodnjik").  Splitting on any of them
-    recovers the flat positional list the grader compares.
+    Split on ` | `, then on the FIRST `: ` in each field: a label may not contain
+    a colon and a value may, which is what makes a definition or a corpus
+    sentence safe as a value with no escaping and no per-type separator.
+
+    The 0.2 sentinel has no `: ` at all and so parses to None by construction.
+    It is compared as a line, before this function is reached.
     """
     if answer is None:
         return None
@@ -84,12 +98,13 @@ def parse(answer, sep=" | ", arity=None):
         if not line.startswith(PREFIX):
             continue
         body = line[len(PREFIX):].strip()
-        if arity == 1 or sep in (None, "", "—"):
-            return [norm(body)]
-        if isinstance(sep, (list, tuple)):
-            pat = "|".join(re.escape(s) for s in sep)
-            return [norm(x) for x in re.split(pat, body)]
-        return [norm(x) for x in body.split(sep)]
+        out = []
+        for field in body.split(" | "):
+            oznaka, sep, vrednost = field.partition(": ")
+            if not sep:
+                return None
+            out.append((norm(oznaka), norm(vrednost)))
+        return sorted(out)
     return None
 
 
@@ -119,6 +134,38 @@ def _f1(pred, gold):
     return 2 * p * r / (p + r)
 
 
+def _allow_pairs(item, allow):
+    """A membership item's allow-list as normalised (oznaka, vrednost) pairs.
+
+    0.1 made `all_items` a list of PAIRS, because the answer names its members as
+    `kolokacija: mineralna voda` and a bare phrase would let a true phrase in
+    under a relation the item never asked about.  A pre-reformat row holds bare
+    strings, and unpacking those characterwise is a `ValueError` five frames deep
+    that says nothing about the corpus -- so it is named here instead.
+    """
+    out = set()
+    for x in allow:
+        if not isinstance(x, (list, tuple)) or len(x) != 2:
+            raise TypeError(
+                f"{item.get('id', '?')} carries a pre-reformat `all_items` "
+                f"({x!r}). This corpus predates the labelled-pair rule "
+                f"(QA_TASKS.md 0.1); convert it with `python -m qa.migrate_pairs` "
+                f"or rebuild it. Nothing here can grade a positional line.")
+        out.add((norm(x[0]), norm(x[1])))
+    return out
+
+
+def _sentinel(answer):
+    """True if the first ODGOVOR: line is exactly the 0.2 sentinel."""
+    if answer is None:
+        return False
+    for line in answer.splitlines():
+        line = line.strip()
+        if line.startswith(PREFIX):
+            return norm(line[len(PREFIX):]) == norm(spec.SENTINEL)
+    return False
+
+
 def grade(item, prediction):
     """-> {'success': bool, 'f1': float, 'reason': str}
 
@@ -126,19 +173,27 @@ def grade(item, prediction):
     breakdown is a Counter and not a regex over prose.
     """
     g = contract(item)
-    sep, mode, arity = g.get("sep"), g["mode"], g.get("arity")
-    pred = parse(prediction, sep=sep, arity=arity)
-    gold = parse(item["answer"], sep=sep, arity=arity)
+    mode = g["mode"]
+
+    # The sentinel is settled first, in both directions.  It carries no pairs, so
+    # it cannot be compared as one; and a model that answers the sentinel to a
+    # positive item has abstained, which is a wrong answer and not an
+    # unparseable one -- the distinction the Tier C false-sentinel rate is about.
+    gold_is_sentinel = _sentinel(item["answer"])
+    pred_is_sentinel = _sentinel(prediction)
+    if gold_is_sentinel or pred_is_sentinel:
+        ok = gold_is_sentinel and pred_is_sentinel
+        return {"success": ok, "f1": 1.0 if ok else 0.0,
+                "reason": "ok" if ok else
+                          ("false_sentinel" if pred_is_sentinel else "missed_sentinel")}
+
+    pred = parse(prediction)
+    gold = parse(item["answer"])
     if pred is None:
         return {"success": False, "f1": 0.0, "reason": "unparseable"}
 
-    if mode == "sequence":
+    if mode == "pairs":
         ok = pred == gold
-        return {"success": ok, "f1": _f1(pred, gold),
-                "reason": "ok" if ok else "mismatch"}
-
-    if mode == "multiset":
-        ok = sorted(pred) == sorted(gold)
         return {"success": ok, "f1": _f1(pred, gold),
                 "reason": "ok" if ok else "mismatch"}
 
@@ -147,13 +202,6 @@ def grade(item, prediction):
         deduped = list(dict.fromkeys(pred))
         if len(deduped) != len(pred):
             return {"success": False, "f1": f1, "reason": "repeated_item"}
-        # A negative is graded on the sentinel alone and never touches the
-        # allow-list, so it is settled BEFORE the allow-list is required -- a
-        # negative legitimately has no member set to draw from.
-        if item.get("negative"):
-            ok = pred == gold                    # the sentinel, exactly
-            return {"success": ok, "f1": f1,
-                    "reason": "ok" if ok else "mismatch"}
         if g.get("all_items") is None:
             raise ValueError(
                 f"{item.get('id', '?')} ({item['type']}) is graded "
@@ -164,7 +212,7 @@ def grade(item, prediction):
                 f"dataset that has not reached stage 5 yet is not an error: "
                 f"pass `pre_ball=True` to skip these items rather than "
                 f"raising on them.")
-        allow = set(g["all_items"])
+        allow = _allow_pairs(item, g["all_items"])
         outside = [p for p in pred if p not in allow]
         if outside:
             return {"success": False, "f1": f1, "reason": "not_in_all"}

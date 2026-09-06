@@ -41,13 +41,22 @@ def sl_sort_key(s):
 # the grader's normalization (QA_TASKS.md 0.8) -- deliberately shallow
 # --------------------------------------------------------------------------
 def norm(s):
-    """Fold case, collapse whitespace, drop ONE trailing period.  Nothing else.
+    """Fold case, collapse whitespace, drop trailing periods.  Nothing else.
 
     No diacritic stripping (it would merge real Slovene distinctions), no
     stemming, no reordering.
+
+    IDEMPOTENT, and it has to be.  `rstrip(".")` can uncover whitespace that was
+    hiding behind the periods -- a corpus sentence ending `... prestopka ...`
+    normalises to `... prestopka ` with a trailing space -- so a single trailing
+    `strip()` was the difference between `norm(x)` and `norm(norm(x))`.  A
+    membership item's allow-list is normalised when it is written and again when
+    it is compared, so a normalizer that moves on the second application marks a
+    correct answer wrong; observed on T19-000364, whose gold is its own only
+    legal member.
     """
     s = unicodedata.normalize("NFC", s)
-    s = re.sub(r"\s+", " ", s).strip().rstrip(".")
+    s = re.sub(r"\s+", " ", s).strip().rstrip(".").strip()
     return s.casefold()
 
 
@@ -115,6 +124,45 @@ GENDER_ADJ = {"moški spol": "moški", "ženski spol": "ženski",
 
 # ordinal of a case, as the reference CSV writes it ("4. Tožilnik sklon")
 CASE_ORD = {c: i + 1 for i, c in enumerate(CASES)}
+
+
+# --------------------------------------------------------------------------
+# the ANSWER LABELS of the labelled-pair rule (QA_TASKS.md 0.1)
+# --------------------------------------------------------------------------
+# Under 0.1 the label is no longer decoration on a positional line -- it is the
+# only thing that says WHICH cell a value fills, so a bug here silently relabels
+# gold rather than merely misspelling a question.  That is why these are built
+# from the tables above, the ones the question metalanguage already uses (C21),
+# and are not a second parallel set: one table, two consumers.
+#
+# The genitive is the citation form for a paradigm cell -- `tožilnik ednine`,
+# `preteklik 1. osebe ednine` -- which is what 0.1's examples spell and what
+# `qa/check_labels.py` normalises back to the nominative the node text carries.
+PERSON_GEN = {p: p.replace("oseba", "osebe") for p in PERSONS}
+
+
+def cell_label(case, number):
+    """`tožilnik ednine` -- one cell of the nominal grid (T1-T3, T20-T22)."""
+    return f"{case} {NUMBER_GEN[number]}"
+
+
+def person_label(tense, person, number, gender=None):
+    """`preteklik 1. osebe ednine`, or `... (ženski spol)` for a composed tense.
+
+    The gender parenthetical exists only where the value carries a participle
+    that agrees (T6's non-present tenses).  It is a parenthetical rather than a
+    fourth comma-separated component because 0.5 renders every feature bundle in
+    the node text that way, and the label has to be findable in the ball.
+    """
+    label = f"{tense} {PERSON_GEN[person]} {NUMBER_GEN[number]}"
+    return f"{label} ({gender})" if gender else label
+
+
+#: the 18 nominal cells, in the canonical order `qa/gen.py:nominal_line` emits.
+GRID_LABELS = tuple(cell_label(c, n) for n in NUMBERS for c in CASES)
+
+#: the 9 person/number cells, in the order `qa/gen.py:person_cells` emits.
+PERSON_CELLS = tuple((p, n) for n in NUMBERS for p in PERSONS)
 
 
 # --------------------------------------------------------------------------

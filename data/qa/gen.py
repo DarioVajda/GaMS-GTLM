@@ -410,9 +410,10 @@ def gen_T6(ctx, e, rng):
     cells = _tense_cells(ctx, present, part, tense, gender or "moški spol")
     if GAP in cells:
         return None
-    # The gender goes in PARENTHESES, not after a comma: `, ` is this type's item
-    # separator, so `preteklik, ženski spol: sem delala` splits the label into two
-    # items and makes the arity depend on whether the gender slot is filled.
+    # The gender goes in PARENTHESES, mirroring how 0.5 renders every feature
+    # bundle in the node text -- which is what lets `qa/check_labels.py` find the
+    # label's words in the ball.  `qa/pairs.py` reads this leader back off the
+    # first cell and distributes it over all nine.
     label = tense if gender is None else f"{tense} ({gender})"
     cells[0] = f"{label}: {cells[0]}"
     slots = {"L": e.lemma, "tense": tense, **tense_slots(tense)}
@@ -564,10 +565,26 @@ def gen_T11(ctx, e, rng):
 # Group D -- pomen
 # --------------------------------------------------------------------------
 def gen_T12(ctx, e, rng):
+    """The defined senses, each carrying the ordinal the GRAPH gives it.
+
+    Not a 1..n renumbering.  A ball renders the anchor's senses under the store's
+    own ordinals, and the placeholder and fallback senses that `defined_senses`
+    drops keep their numbers there -- `nakladnica`'s one real sense is `pomen 3`
+    in the ball and was `pomen 1` in the answer.  Under 0.1 the ordinal is part
+    of the LABEL, so renumbering makes the label contradict the node it names, in
+    623 of 623 items: the model would be trained to answer `pomen 1` while
+    looking at `pomen 3`.  The ordinal-less senses the store sorts last are
+    labelled `pomen`, exactly as the node text spells them.
+    """
     ds = seeds.defined_senses(ctx.store, e.a)
     if not ds:
         return None
-    return {"L": e.lemma}, [b for _v, _o, b in ds]
+    return {"L": e.lemma}, [f"{sense_label(o)}: {b}" for _v, o, b in ds]
+
+
+def sense_label(ordinal):
+    """`pomen 3`, or `pomen` for a sense the KG gives no number."""
+    return f"pomen {ordinal}" if ordinal else "pomen"
 
 
 def gen_T14(ctx, e, rng):

@@ -128,9 +128,10 @@ def to_negative(r):
     r["answer"] = spec.sentinel_line()
     r["gold_items"] = [spec.SENTINEL]
     r["negative"] = True
-    sp = spec.SPEC[r["type"]]
-    g = {"mode": sp["mode"], "sep": sp["sep"], "arity": sp["arity"],
-         "regex": sp["regex"]}
+    # ITEM-level facts only.  `mode` is per-type and read from `qa/spec.py`;
+    # 0.1 retired `sep`, `arity` and `regex` altogether, and writing any of them
+    # here is how a stale shape contract used to reach the grader.
+    g = {}
     if r["type"] == "T17":
         g.update(quantity_band=(r.get("slots") or {}).get("band"),
                  n_asked=(r.get("slots") or {}).get("N"),

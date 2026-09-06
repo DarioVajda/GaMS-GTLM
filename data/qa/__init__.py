@@ -8,7 +8,8 @@ Per-type specification: ../QA_TASKS.md (how each question type is generated).
     seeds.py          the D8 seed pool, the D9 proxy, D10 bands, the D11 split
     unlisted.py       real words the lookup cannot reach -- negative flavour (a)
     colloc_sampling.py  the sense -> kolokacija cap and its seeded sampler
-    spec.py           the per-type answer contract (arity, separator, mode)
+    spec.py           the per-type answer contract (mode, key set, the budget)
+    pairs.py          the labelled-pair rule -- how a type's cells get labelled
     templates.py      question frames, with the Tier A withheld set marked
     gen.py            the per-type answer generators
     grade.py          the grader -- a script, no model in the loop
@@ -24,6 +25,12 @@ and the checks over what they produce:
 
     selftest.py       the C-checks of QA_TASKS.md section 2
     check_balls.py    ball/dataset agreement and the membership allow-lists
+    check_labels.py   C25 -- is every answer label readable off the ball?
     check_variants.py the baselines carry the same items and answers
     inspect.py        read a generated dataset by eye
+
+and one migration, for a corpus generated before the labelled-pair rule:
+
+    migrate_pairs.py  positional lines -> labelled pairs, via the same
+                      `pairs.py` the generator now uses
 """
