@@ -34,15 +34,23 @@ Which check is which:
        the written balls, so it lives in `qa/check_balls.py`.
   C11  the split is lemma-disjoint (D11), over EVERY lemma an item names rather
        than over its seed.
-  C13  the majority-class baseline for every type, reported beside the score.
+  C13  the no-knowledge baselines for every type, reported beside the score:
+       the constant answer, the constant LABEL SET, and the label set with the
+       values copied out of the question.  A constant answer stopped being the
+       cheap strategy when the label came apart from the value.
   C28  no POSITIVE item ships the single-node `ni v bazi` ball.  Needs --balls.
+  D3b  the surface index keys MWE phrases, and no phrase key shadows a word --
+       the invariant flavour (a) rests on.  Needs --store.
 
-C26 (constituent validity over T30/T34) and C27 (D5c is a no-op on word balls)
-are specified in QA_TASKS.md section 2 and are NOT here: neither has anything to
-assert yet.  C26 needs the MWE constituent accessor that does not exist, and C27
-needs D5c itself.  A check that runs over nothing passes over nothing, and would
-read in this list as coverage we do not have; each lands with the change that
-gives it something to check.
+  C27  D5c is a no-op on word-anchored balls -- the same anchors built with and
+       without the cap at every expansion, node sets compared.  Needs --store.
+
+C26 (constituent validity over T30/T34) is specified in QA_TASKS.md section 2 and
+is still NOT here: it has nothing to assert yet, because T30 and T34 do not exist
+and the MWE constituent accessor they need does not either.  A check that runs
+over nothing passes over nothing, and would read in this list as coverage we do
+not have; it lands with the change that gives it something to check.  C27 was
+absent for the same reason until D5c landed, and is now real.
 """
 import os
 import re
@@ -50,7 +58,9 @@ import sys
 import argparse
 import collections
 
-from qa import sl, spec, grade, pairs, seeds, colloc_sampling
+import numpy as np
+
+from qa import sl, spec, grade, pairs, seeds, colloc_sampling, build_balls
 
 FAIL = []
 
@@ -398,15 +408,194 @@ def c28_balls_resolve(balls, items):
 
 
 def c13_baselines(splits):
-    print("\nC13 -- majority-class baseline per type (reported, not asserted)")
+    """C13: what a type is worth to a model that knows nothing.
+
+    Three numbers, because the labelled-pair format changed what "cheap" means.
+    A constant answer string used to be the whole no-knowledge strategy, and
+    `answer` still measures it.  But the pair rule pulls the label apart from
+    the value, and the two are cheap for different reasons: the label set is
+    usually a function of the question, and the value is often standing in the
+    question already.  The strategy that beats a constant string is "emit this
+    type's usual labels, and copy the values out of the question" -- which a
+    constant-answer baseline cannot see at all, and which leaves the type
+    reading reassuringly hard while it is in fact trivial.
+
+      answer   the most common answer string, verbatim -- the old number
+      labels   the most common label multiset: how often the shape is free
+      quote    labels AND every value standing in the question as a whole
+               word: the answer is quoted in the prompt (T20 analyses a form
+               the question itself supplies)
+      morph    labels AND every value inside the question but not as a word:
+               the answer is a morphological derivation of something quoted.
+               T4 strips an inflection; T16's antonyms are dominated by `ne-`,
+               so a third of the Tier C type is reachable by deleting two
+               letters and never consulting the graph at all
+
+    `quote` and `morph` are upper bounds, not scores: they say the information
+    suffices, not that a model finds it.  Read them as what a retrieval arm has
+    to beat before its gap over the no-retrieval control means anything.
+    """
+    print("\nC13 -- no-knowledge baselines per type (reported, not asserted)")
     by_type = collections.defaultdict(list)
     for it in splits["test"]:
-        by_type[it["type"]].append(it["answer"])
+        by_type[it["type"]].append(it)
+    print(f"    {'type':5s} {'n':>4s}  {'answer':>7s} {'labels':>7s} "
+          f"{'quote':>7s} {'morph':>7s}  most common label set")
     for t in sorted(by_type):
-        c = collections.Counter(by_type[t])
-        top, n = c.most_common(1)[0]
-        print(f"    {t:5s} n={len(by_type[t]):4d}  baseline "
-              f"{100.0 * n / len(by_type[t]):5.1f}%  {top[:56]!r}")
+        items = by_type[t]
+        n = len(items)
+        answers = collections.Counter(it["answer"] for it in items)
+        labels = collections.Counter(_label_key(it) for it in items)
+        top_labels, n_labels = labels.most_common(1)[0]
+        free = [it for it in items if _label_key(it) == top_labels]
+        found = [_values_in_question(it) for it in free]
+        quote = sum(1 for kind in found if kind == "word")
+        morph = sum(1 for kind in found if kind == "inside")
+        shown = ", ".join(top_labels[:3]) + ("..." if len(top_labels) > 3 else "")
+        print(f"    {t:5s} {n:4d}  {100.0 * answers.most_common(1)[0][1] / n:6.1f}% "
+              f"{100.0 * n_labels / n:6.1f}% {100.0 * quote / n:6.1f}% "
+              f"{100.0 * morph / n:6.1f}%  {shown[:44]!r}")
+
+
+def _gold_pairs(item):
+    """An item's gold as pairs, or None if it is a sentinel.
+
+    A negative's `gold_items` is not a list of pairs -- it is the one sentinel
+    string, because "not in the database" has no label and no value.  Both
+    baselines treat that as its own class rather than as an empty pair list:
+    every negative of a type answers identically, which is free structure the
+    baseline should show, not a zero it should hide.
+    """
+    gold = item.get("gold_items") or []
+    if any(not (isinstance(g, (list, tuple)) and len(g) == 2) for g in gold):
+        return None
+    return gold
+
+
+def _label_key(item):
+    """An item's label multiset, canonically ordered, as a hashable key."""
+    gold = _gold_pairs(item)
+    if gold is None:
+        return (spec.SENTINEL,)
+    return tuple(sorted(sl.norm(k) for k, _v in gold))
+
+
+def _values_in_question(item):
+    """How the gold values sit in the question: "word", "inside", or None.
+
+    "word" -- every value is a whole word of the question, so the answer is
+    quoted in the prompt.  "inside" -- every value is in the question but at
+    least one only as a substring, so the answer is a derivation of something
+    quoted: an inflection stripped, or a `ne-` removed.  The distinction is the
+    point.  Plain containment alone reads as an artefact ("of course
+    `priročnost` is inside `nepriročnost`") and gets waved away; separating the
+    two says which
+    types are answerable by copying and which by a two-letter edit, and both
+    are answerable without the graph.
+
+    A sentinel is "word": a negative's answer is a fixed string, and needs no
+    source in the question at all.
+    """
+    gold = _gold_pairs(item)
+    if gold is None:
+        return "word"
+    q = sl.norm(item["question"])
+    values = [sl.norm(v) for _k, v in gold]
+    if not all(v in q for v in values):
+        return None
+    # \w is Unicode-aware, so the caron letters count as word characters and
+    # `zvest` does not match inside `zvestoba`.
+    whole = all(re.search(rf"(?<!\w){re.escape(v)}(?!\w)", q) for v in values)
+    return "word" if whole else "inside"
+
+
+def d3b_no_shadow(store):
+    """D3b: the index keys phrases, and no phrase key shadows a word.
+
+    Not a numbered check of section 2, but the invariant `qa/unlisted.py`'s
+    docstring demands: flavour (a) means "a real word the D3 lookup cannot
+    reach", and every one of those items was generated against an index that
+    held words only.  Widening it is safe exactly as long as what was added
+    cannot be a word -- so the assertion is that every added key contains a
+    space, which no word key does.
+
+    It also catches the failure that made this check worth writing: the cached
+    index is a file under the store, and a stale one turns D3b into a no-op
+    that looks identical to success, because an unresolved phrase still ships a
+    well-formed `ni v bazi` ball.
+    """
+    print("\nD3b -- the surface index keys phrases, and none shadows a word")
+    idx = store.surface_index()
+    phrase = [k for k in idx if " " in k]
+    check("the index holds phrase keys", bool(phrase), f"{len(phrase):,} of {len(idx):,}")
+    # A word key with a space would mean the two halves are no longer separable
+    # and the flavour (a) guarantee could not be stated at all.
+    words = {store.lemma(int(a)).casefold() for a in store.core_anchors()[:5000]}
+    check("no core lemma contains a space",
+          not any(" " in w for w in words), f"{len(words):,} sampled")
+    check("every phrase key is multi-word",
+          all(" " in k for k in phrase))
+
+
+def c27_d5c_word_balls(store, items, n=300):
+    """C27: D5c is a no-op on word-anchored balls.
+
+    D5c moves D5's `word -> MWE` cap from the root's hop-1 list to every
+    expansion.  On an MWE root that is the difference between a 423,606-node
+    ball and a 103-node one; on a single-word root it must change nothing at
+    all, or the cap is not where the design says it is and every published
+    word-ball number was measured against a different policy.
+
+    Asserted rather than argued: the same anchors are built both ways in one
+    process and the node sets compared.  This is the check that was deliberately
+    absent until D5c existed to give it something to compare.
+    """
+    print(f"\nC27 -- D5c changes no word ball (sampled {n})")
+    anchors, seen = [], set()
+    for it in items:
+        if it["negative"]:
+            continue
+        for a in it.get("targets") or ():
+            i = int(np.searchsorted(store.codes, a))
+            if (i < len(store.codes) and int(store.codes[i]) == a
+                    and not store.mwe[i] and i not in seen):
+                seen.add(i)
+                anchors.append(i)
+                break
+        if len(anchors) >= n:
+            break
+    if not anchors:
+        check("word anchors to compare", False)
+        return
+    bad = []
+    for i in anchors:
+        with_ = build_balls.ball_nodes(store, i)
+        without = build_balls.ball_nodes(store, i, d5c=False)
+        if with_ != without:
+            bad.append((int(store.codes[i]), len(without), len(with_)))
+    check("word balls are identical with and without D5c", not bad,
+          f"{len(anchors)} anchors" if not bad else f"{len(bad)} differ: {bad[:3]}")
+
+    # The other half, and the one that keeps this check honest: if D5c were
+    # reverted, the two builds above would agree everywhere and the no-op
+    # assertion would pass by doing nothing.  So assert that the cap DOES bite
+    # where it is supposed to.  `se` is a constituent of ~423k phrases; an MWE
+    # anchor built without the cap runs to six figures.
+    mwe = [int(a) for a in store.mwe_anchors()[:1]]
+    for it in items:
+        if len(mwe) >= 3:
+            break
+        for c in it.get("targets") or ():
+            j = int(np.searchsorted(store.codes, c))
+            if (j < len(store.codes) and int(store.codes[j]) == c
+                    and store.mwe[j] and j not in mwe):
+                mwe.append(j)
+                break
+    capped = [(len(build_balls.ball_nodes(store, j, d5c=False)),
+               len(build_balls.ball_nodes(store, j))) for j in mwe]
+    check("D5c actually bounds an MWE ball",
+          all(c < u for u, c in capped) if capped else False,
+          f"uncapped -> capped: {capped}")
 
 
 def c18_sampling(store, items):
@@ -468,6 +657,7 @@ def run(dataset=None, store=None, pre_ball=False, balls=None):
         from qa.store import open_store
         store = open_store(args.store, verbose=False)
         c7_sense_class(store)
+        d3b_no_shadow(store)
 
     if args.dataset:
         splits = load(args.dataset)
@@ -488,6 +678,7 @@ def run(dataset=None, store=None, pre_ball=False, balls=None):
             c28_balls_resolve(ballrows, allitems)
         c13_baselines(splits)
         if store:
+            c27_d5c_word_balls(store, allitems)
             c18_sampling(store, allitems)
 
     print("\nSELFTEST:", "PASS" if not FAIL else f"FAIL ({len(FAIL)}): {FAIL}")
