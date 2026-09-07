@@ -252,6 +252,84 @@ def counted(n, noun):
     return f"{n} {genitive}"
 
 
+# --------------------------------------------------------------------------
+# the relation names, declined -- T23's slot
+# --------------------------------------------------------------------------
+# T23 asks whether a relation is recorded for a word, so the relation's NAME goes
+# into the question, where it declines like any other Slovene noun and drags
+# agreement along with it ("vsaj eno sopomenko" but "vsaj en zgled", "zabeležene
+# sopomenke" but "zabeleženi zgledi").  Getting that wrong writes ungrammatical
+# Slovene into the question distribution, which is the defect the slot-naming
+# convention at the top of qa/templates.py exists to prevent.
+#
+# A closed table, hand-written, never a stemmer -- the same discipline the case
+# and tense tables above follow.  Five relations is the whole vocabulary: the
+# graph has no sixth relation a yes/no question could be asked about.
+#
+# It is also read BACKWARDS, by C25 (`qa/check_labels.py`).  T23's answer label
+# is the relation in the nominative while the question spells it in whichever
+# case the frame needed, so the check that asks "is this label sitting in the
+# item's own question?" has to fold the inflected form back -- and it folds it
+# back through this table, so the frames and the check cannot drift into two
+# different ideas of what `sopomenko` is a form of.
+RELATIONS = {
+    #                gender  nom sg      acc sg      gen sg      nom pl       acc pl       gen pl
+    "sopomenka":    ("f", "sopomenka", "sopomenko", "sopomenke", "sopomenke", "sopomenke", "sopomenk"),
+    "protipomenka": ("f", "protipomenka", "protipomenko", "protipomenke",
+                     "protipomenke", "protipomenke", "protipomenk"),
+    "kolokacija":   ("f", "kolokacija", "kolokacijo", "kolokacije",
+                     "kolokacije", "kolokacije", "kolokacij"),
+    "oblika":       ("f", "oblika", "obliko", "oblike", "oblike", "oblike", "oblik"),
+    "zgled":        ("m", "zgled", "zgled", "zgleda", "zgledi", "zglede", "zgledov"),
+    "pomen":        ("m", "pomen", "pomen", "pomena", "pomeni", "pomene", "pomenov"),
+}
+
+#: The agreeing words, by gender.  Kept apart from the noun forms because they
+#: agree rather than decline: adding a frame that needs "najden" is one row here,
+#: not five edits above.
+_AGREE = {
+    "one": {"f": "vsaj eno", "m": "vsaj en"},        # + accusative singular
+    "any": {"f": "kakšno", "m": "kakšen"},           # + accusative singular
+    "rec": {"f": "zabeležena", "m": "zabeležen"},    # + nominative singular
+    "rec_pl": {"f": "zabeležene", "m": "zabeleženi"},   # + nominative plural
+    "nav": {"f": "navedena", "m": "naveden"},        # + nominative singular
+}
+
+
+def relation_slots(rel):
+    """Every `{REL_*}` slot a T23 frame may use, for one relation."""
+    g, nom, acc, gen, nom_pl, acc_pl, gen_pl = RELATIONS[rel]
+    return {
+        "REL": rel,
+        "REL_NOM": nom, "REL_ACC": acc, "REL_GEN": gen,
+        "REL_NOM_PL": nom_pl, "REL_ACC_PL": acc_pl, "REL_GEN_PL": gen_pl,
+        "REL_ONE_ACC": f"{_AGREE['one'][g]} {acc}",
+        "REL_ANY_ACC": f"{_AGREE['any'][g]} {acc}",
+        "REL_REC_NOM": f"{_AGREE['rec'][g]} {nom}",
+        "REL_REC_PL": f"{_AGREE['rec_pl'][g]} {nom_pl}",
+        "REL_NAV_NOM": f"{_AGREE['nav'][g]} {nom}",
+    }
+
+
+#: Every inflected relation form -> the nominative C25 must recognise it as.
+RELATION_FORMS = {f.casefold(): rel
+                  for rel, row in RELATIONS.items() for f in row[1:]}
+
+
+# --------------------------------------------------------------------------
+# whole-word occurrence
+# --------------------------------------------------------------------------
+#: One pattern, three callers.  T20 needs the COUNT (a form must occur exactly
+#: once for the question to be unambiguous), C26 needs the boolean, and the two
+#: drifting apart would mean two different ideas of where a Slovene word ends.
+WORD = r"(?<!\w){}(?!\w)"
+
+
+def occurs(surface, text):
+    """Is `surface` in `text` as a whole word, case-blind?"""
+    return re.search(WORD.format(re.escape(surface)), text, re.I) is not None
+
+
 # There is deliberately no misspelling generator here: negatives of flavour (a)
 # are real words the lookup cannot reach, drawn by qa/unlisted.py, which carries
 # the reasoning.

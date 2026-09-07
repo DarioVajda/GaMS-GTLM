@@ -420,6 +420,45 @@ TEMPLATES = {
         ("Poglej stavek {S} in povej, v kateri obliki nastopa {F}.", "A"),
         ("Katero slovnično obliko ima {F} tukaj: {S}", "A"),
     ],
+
+    # ---- Group H: the first two ----------------------------------------
+    # {REL_*} is one relation name in the case the frame needs -- see
+    # sl.relation_slots().  Never write a relation name literally into a frame:
+    # `protipomenka` is Tier C, and a literal would put its tag word into every
+    # item of this type instead of only into the test items that ask about it.
+    "T23": [
+        ("Ali ima beseda {L} {REL_ACC}?", "train"),
+        ("Ali baza vsebuje {REL_ACC_PL} za besedo {L}?", "train"),
+        ("Preveri, ali so za besedo {L} {REL_REC_PL}.", "train"),
+        ("Ali je pri besedi {L} {REL_NAV_NOM}?", "train"),
+        ("Ali ima {L} {REL_ONE_ACC}?", "train"),
+        ("Ali v bazi najdem {REL_ACC_PL} besede {L}?", "train"),
+        ("Zanima me, ali ima beseda {L} {REL_ACC}.", "train"),
+        ("Ali obstaja {REL_NOM} za besedo {L}?", "train"),
+        ("Za besedo {L} — ali ima {REL_ANY_ACC}?", "train"),
+        ("Ali baza pozna {REL_ANY_ACC} besede {L}?", "train"),
+        ("Rabim samo potrditev: ima beseda {L} {REL_ACC}?", "A"),
+        ("Ne najdem {REL_GEN} za besedo {L}. Je sploh v bazi?", "A"),
+        ("Me zanima, ali baza za besedo {L} sploh ima {REL_ACC_PL}.", "A"),
+    ],
+    # T30's {L} is a MULTI-WORD phrase, so a frame must not call it "beseda":
+    # "iz katerih besed je sestavljena besedna zveza pod drobnogledom" is a true
+    # premise, "beseda pod drobnogledom" is not.
+    "T30": [
+        ("Iz katerih besed je sestavljena zveza {L}?", "train"),
+        ("Katere iztočnice sestavljajo besedno zvezo {L}?", "train"),
+        ("Razčleni zvezo {L} na posamezne besede.", "train"),
+        ("Navedi sestavine besedne zveze {L}.", "train"),
+        ("Katere osnovne oblike nastopajo v zvezi {L}?", "train"),
+        ("Iz katerih iztočnic je sestavljena besedna zveza {L}?", "train"),
+        ("Zapiši besede, iz katerih je sestavljena zveza {L}.", "train"),
+        ("Na katere iztočnice razpade zveza {L}?", "train"),
+        ("Kateri deli sestavljajo besedno zvezo {L}?", "train"),
+        ("Razstavi besedno zvezo {L} na iztočnice.", "train"),
+        ("Zveza {L} — iz česa je sestavljena?", "A"),
+        ("Ne vem, kako razčleniti zvezo {L}. Katere besede jo sestavljajo?", "A"),
+        ("Iz katerih osnovnih oblik je zveza {L}?", "A"),
+    ],
 }
 
 # A frame that names a word class -- "samostalnik {L}", "glagol {L}",

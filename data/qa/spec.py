@@ -98,7 +98,51 @@ SPEC = {
     "T20": dict(name="primeri_uporabe/analiza_oblike_v_povedi", mode="pairs",
                 keys=GRID),
     "T21": dict(name="sklanjanje/analiza_oblike", mode="pairs", keys=GRID),
+    # ── Group H, the first two (step 7: prove the machinery on two types) ──
+    "T23": dict(name="preveri/ali_obstaja", mode="pairs",
+                keys="the relation's own tag"),
+    "T30": dict(name="zveze/sestava_zveze", mode="pairs", keys="iztočnica",
+                seed_pool="phrase"),
 }
+
+#: Types seeded from the PHRASE pool rather than the word pool.  `availability`
+#: runs every generator over every seed, and a phrase type over word seeds
+#: returns nothing for all of them -- it does not fail, it just reports the type
+#: as unavailable, which is the silent kind of wrong.  Naming the pool here is
+#: what makes the generation loop ask the right population.
+PHRASE_SEEDED = frozenset(k for k, v in SPEC.items()
+                          if v.get("seed_pool") == "phrase")
+
+#: T23's slot.  The two held-out relations (`protipomenka` from T16, `prevod
+#: (madžarsko)` from T36) are TEST-ONLY -- a question that merely names a held-out
+#: relation leaks it whether the answer is `da` or `ne`, which is what C6 checks
+#: over the whole item rather than over the answer.
+#:
+#: Four of the coverage table's seven training relations, not seven.  The three
+#: absent ones are absent for reasons, not for want of typing:
+#:
+#:   `prevod (madžarsko)`  is the OTHER held-out relation, and T36 -- which holds
+#:       it out -- has not landed.  Adding it here would put a Tier C slot value
+#:       into training with no tag words registered in TIER_C_TAG_WORDS and so no
+#:       check watching it.  It goes in with T36, in the same diff as its tag
+#:       words.
+#:   MWE membership       has no node prefix of its own.  Every other value here
+#:       is the literal tag the ball spells (`sopomenka:`, `oblika:`), and
+#:       "does this word belong to a phrase" would need a tag invented for the
+#:       question -- which is a decision about the label vocabulary (0.1), not a
+#:       detail of this type.
+#:   `pomen`              cannot answer `ne` truthfully.  Presence would have to
+#:       mean a DEFINED sense (what T12 lists), because every core anchor has a
+#:       sense node and the answer would otherwise be `da` for all of them -- but
+#:       measured over 6,000 pool entries, **100 %** of those with no defined
+#:       sense still render a `pomen` node in the ball (`pomen None: Shakespeare`,
+#:       a placeholder whose body is the headword).  So every `pomen: ne` ships an
+#:       input that appears to contradict it, and the model would be supervised to
+#:       ignore a node it can plainly see.  The fix is a label that names the
+#:       DEFINITION rather than the sense, which is a §0.1 decision and not this
+#:       type's to make.
+T23_RELATIONS = ("sopomenka", "zgled", "kolokacija", "oblika")
+T23_HELD_OUT = ("protipomenka",)
 
 # ── The set rule ───────────────────────────────────────────────────────────
 # ORDER IS NOT A PROPERTY OF THIS DATA.  The KG stores the examples of a sense,
@@ -125,7 +169,7 @@ SET_VALUED = frozenset(MEMBER_KIND)
 #: (C15).  T17 is here for the generated corpus, where its draw is still the
 #: sampler's sorted one; stage 4 re-verbalises it from the ball's pool, whose
 #: order is the ball's, so C15 is asserted before that stage and not after.
-VALUE_SORTED = ("T4", "T15", "T16", "T17")
+VALUE_SORTED = ("T4", "T15", "T16", "T17", "T30")
 
 
 def check_set_rule():
@@ -158,7 +202,12 @@ TIER_C = ("T16",)
 # word `nasprotje` is not knowing that `protipomenka:` nodes exist or what
 # question shape asks for them.  They are banned from training QUESTIONS, which
 # we author, and reported but allowed in answers.
-TIER_C_TAG_WORDS = ("protipomenka", "protipomenke", "protipomenko", "antonim")
+TIER_C_TAG_WORDS = ("protipomenka", "protipomenke", "protipomenko",
+                    # T23 puts the relation name in the QUESTION, where it
+                    # declines: the genitive plural is a tag word C6 never had
+                    # to catch while the name only ever appeared as a label.
+                    "protipomenk", "protipomenki",
+                    "antonim")
 TIER_C_SOFT_WORDS = ("nasprotje", "nasproten", "nasprotno", "nasprotna")
 TIER_C_LEAK_WORDS = TIER_C_TAG_WORDS + TIER_C_SOFT_WORDS
 

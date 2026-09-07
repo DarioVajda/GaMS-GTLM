@@ -91,7 +91,11 @@ DECLARED_ATOMS = frozenset(
 #: to contain.  Recorded and reported rather than passed on a coincidence -- the
 #: old check scored T14 at 100 % because a one-token gold of `3` matched any node
 #: with a 3 in it.
-COMPOSED_VALUE = ("T14",)
+#: T23 joins it for the same reason one step further out: its value is `da` or
+#: `ne`, a VERDICT ABOUT the ball rather than a node in it, and a `ne` item is
+#: precisely the case where the thing being asked about is absent.  Requiring
+#: containment would make every correct `ne` look like a defect.
+COMPOSED_VALUE = ("T14", "T23")
 
 
 def is_composed(gold):

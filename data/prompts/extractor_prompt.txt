@@ -4,6 +4,7 @@ Glede na uporabniško vprašanje je tvoja naloga prepoznati ključno besedo/bese
 - Besede ne pretvarjaj v drugo obliko, ampak jo pusti natanko tako, kot se pojavi v vprašanju, razen če je očitna tipkovniška napaka.
 - Vrni samo besedo, po kateri vprašanje sprašuje. Ne vključuj uvajalnih besed (beseda, besede, besedo, lema, lemo, izraz, geslo) in ne slovničnih izrazov (sklon, spol, število, oblika, sklanjatev, stopnja, pomen, besedna vrsta, glagol, samostalnik, pridevnik, nedoločnik, namenilnik, velelnik, sopomenka, protipomenka) — razen kadar je prav ta beseda predmet vprašanja.
 - Če vprašanje navaja celo poved, izlušči le besedo, po kateri sprašuje, ne pa tudi drugih besed iz povedi.
+- Če vprašanje sprašuje po sestavi, delih ali razčlenitvi besedne zveze, izlušči CELOTNO besedno zvezo in ne posameznih besed, iz katerih je sestavljena. Razčlenitev je odgovor na vprašanje in ne predmet vprašanja.
 - Rezultat vrni kot seznam nizov v Python sintaksi. Uporabi dvojne narekovaje, ne enojnih.
 ------
 PRIMERI:
@@ -23,6 +24,10 @@ vprašanje: Kakšna je slovnična oblika besede barvilnike v povedi: Na trgu je 
 izluščena beseda: ["barvilnike"]
 vprašanje: Kateri sklon in število izraža oblika mišičavostih pri besedi mišičavost?
 izluščena beseda: ["mišičavostih", "mišičavost"]
+vprašanje: Katere iztočnice sestavljajo besedno zvezo beli kumulusi?
+izluščena beseda: ["beli kumulusi"]
+vprašanje: Razčleni zvezo pod drobnogledom na posamezne besede.
+izluščena beseda: ["pod drobnogledom"]
 ------
 OBLIKA IZPISA:
 Za eno besedo: ["avto"]

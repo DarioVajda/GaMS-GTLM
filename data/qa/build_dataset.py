@@ -161,6 +161,20 @@ def negative_item(ctx, type_key, e, rng, flavour):
         slots.update(tense=t, **gen.tense_slots(t))
     elif type_key == "T17":
         slots.update(band="none", n_all=0)
+    elif type_key == "T23":
+        # Every T23 frame names a relation, so a negative needs one too -- and
+        # without this branch `render_question` raises KeyError on the missing
+        # slots and the negative is dropped, silently, all of them.
+        #
+        # NEVER the held-out relation.  A negative's answer is the sentinel and
+        # teaches nothing about the relation it names, so asking about
+        # `protipomenka` here would spend the Tier C budget for nothing.
+        #
+        # The item is the distinction the type exists to draw: `ne` means the
+        # word is in the base and the relation is not, the sentinel means the
+        # word is not in the base at all.
+        rel = spec.T23_RELATIONS[rng.randrange(len(spec.T23_RELATIONS))]
+        slots.update(sl.relation_slots(rel))
     elif type_key in ("T4",):
         # T4 has no ordinary-lemma negative: every real form belongs to some
         # lemma, so "no lemma is recorded" is only true of a string the lookup
@@ -288,21 +302,41 @@ def _tier_c_safe(item):
 
 
 # --------------------------------------------------------------------------
+def seed_entries(ctx, type_key):
+    """The population a type is seeded from.
+
+    Every type but the phrase family draws from the word pool.  A phrase type
+    drawing from it would not FAIL -- its generator would simply return None for
+    all 72,334 word entries and the type would be reported unavailable, which is
+    the silent kind of wrong.  `spec.PHRASE_SEEDED` is what makes the loop ask
+    the right population, and it is derived from the SPEC table so a new phrase
+    type declares its pool where it declares everything else.
+    """
+    if type_key in spec.PHRASE_SEEDED:
+        return ctx.phrase_pool
+    return ctx.pool.entries
+
+
 def availability(ctx, rng, types, sample_cap=None):
     """{type: {band: [entries]}} -- who can actually answer each type.
 
     Computed by RUNNING the generator, not by predicting it: a type is available
     for an entry iff the generator returns a gold answer for it.  Slower than a
     heuristic and the only version that cannot be wrong.
+
+    Type-outer rather than entry-outer, because the population is now per type
+    (`seed_entries`).  The number of generator calls is unchanged.
     """
     avail = {t: collections.defaultdict(list) for t in types}
     errors = collections.Counter()
     first_error = {}
-    entries = ctx.pool.entries
-    for i, e in enumerate(entries):
-        if sample_cap and i >= sample_cap:
-            break
-        for t in types:
+    seen = collections.Counter()
+    for t in types:
+        entries = seed_entries(ctx, t)
+        for i, e in enumerate(entries):
+            if sample_cap and i >= sample_cap:
+                break
+            seen[t] += 1
             try:
                 out = gen.GENERATORS[t](ctx, e, random.Random(0))
             except Exception as exc:                # noqa: BLE001
@@ -318,7 +352,9 @@ def availability(ctx, rng, types, sample_cap=None):
         print(f"[avail] GENERATOR EXCEPTIONS: {dict(errors)}", flush=True)
         for t, msg in first_error.items():
             print(f"    {t}: {msg}", flush=True)
-        worst = max(errors.values()) / max(len(entries), 1)
+        # Per type, against the population THAT type was run over -- a phrase
+        # type's rate must not be divided by the word pool's size.
+        worst = max(errors[t] / max(seen[t], 1) for t in errors)
         if worst > 0.001:
             raise RuntimeError(f"generator exception rate {worst:.3%} -- fix it")
     return avail
@@ -365,8 +401,9 @@ def generate(ctx, out_dir, seed=20260821, types=None, verbose=True, scale=1.0):
     _NEG_REPLAY.clear()
     rng = random.Random(seed)
     if verbose:
-        print(f"[avail] running every generator over {len(ctx.pool):,} pool entries "
-              f"x {len(types)} types ...", flush=True)
+        n_calls = sum(len(seed_entries(ctx, t)) for t in types)
+        print(f"[avail] running each of {len(types)} generator(s) over its own "
+              f"seed pool -- {n_calls:,} calls ...", flush=True)
     avail = availability(ctx, rng, types)
     if verbose:
         for t in types:
@@ -452,11 +489,25 @@ def generate(ctx, out_dir, seed=20260821, types=None, verbose=True, scale=1.0):
 # Which flavour a type's ORDINARY-LEMMA negatives take (0.2).  `mismatch` means
 # the lemma exists and the question's category does not apply to it; `absent`
 # means the lemma exists and simply lacks the relation.
-MISMATCH_TYPES = {"T1", "T2", "T3", "T5", "T6", "T7", "T9", "T10", "T20", "T21"}
+MISMATCH_TYPES = {"T1", "T2", "T3", "T5", "T6", "T7", "T9", "T10", "T20", "T21",
+                  # T30 asks what a PHRASE is made of; a single-word entry is one
+                  # the question does not apply to, and saying so is a boundary of
+                  # the resource rather than a gap in it.
+                  "T30"}
 
 
 def _ordinary_pool(ctx, t, split):
-    """Seeds for a type's ordinary-lemma negatives, or [] if it has none."""
+    """Seeds for a type's ordinary-lemma negatives, or [] if it has none.
+
+    T23 is deliberately absent: its POSITIVES already answer `ne` when a relation
+    is missing, so an "ordinary lemma that lacks the relation" is not a negative
+    of this type at all -- it is one of its two answers.  What remains is the
+    lemma that is not in the base, which is the `unlisted` flavour.
+    """
+    if t == "T30":
+        # A word, asked a phrase's question.  Drawn from the WORD pool while the
+        # positives come from the phrase pool -- the one place the two meet.
+        return [e for e in ctx.pool.entries if e.split == split]
     if t == "T8":
         # An MWE entry carries no partOfSpeech at all -- a truthful negative that
         # teaches a real boundary of the resource.
@@ -510,7 +561,11 @@ def emit_negatives(ctx, t, split, take, n_neg, rng, counter, items, seed):
     rejected_union = 0
     while sum(made.values()) < n_neg and tries < n_neg * 40:
         tries += 1
-        want_fake = (rng.random() < UNLISTED_SHARE) or not ordinary
+        # A phrase type's `unlisted` negative would be a single real word framed
+        # as a phrase, which is the mismatch negative it already has, wearing a
+        # second label.  One boundary per flavour.
+        want_fake = ((rng.random() < UNLISTED_SHARE
+                      and t not in spec.PHRASE_SEEDED) or not ordinary)
         flavour = ("unlisted" if want_fake
                    else ("mismatch" if t in MISMATCH_TYPES else "absent"))
         pool_b = real if want_fake else ordinary
@@ -546,6 +601,16 @@ def emit_negatives(ctx, t, split, take, n_neg, rng, counter, items, seed):
         _NEG_REPLAY[(t, split)] = chosen
     if rejected_union:
         made["_rejected_union"] = rejected_union
+    # A type that asked for negatives and produced none is a defect, and it is a
+    # QUIET one: the type still ships thousands of positives and the report shows
+    # an empty dict next to a type nobody was reading closely.  T23 hit it -- a
+    # frame slot its negatives did not fill made `render_question` return None for
+    # every attempt -- and nothing else in the build would have said so.
+    if n_neg and not sum(v for k, v in made.items() if not k.startswith("_")):
+        print(f"[neg] *** {t}/{split}: wanted {n_neg} negatives, made NONE after "
+              f"{tries} tries. The type's negatives are being rejected or dropped "
+              f"-- a slot its frames need and `negative_item` does not fill is the "
+              f"usual cause.", flush=True)
     return dict(made)
 
 
@@ -590,21 +655,23 @@ def _mwe_seeds(ctx, limit=6000):
     """
     if "mwe" in _MWE_CACHE:
         return _MWE_CACHE["mwe"]
-    import numpy as np
     st = ctx.store
-    a = np.flatnonzero(st.kind[:st.n_real] == 0)
-    a = a[st.mwe[a]][:limit * 4]
-    out = []
-    for i in a:
+    cache, out = {}, []
+    for i in st.mwe_anchors()[:limit * 4]:
         i = int(i)
-        lemma = st.lemma(i)
-        if not lemma or st.pos(i) is not None:
+        if st.pos(i) is not None:
             continue
-        proxy = len(st.collocations(i)) + seeds._mwe_memberships(st, i)
-        out.append(seeds.Entry(a=i, lu=st.lu_id(i), lemma=lemma, pos=None,
-                               feat={}, proxy=proxy, band=seeds.band_of(proxy),
-                               split=None, n_def=0, n_syn=0, n_ant=0, n_ex=0,
-                               n_col=0))
+        # `entry_for`, not a hand-built Entry.  This used to construct one
+        # inline, which meant a second place that had to know every field: the
+        # moment Group H added `mwe`/`n_mwe`/`n_const` to the record, these
+        # entries were missing them and `as_dict()` raised on the first one
+        # written.  It also hard-coded the word proxy, which is ~0 for every
+        # phrase and put the whole T8 negative pool in B0 -- the exact defect
+        # this function's docstring warns about.
+        e = seeds.entry_for(st, i, require_content=False, proxy_cache=cache)
+        if e is None:
+            continue
+        out.append(e)
         if len(out) >= limit:
             break
     seeds.assign_split(out)

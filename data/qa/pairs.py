@@ -172,6 +172,24 @@ def _t14(slots, items):
     return [["število pomenov", items[0]]]
 
 
+def _t23(slots, items):
+    """`sopomenka: da`.  The relation asked about is the label, `da`/`ne` the value.
+
+    The label cannot come from `slots` alone: the generator glues it on exactly as
+    T7 and T12 do, so the pair survives the round trip through `gold_items` on disk
+    without this module having to know which slot name each frame used.
+
+    `ne` is an ANSWER, not the 0.2 sentinel.  The sentinel means the question
+    cannot be answered from the database; `ne` means it can, and the answer is
+    that the relation is absent -- which is the only fact this type teaches.
+    """
+    out = [_split_leader(c) for c in items]
+    bad = [v for _, v in out if v not in ("da", "ne")]
+    if bad:
+        raise ValueError(f"T23 answers `da` or `ne`, got {bad!r}")
+    return out
+
+
 def _tagged(tag):
     return lambda slots, items: [[tag, v] for v in items]
 
@@ -184,6 +202,9 @@ _BY_TYPE = {
     "T15": _tagged("sopomenka"), "T16": _tagged("protipomenka"),
     "T17": _tagged("kolokacija"), "T19": _tagged("zgled"),
     "T20": _analysis,
+    # Group H.  T30 shares T4's rule and its label: a phrase's constituents are
+    # headwords, named the way every other headword in this corpus is named.
+    "T23": _t23, "T30": _t4,
 }
 
 

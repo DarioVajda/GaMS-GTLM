@@ -60,7 +60,7 @@ import collections
 
 import numpy as np
 
-from qa import sl, spec, grade, pairs, seeds, colloc_sampling, build_balls
+from qa import sl, spec, grade, pairs, seeds, templates, colloc_sampling, build_balls
 
 FAIL = []
 
@@ -70,6 +70,18 @@ def check(name, ok, detail=""):
     if not ok:
         FAIL.append(name)
     return ok
+
+
+def skip(name, why):
+    """A check whose POPULATION is absent, which is not the same as failing.
+
+    A `--types` subset legitimately has no T17 items and no word-anchored
+    targets, and reporting those as failures makes every subset build end in
+    `SELFTEST: FAIL` -- two red lines that are always there, which is exactly how
+    a real failure gets scrolled past.  Skipping is only ever about the input
+    being empty; a check with something to look at still passes or fails.
+    """
+    print(f"  [SKIP] {name}  {why}")
 
 
 # --------------------------------------------------------------------------
@@ -131,6 +143,39 @@ def c7_labels():
     check("render/parse round-trips a value containing a colon",
           grade.parse(pairs.render(p))
           == sorted((sl.norm(k), sl.norm(v)) for k, v in p))
+    c7_relation_slots()
+
+
+def c7_relation_slots():
+    """T23's relation table: every frame renders, for every relation.
+
+    A relation missing one inflected form does not raise where it is written; it
+    raises inside `render_question`, which swallows the KeyError and returns None,
+    and the type quietly makes fewer items.  Cheaper to assert here, over the
+    whole cross product, than to explain a shortfall later.
+
+    The round trip through C25 is asserted too, because the frames and the check
+    share `sl.RELATIONS` and the point of sharing it is that they cannot drift:
+    if a question can name the relation, the check must be able to find it there.
+    """
+    from qa.check_labels import in_question
+    rels = spec.T23_RELATIONS + spec.T23_HELD_OUT
+    bad_render, bad_read = [], []
+    for rel in rels:
+        slots = dict(sl.relation_slots(rel), L="preizkus")
+        for frame, _tier in templates.TEMPLATES["T23"]:
+            try:
+                q = frame.format(**slots)
+            except KeyError as e:
+                bad_render.append((rel, frame, str(e)))
+                continue
+            if not in_question(q, rel):
+                bad_read.append((rel, q))
+    check(f"every T23 frame renders for all {len(rels)} relations", not bad_render,
+          f"{len(rels)} x {len(templates.TEMPLATES['T23'])} frames"
+          if not bad_render else str(bad_render[:2]))
+    check("and C25 can read the relation back out of each one", not bad_read,
+          "" if not bad_read else f"{len(bad_read)} cannot: {bad_read[:2]}")
 
 
 def c7_sense_class(store):
@@ -537,6 +582,69 @@ def d3b_no_shadow(store):
           all(" " in k for k in phrase))
 
 
+#: The types whose ANSWER names the constituents of the phrase in the question.
+CONSTITUENT_TYPES = ("T30", "T34")
+
+
+def c26_constituents(store, items):
+    """C26: every constituent an answer names really occurs in the phrase.
+
+    Read off the ITEM, not off the store: the question carries the phrase and the
+    gold carries the words, so the check is exactly the claim the item makes and
+    does not have to agree with the generator about which anchor it came from.
+    That matters here, because the generator is the thing being checked -- the
+    KG's constituent edges are wrong for 49 function-word anchors (see
+    `seeds.constituent_occurs`) and the answers they produce are well-formed
+    lemmas in the right shape.
+
+    A constituent usually appears in the phrase INFLECTED (`razpravo` for
+    `razprava`), so a miss falls back to the entry's `oblika:` forms -- which
+    means resolving the named lemma to an anchor.  That is done through the
+    phrase's own composition edges and NOT through the surface reverse index: the
+    index covers the core pool, and 3 of the 15 constituents in a hand-checked
+    sample are outside it (`letoštetje`, `zorjenje`, `Lepant`), so an
+    index-based lookup reports a correct item as broken. That was this check's
+    first version, and its failures were all its own.
+
+    Two claims, both against the item rather than against the generator's
+    working state:
+
+      * every word the answer names is one of the phrase's recorded parts -- an
+        invented constituent is caught even if it happens to occur, and
+      * that part really does show up in the phrase.
+
+    The second is the one that catches the KG's bad edges, and it is re-derived
+    from node text here, so it does not inherit the generator's verdict.
+    """
+    print("\nC26 -- every constituent named occurs in its phrase")
+    rows = [it for it in items
+            if it["type"] in CONSTITUENT_TYPES and not it["negative"]]
+    if not rows:
+        skip("constituent validity", "no constituent-naming items in this dataset")
+        return
+    cache = {}
+    unknown, absent = [], []
+    n_const = 0
+    for it in rows:
+        phrase = (it.get("slots") or {}).get("L") or ""
+        a = _anchor_of(store, it)
+        parts = ({} if a is None else
+                 {store.lemma(c).casefold(): c
+                  for c in seeds.constituents(store, a)})
+        for _oznaka, w in it["gold_items"]:
+            n_const += 1
+            c = parts.get(w.casefold())
+            if c is None:
+                unknown.append((it["id"], phrase, w))
+            elif not seeds.constituent_occurs(store, c, phrase, cache):
+                absent.append((it["id"], phrase, w))
+    check("every constituent named is a recorded part of the phrase", not unknown,
+          f"{n_const:,} constituents over {len(rows):,} items" if not unknown
+          else f"{len(unknown)} are not, e.g. {unknown[:3]}")
+    check("and occurs in it", not absent,
+          "" if not absent else f"{len(absent)} do not, e.g. {absent[:3]}")
+
+
 def c27_d5c_word_balls(store, items, n=300):
     """C27: D5c is a no-op on word-anchored balls.
 
@@ -565,7 +673,15 @@ def c27_d5c_word_balls(store, items, n=300):
         if len(anchors) >= n:
             break
     if not anchors:
-        check("word anchors to compare", False)
+        # No targets at all means the dataset has not reached stage 4 -- nothing
+        # to compare, and saying so is honest.  Targets that are ALL phrases is a
+        # different thing and stays a failure: on a corpus with word-seeded types
+        # it would mean the anchors resolved to something unexpected.
+        if any(it.get("targets") for it in items):
+            check("a word-anchored target to compare", False,
+                  "every target in this dataset is a phrase")
+        else:
+            skip("D5c on word balls", "no item has targets yet (pre stage 4)")
         return
     bad = []
     for i in anchors:
@@ -593,8 +709,16 @@ def c27_d5c_word_balls(store, items, n=300):
                 break
     capped = [(len(build_balls.ball_nodes(store, j, d5c=False)),
                len(build_balls.ball_nodes(store, j))) for j in mwe]
+    # AT LEAST ONE must shrink, and none may grow.  Not "all of them shrink":
+    # most phrases are ordinary and their hop-1 words belong to few enough MWEs
+    # that the cap never binds -- sampling three of them found (88 -> 88) and
+    # (131 -> 100) beside the hub's (423,587 -> 117).  Requiring every sampled
+    # ball to shrink asserted that every phrase is a hub, which is false and made
+    # the check fail on a corpus that was correct.  The first entry is always the
+    # hub anchor, so "at least one" is not left to the sample.
     check("D5c actually bounds an MWE ball",
-          all(c < u for u, c in capped) if capped else False,
+          bool(capped) and any(c < u for u, c in capped)
+          and all(c <= u for u, c in capped),
           f"uncapped -> capped: {capped}")
 
 
@@ -611,7 +735,13 @@ def c18_sampling(store, items):
     print("\nC18 -- D5b reproducibility")
     anchors = [it for it in items if it["type"] == "T17" and not it["negative"]]
     if not anchors:
-        check("T17 items present", False)
+        # Absent type -> skip; present but all negative -> fail.  The second is a
+        # real defect (a type that generated no positives) and must not hide
+        # behind the licence a `--types` subset gets.
+        if any(it["type"] == "T17" for it in items):
+            check("T17 positives present", False, "T17 items exist, none positive")
+        else:
+            skip("D5b reproducibility", "no T17 items in this dataset")
         return
     sample = anchors[:200]
     a = _anchor_of(store, sample[0])
@@ -678,6 +808,7 @@ def run(dataset=None, store=None, pre_ball=False, balls=None):
             c28_balls_resolve(ballrows, allitems)
         c13_baselines(splits)
         if store:
+            c26_constituents(store, allitems)
             c27_d5c_word_balls(store, allitems)
             c18_sampling(store, allitems)
 

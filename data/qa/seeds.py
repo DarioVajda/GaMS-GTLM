@@ -36,6 +36,101 @@ def band_of(proxy):
     return BAND_NAMES[0]
 
 
+def constituents(store, a):
+    """The word anchors an MWE is composed of, via its `sestavina` edges.
+
+    Empty for a WORD anchor, and the guard is load-bearing rather than defensive.
+    The filter below reads "an anchor neighbour that is not itself an MWE", which
+    for a phrase means its parts -- but run on a word it would mean *the other
+    words that word is linked to*, and T30 would answer "what is X made of?" with
+    a list of X's relatives.  Only ever called on phrases until now, so nothing
+    had exercised the other direction.
+    """
+    from .store import K_ANCHOR
+    if not store.mwe[a]:
+        return []
+    return [int(v) for v in store.nbrs(a)
+            if store.kind[int(v)] == K_ANCHOR and not store.mwe[int(v)]]
+
+
+def constituent_occurs(store, c, phrase, cache=None):
+    """C26: does constituent anchor `c` actually SHOW UP in `phrase`?
+
+    Its own lemma, or one of its `oblika:` forms, as a whole word -- `razprava`
+    is not in *razvneti razpravo* and `razpravo` is.
+
+    The check is needed because the KG's own constituent edges are not always
+    right, and the wrong ones are concentrated: over 2,365 sampled phrases, 49
+    anchors account for every failure and the top ten for 93.6 % of them. They
+    are function words whose anchor carries a misleading lemma -- node 100762
+    reads `iztočnica: prikazati (zaimek, naslonska oblika)` and is the clitic
+    *se*, in 270 phrases; nodes 260/261/277 read `celoti`, `na` and `silo`,
+    are all tagged `predlog`, and stand in for *v* and *z*.
+
+    So the answer would name a word that is not in the phrase, in a shape that
+    looks perfectly well formed -- which is why this is a filter as well as a
+    check.  It costs 26.4 % of T30's items.
+
+    `cache` maps an anchor to its surfaces, and it is not an optimisation to be
+    weighed -- it is the difference between a 6-minute generation stage and a
+    40-minute one.  Without it, `store.forms` is walked again for every phrase a
+    constituent appears in, and the constituents that appear in the most phrases
+    are the function words with the most forms.  Pass one dict for the whole run.
+    """
+    if sl.occurs(store.lemma(c), phrase):
+        return True
+    if cache is None:
+        return any(sl.occurs(s, phrase) for _v, s, _f in store.forms(c))
+    surfaces = cache.get(c)
+    if surfaces is None:
+        surfaces = cache[c] = tuple({s for _v, s, _f in store.forms(c) if s})
+    return any(sl.occurs(s, phrase) for s in surfaces)
+
+
+def phrase_proxy(store, a, cache=None):
+    """D9's frequency proxy for a PHRASE: the MINIMUM over its constituents'.
+
+    A phrase has no collocations and belongs to no larger MWE, so the word
+    proxy (`n_col + mwe_memberships`) is ~0 for all of them: measured, 316 of
+    319 phrase seeds land in B0 and the whole family collapses into one band.
+
+    `min` rather than max/sum/median, decided by measurement over 6,000
+    phrases -- share of the family in each band, against a core pool that runs
+    29.9/12.3/13.9/14.8/15.4/9.4/4.3 across B0..B6:
+
+        min     0.0  1.5  2.7  7.4 23.1 39.9 25.4      <- spreads
+        median  0.0  0.1  0.1  0.4  3.4 20.6 75.4
+        max     0.0  0.1  0.1  0.2  1.4 10.6 87.7
+        sum     0.0  0.0  0.1  0.1  0.9  7.9 91.0
+
+    max, sum and median are all dominated by the phrase's function word --
+    `biti` is a constituent of 423,510 phrases -- so they band the family by
+    its most common part and pile 75-91 % into B6, which is exactly as flat as
+    the B0 collapse they were meant to fix.  `min` is also the reading that
+    means anything: a phrase is at most as common as its rarest constituent.
+
+    B0 comes out empty by construction, and that is correct rather than a
+    miss -- every constituent belongs to at least the phrase being scored, so
+    the minimum proxy is at least 1.
+
+    `cache` maps constituent node -> proxy.  Pass one: `store.proxy` walks the
+    node's whole adjacency, phrases share their function words, and without it
+    a pool build re-walks `biti`'s 423,510 edges once per phrase that uses it.
+    """
+    cs = constituents(store, a)
+    if not cs:
+        return 0
+    if cache is None:
+        return min(store.proxy(c) for c in cs)
+    out = None
+    for c in cs:
+        p = cache.get(c)
+        if p is None:
+            p = cache[c] = store.proxy(c)
+        out = p if out is None or p < out else out
+    return out
+
+
 def sense_class(store, a, sense_node, ordinal, body, lemma_cf):
     """placeholder | fallback | defined -- QA_TASKS.md Group D, shared by T12/T14.
 
@@ -60,7 +155,13 @@ def sense_class(store, a, sense_node, ordinal, body, lemma_cf):
 class Entry:
     """Everything the generators need about one seed lemma, computed once."""
     __slots__ = ("a", "lu", "lemma", "pos", "feat", "proxy", "band", "split",
-                 "n_def", "n_syn", "n_ant", "n_ex", "n_col")
+                 "n_def", "n_syn", "n_ant", "n_ex", "n_col",
+                 # Group H counters.  `mwe` is what the phrase types select on;
+                 # `n_mwe`/`n_const` are the two counts that are facts about an
+                 # entry's position in the MWE graph rather than about a
+                 # relation, and T24/T27 compare counts across entries, so they
+                 # have to be exact here rather than recomputed per generator.
+                 "mwe", "n_mwe", "n_const")
 
     def __init__(self, **kw):
         for k, v in kw.items():
@@ -139,13 +240,19 @@ def ambiguous_lemma_units(path=None):
         return {int(k) for k in json.load(f)["units"]}
 
 
-def entry_for(store, a, split=None, require_content=True):
+def entry_for(store, a, split=None, require_content=True, proxy_cache=None):
     """One `Entry` for anchor `a`, or None when it is not usable as a seed.
 
     Factored out of `build_pool` so the same construction serves the union
     absence test in build_dataset: that test has to run the REAL generators over
     an arbitrary co-extracted anchor, and a generator needs a fully populated
     Entry.  Building it any other way would let the two drift.
+
+    Works for a phrase anchor as well as a word one; the two differ only in how
+    the proxy is computed (see `phrase_proxy`).  The content rule is deliberately
+    NOT tightened for phrases: 95.4 % of MWEs pass it on a usage example alone,
+    and that example-bearing half is the capability the phrase family exists to
+    reach.  Bounding the phrase pool is `build_phrase_pool`'s job, by sampling.
     """
     a = int(a)
     lemma = store.lemma(a)
@@ -158,11 +265,15 @@ def entry_for(store, a, split=None, require_content=True):
     n_ex = len(store.examples(a))
     if require_content and not (n_def or n_col or n_syn or n_ex):
         return None
-    proxy = n_col + _mwe_memberships(store, a)
+    mwe = bool(store.mwe[a])
+    n_mwe = _mwe_memberships(store, a)
+    n_const = len(constituents(store, a)) if mwe else 0
+    proxy = (phrase_proxy(store, a, proxy_cache) if mwe else n_col + n_mwe)
     return Entry(a=a, lu=store.lu_id(a), lemma=lemma, pos=store.pos(a),
                  feat=store.anchor_features(a), proxy=proxy,
                  band=band_of(proxy), split=split, n_def=n_def, n_syn=n_syn,
-                 n_ant=n_ant, n_ex=n_ex, n_col=n_col)
+                 n_ant=n_ant, n_ex=n_ex, n_col=n_col,
+                 mwe=mwe, n_mwe=n_mwe, n_const=n_const)
 
 
 def build_pool(store, progress=None):
@@ -189,6 +300,114 @@ def build_pool(store, progress=None):
           flush=True)
     assign_split(entries)
     return Pool(store, entries)
+
+
+# How many phrase seeds to draw.  The word pool is ~72 k and the corpus it
+# supports is 12,490 items; the phrase family is a minority of the type
+# inventory, so a pool of the same order is generous and nothing about it wants
+# to be 3.76 M.
+PHRASE_POOL = 80_000
+
+
+def build_phrase_pool(store, limit=PHRASE_POOL, seed=20260821, progress=None):
+    """D8 for phrases: a BOUNDED sample of MWE anchors, entries built for the draw.
+
+    `build_pool` can walk its whole population because there are 100,801 core
+    anchors.  There are 3,940,417 MWE anchors, and `entry_for`'s content rule
+    keeps 95.4 % of them -- so the same approach projects a pool of ~3.76 M
+    entries and a 14.3-minute pass before a single item is generated.
+
+    The fix is to bound the pool by SAMPLING rather than by content.  Tightening
+    the content rule instead is the tempting mistake: requiring a definition cuts
+    the pool to ~62,849, a pleasant number bought by discarding the 97.6 % of
+    phrases whose content is a usage example -- which is precisely the half
+    QA_TASKS.md H.5 wants these types to reach.
+
+    Deterministic: the permutation is seeded, so the draw is a pure function of
+    (store, limit, seed) exactly as `build_pool` is a pure function of the store.
+    """
+    import numpy as np
+
+    mwe = store.mwe_anchors()
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(len(mwe))
+    entries, cache, seen = [], {}, 0
+    for j in order:
+        if len(entries) >= limit:
+            break
+        seen += 1
+        e = entry_for(store, int(mwe[int(j)]), proxy_cache=cache)
+        if e is not None:
+            entries.append(e)
+        if progress and seen % 10000 == 0:
+            progress(seen, len(mwe), len(entries))
+    print(f"[phrase pool] {len(entries):,} entries from {seen:,} sampled of "
+          f"{len(mwe):,} MWE anchors ({len(cache):,} constituent proxies cached)",
+          flush=True)
+    assign_split(entries)
+    return entries
+
+
+def same_split_partners(entries, store, kind):
+    """H.3: {entry -> [partner entry, ...]} over one relation, same split only.
+
+    T25/T26/T27 name two lemmas, and C11 is a statement about lemmas rather than
+    about items: a test item naming a training lemma breaks the split exactly as
+    a duplicated seed would.  `assign_split` hashes ONE lemma, so a pair's two
+    halves agree only by chance -- measured over the whole pool, 60.0 % for
+    `sopomenka` and 59.5 % for `protipomenka`, both sitting on the Σ share²
+    ≈ 0.5998 baseline, which is what "by chance" looks like when it is true.
+
+    So the pair is drawn from within one split.  Capacity after the filter, and
+    the reason it must be recomputed per relation rather than scaled from the
+    coverage table: `sopomenka` keeps 96,456 of 206,476 partner mentions and
+    `protipomenka` 3,044 of 5,654 -- the thinner relation keeps the LARGER
+    share, because its partners are likelier to be seeds themselves.
+    """
+    by_lemma = {}
+    for e in entries:
+        by_lemma.setdefault(e.lemma.casefold(), e)
+    out = {}
+    for e in entries:
+        keep = []
+        for p in store.partners(e.a, kind):
+            o = by_lemma.get(p.casefold())
+            if o is not None and o.split == e.split and o.a != e.a:
+                keep.append(o)
+        if keep:
+            out[e.a] = keep
+    return out
+
+
+def constituents_agree(store, entry, word_split):
+    """H.3, one level down: does every seeded constituent share the phrase's split?
+
+    A phrase type whose ANSWER names its constituents (T30, T34) names word
+    lemmas, and C11 is a check over every lemma an item names -- so a train
+    phrase built on a test seed breaks lemma-disjointness exactly as a
+    duplicated seed does.  This is the same argument H.3 makes for synonym
+    pairs, and it needs the same filter.
+
+    Measured on 5,000 phrase seeds against the 71,152-lemma word pool: only
+    **39.9 %** agree, a steeper loss than H.3's ~40 % because a phrase has a
+    median of 3 constituents and each agrees only by chance.  It is a filter and
+    not a blocker: 39.9 % of an 80 k phrase pool is ~32,000 usable seeds, against
+    the few hundred a single type draws.
+
+    Applied ONLY by the constituent-naming types.  A phrase type that asks for a
+    definition or an example names no constituent lemma and must not pay this
+    cost -- which is why it is a helper here rather than a rule inside
+    `build_phrase_pool`.
+
+    `word_split` maps a casefolded word lemma to its split; build it once from
+    the word pool.  A constituent that is not a seed at all is not a leak: it
+    never appears as a training seed, so it cannot collide with one.
+    """
+    for c in constituents(store, entry.a):
+        s = word_split.get(store.lemma(c).casefold())
+        if s is not None and s != entry.split:
+            return False
+    return True
 
 
 def _mwe_memberships(store, a):

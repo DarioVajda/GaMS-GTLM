@@ -22,7 +22,9 @@ import collections
 from . import sl
 from . import colloc_sampling
 from . import seeds
+from . import spec
 from .spec import GAP
+from .store import K_SYN, K_ANT
 
 # --------------------------------------------------------------------------
 # shared context
@@ -38,12 +40,43 @@ class Ctx:
         self.aux = _auxiliary_tables(store)
         self._surface = None
         self._unlisted = None
+        self._word_split = None
+        self._phrase_pool = None
+        #: anchor -> its surfaces, for C26.  One dict for the whole run; see
+        #: seeds.constituent_occurs for why it is not optional.
+        self.form_cache = {}
 
     @property
     def surface(self):
         if self._surface is None:
             self._surface = self.store.surface_index()
         return self._surface
+
+    @property
+    def phrase_pool(self):
+        """The MWE seed pool (H.5), built once and shared by every phrase type.
+
+        Separate from `pool` rather than merged into it because the two are sized
+        by different constraints: the word pool is everything that passes the
+        content rule (72,334), while the phrase population is 3.76 M and is bound
+        by SAMPLING instead -- see seeds.build_phrase_pool.
+        """
+        if self._phrase_pool is None:
+            self._phrase_pool = seeds.build_phrase_pool(self.store)
+        return self._phrase_pool
+
+    @property
+    def word_split(self):
+        """casefolded word lemma -> its split, for H.3's constituent rule.
+
+        Built from the WORD pool, which is the population whose lemmas C11 keeps
+        disjoint; a phrase type that names constituents has to answer to it.
+        """
+        if self._word_split is None:
+            self._word_split = {}
+            for e in self.pool.entries:
+                self._word_split.setdefault(e.lemma.casefold(), e.split)
+        return self._word_split
 
     @property
     def unlisted(self):
@@ -714,7 +747,7 @@ def gen_T19(ctx, e, rng):
     return {"L": e.lemma}, [ex[0]]
 
 
-_WORD = r"(?<!\w){}(?!\w)"
+_WORD = sl.WORD
 
 
 def occurrences(surface, sent):
@@ -773,6 +806,146 @@ def gen_T20(ctx, e, rng):
 
 
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Group H -- the first two types (step 7)
+# --------------------------------------------------------------------------
+YES_NO = ("da", "ne")
+
+
+def relation_values(store, a, rel):
+    """Everything anchor `a` records under `rel`, as the strings a ball shows."""
+    if rel == "sopomenka":
+        return store.partners(a, K_SYN)
+    if rel == "protipomenka":
+        return store.partners(a, K_ANT)
+    if rel == "zgled":
+        return [t for _v, t in store.examples(a) if t]
+    if rel == "kolokacija":
+        return [p for _v, p in store.collocations(a) if p]
+    if rel == "pomen":
+        return [b for _v, _o, b in seeds.defined_senses(store, a)]
+    if rel == "oblika":
+        return [s for _v, s, _f in store.forms(a) if s]
+    raise KeyError(rel)
+
+
+def relation_state(store, anchors, rel):
+    """(present, ambiguous) for `rel` over every anchor the ball will hold.
+
+    `ambiguous` means a `da`/`ne` answer would collide with a VALUE of the
+    relation: `oblika: da` reads two ways -- "yes, it has forms" and "one of its
+    forms is *da*" -- and *da* really is a form of `dati`.  Rare (2 of 13,015
+    synonym partners, 1 of 16,494 senses) and cheap to refuse, which is the same
+    treatment T1 gives its animacy doublets.
+    """
+    present = ambiguous = False
+    for a in anchors:
+        for v in relation_values(store, a, rel):
+            present = True
+            if v.strip().casefold() in YES_NO:
+                ambiguous = True
+                return present, ambiguous
+    return present, ambiguous
+
+
+def sibling_anchors(ctx, lemma):
+    """Every anchor the item's own ball will be built from.
+
+    D3 unions all anchors whose surface matches, so a homograph brings a second
+    entry's subtree into the SAME ball.  A yes/no answer has to be true of the
+    ball the model is shown, not of one anchor inside it: `ne` while the ball
+    renders a `sopomenka:` node is an item whose gold contradicts its input.
+    """
+    hits = ctx.surface.get(lemma.casefold())
+    return sorted(int(a) for a in hits) if hits else []
+
+
+def gen_T23(ctx, e, rng):
+    """Is relation R recorded for word L?  `da` or `ne`, both read off the graph.
+
+    `ne` is an ANSWER and not the 0.2 sentinel: the database answers the question,
+    and what it answers is that the relation is absent.  That is the fact this
+    type teaches, and no other type in the corpus teaches it -- every other type
+    asks the graph for content and can only fail to find it.
+
+    The relation is chosen to keep `da` and `ne` near balanced ITEM BY ITEM rather
+    than by post-hoc filtering: a coin picks which answer is wanted, and the
+    relation is drawn from the ones that give it.  Left to a uniform draw over
+    relations the type comes out heavily `da` -- most pool entries have senses and
+    examples -- and a model can score well on it without reading the ball at all.
+
+    Tier C: `protipomenka` may only be asked of a TEST entry (D12/C6).  A training
+    question that merely names the held-out relation leaks it whether its answer
+    is `da` or `ne`, so the constraint is on the item and not on the answer.
+    """
+    store = ctx.store
+    anchors = sibling_anchors(ctx, e.lemma) or [e.a]
+    cand = list(spec.T23_RELATIONS)
+    if e.split == "test":
+        cand += list(spec.T23_HELD_OUT)
+    present = {}
+    for r in cand:
+        p, ambiguous = relation_state(store, anchors, r)
+        if not ambiguous:
+            present[r] = p
+    if not present:
+        return None
+    want = rng.random() < 0.5          # True -> look for a `ne`
+    pool = [r for r in present if present[r] is not want] or list(present)
+    rel = pool[rng.randrange(len(pool))]
+    slots = {"L": e.lemma}
+    slots.update(sl.relation_slots(rel))
+    return slots, [f"{rel}: {'da' if present[rel] else 'ne'}"]
+
+
+def gen_T30(ctx, e, rng):
+    """The headwords a multi-word phrase is composed of.
+
+    The answer is the CONSTITUENT LEMMAS, not the phrase's own surface words:
+    `pod drobnogledom` answers `iztočnica: pod | iztočnica: drobnogled`, and the
+    two differ in 93.1 % of phrases -- which is what makes the type a lookup
+    rather than a tokenisation exercise.
+
+    Two entry-level rules, both refusals rather than repairs:
+
+      * a phrase with fewer than two distinct constituent headwords has no
+        composition to state, and
+      * every constituent that is itself a word seed must share this phrase's
+        split (H.3, one level down).  T30's answer NAMES word lemmas and C11 is a
+        check over every lemma an item names, so a train phrase built on a test
+        seed breaks lemma-disjointness exactly as a duplicated seed would.  Only
+        39.9 % of phrases pass, which is a filter and not a blocker.
+
+    And one at the constituent level: C26.  Every constituent must actually occur
+    in the phrase, by its lemma or one of its forms.  The KG's constituent edges
+    are not always right -- see `seeds.constituent_occurs` -- and a wrong one is
+    a well-formed lemma in the right shape, which nothing downstream would query.
+    Refused rather than repaired: dropping the bad constituent would ship an
+    answer that is incomplete about a phrase whose composition we know we cannot
+    read.  Costs a further 26.4 %.
+    """
+    store = ctx.store
+    if not seeds.constituents_agree(store, e, ctx.word_split):
+        return None
+    out, seen = [], set()
+    for c in seeds.constituents(store, e.a):
+        if not seeds.constituent_occurs(store, c, e.lemma, ctx.form_cache):
+            return None
+        w = store.lemma(c)
+        k = w.casefold()
+        if not w or k in seen:
+            continue
+        seen.add(k)
+        out.append(w)
+    if len(out) < 2:
+        return None
+    # Canonical order is Slovene alphabetical, and C15 asserts it (VALUE_SORTED).
+    # NOT the order the words appear in the phrase: `constituents` walks graph
+    # edges, whose order is node id, so a "phrase order" read off it would be a
+    # tie-break dressed up as a fact -- exactly what the set rule forbids.
+    return {"L": e.lemma}, sorted(out, key=sl.sl_sort_key)
+
+
 GENERATORS = {
     "T1": gen_T1, "T2": gen_T2, "T3": gen_T3, "T4": gen_T4, "T21": gen_T21,
     "T5": gen_T5, "T6": gen_T6, "T7": gen_T7,
@@ -781,4 +954,5 @@ GENERATORS = {
     "T15": gen_T15, "T16": gen_T16,
     "T17": gen_T17,
     "T19": gen_T19, "T20": gen_T20,
+    "T23": gen_T23, "T30": gen_T30,
 }

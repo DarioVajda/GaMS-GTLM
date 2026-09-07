@@ -1118,9 +1118,13 @@ genuine miss — "rescuing" it by splitting it would be rescuing it by doing not
 **Two-anchor items and the split.** C11 says the split is lemma-disjoint, and
 `qa/seeds.py` assigns it by hashing **one** lemma. An item naming two lemmas therefore
 puts both into whatever split it lands in, and the second one agrees only by chance —
-measured over the corpus, a synonym partner that is itself a seed shares its anchor's
-split **64.9 %** of the time (T15, n = 467) and **24.1 %** (T16, n = 29); the
-chance rate is Σ share² ≈ 0.60. T25, T26 and T27 therefore admit a pair only when
+measured over the whole pool rather than over one corpus sample, a synonym partner that
+is itself a seed shares its anchor's split **60.0 %** of the time and an antonym partner
+**59.5 %**, against a chance rate of Σ share² ≈ **0.5998**. In other words the agreement
+is chance and nothing but chance, for both relations. (An earlier sample of the
+generated corpus read 64.9 % and 24.1 %; those were n = 467 and n = 29, and the second
+was small enough to have invented the "thin relations lose more" story that the full
+measurement does not support.) T25, T26 and T27 therefore admit a pair only when
 **both lemmas already sit in the same split**, which costs ~40 % of the pair pool and
 is the only rule that keeps C11 true. Nothing about the pair decides the split; the
 split decides which pairs exist.
@@ -1167,6 +1171,39 @@ counting and comparison type below:
 Every one of those rates is a **natural negative pool**, and the group is designed so
 that the same relation is sometimes listed, sometimes counted, sometimes only asked
 about — which is what stops *relation* from predicting *answer shape*.
+
+**What the first two types cost, end to end.** T23 and T30 were built first and run
+through the whole pipeline (`--types T23,T30`, a subset build that stays in staging and
+is never published), because nothing in this design proves a type generates at scale:
+usability is decided by running the generator, and until now no generator existed. It
+took two runs. The second (job 139963) built **11,903 items** — 72,334 word seeds
+eligible for T23, 23,679 phrase seeds for T30 — in **68 minutes** on two B200s, but
+**35 of those minutes were C26 re-walking the paradigm** on every phrase; with the
+anchor→surface cache the whole check suite runs in **25 s**, which puts the standing
+cost at about **33 minutes** (generate ~6 min, extract 7.4, relabel 0.1, balls 18.5,
+variants 0.9).
+
+The two runs found four things that no amount of reading would have:
+
+| | found by | | fixed |
+|---|---|---|---|
+| the extractor takes a decomposition question apart instead of naming its subject | the extraction score, T30 recall **21.3 %** against T23's **99.0 %** | one prompt rule + two examples | recall **92.7 %**, `keep` 58.2 % → **89.9 %** |
+| the KG's constituent edges are wrong for 49 function-word anchors | **C26**, once it existed | occurrence filter in the generator, check over the output | 9,835 constituents, 0 bad |
+| `pomen: ne` is contradicted by its own ball, 100 % of the time | measuring the relation before trusting it | relation dropped from T23 | 4 relations + 1 held out |
+| C27's second half asserted that *every* MWE ball shrinks under D5c | the run itself, on a corpus with real phrase anchors | assertion says *at least one shrinks, none grows* | passes on real phrase balls |
+
+Two of those are defects in this group's own new code and two are defects in things it
+was built on top of. That ratio is the argument for building two types before fifteen.
+
+**What the run says about the two types.** Containment is 100 % over 9,835 gold items
+with 0 bad; C28 leaves 6 of 4,821 multi-word subjects unresolved; every variant matches;
+the grader scores its own gold at 100 % on all three splits; the full self-test passes.
+The one number worth watching is T30's **quote baseline of 25.8 %** — a model that
+copies words out of the question is already a quarter right, because the phrase's own
+words *are* the answer and only lemmatisation separates them. T30's label baseline is
+77.8 % for the same reason: the label is always `iztočnica`, so only the count is
+unknown. Neither is a defect, but T30 is a weaker discriminator than T23, whose answer
+and label baselines are both under 21 %.
 
 ---
 
@@ -1230,6 +1267,58 @@ ODGOVOR: zgled: ne
 The second example is deliberately not `protipomenka: ne`. That line is a legal **test**
 answer and an illegal training one, and writing the illegal case as the type's
 illustration is how a held-out relation quietly becomes a seen one.
+
+**Landed** (`qa/gen.py:gen_T23`), with **four** of the seven training relations —
+`sopomenka`, `zgled`, `kolokacija`, `oblika` — plus `protipomenka` in test items only.
+The three that are absent are absent for reasons, all recorded in `spec.T23_RELATIONS`:
+
+* `prevod (madžarsko)` is the *other* held-out relation and T36, which holds it out, has
+  not landed. Putting it in the slot now would be a Tier C value in training with no tag
+  words registered and so no check watching it.
+* MWE membership has no node prefix of its own, and inventing a tag for the question is
+  a decision about the label vocabulary (§0.1), not a detail of this type.
+* **`pomen` cannot answer `ne` truthfully, and this is the one that had to be measured.**
+  Presence has to mean a *defined* sense — the thing T12 lists — because every core
+  anchor has a sense node and the answer would otherwise be `da` for all of them. But
+  over 6,000 pool entries, **100 % of those with no defined sense still render a `pomen`
+  node in the ball**: `pomen None: Shakespeare`, a placeholder whose body is the headword.
+  Every `pomen: ne` would therefore ship an input that appears to contradict it, and the
+  model would be supervised to ignore a node it can plainly see. The fix is a label that
+  names the *definition* rather than the sense, which is a §0.1 decision.
+
+Measured on the real store, 4,000 word seeds: **54.5 % `da`, 45.5 % `ne`**, with the five
+relations drawn 787–1,302 times each and `protipomenka` appearing in test items only.
+Three things make that balance real rather than arranged:
+
+* **The answer is decided over the whole ball, not over the seed anchor.** D3 unions
+  every anchor the surface resolves to, so a homograph brings a second entry's subtree
+  into the same input; `ne` while the ball renders a `sopomenka:` node is an item whose
+  gold contradicts what the model is shown.
+* **The coin picks the answer first and the relation second.** Left to a uniform draw
+  over relations the type comes out heavily `da` — most pool entries have senses and
+  forms — and a model could score well without reading anything.
+* **The `da`/`ne` seed filter is implemented, and it earns its place through `oblika`:**
+  *da* is a form of *dati*, so `oblika: da` reads both as "yes, it has forms" and as "one
+  of its forms is *da*". The relation is refused for that entry rather than the entry
+  being dropped.
+
+Two consequences elsewhere, both of which would otherwise have been silent:
+
+* **The label of a `ne` answer is in the QUESTION, not in the ball** — necessarily, since
+  a correct `ne` is exactly the case where the relation is absent from the ball. C25
+  (`qa/check_labels.py`) grew a third status for this, *in the question*, reported in its
+  own column and never merged into *derived*. It satisfies C25's real criterion — can the
+  model copy the label from something it is shown — rather than bending it, and the
+  inflected form is folded back through `sl.RELATIONS`, the same table the frames are
+  built from, so the two cannot drift.
+* **The value is composed too**, like T14's count: `da` is a verdict *about* the ball and
+  not a node in it, so T23 joins `COMPOSED_VALUE` in `qa/check_balls.py`. Requiring
+  containment would have made every correct `ne` look like a defect.
+
+Its negatives are 100 % `unlisted`, and that is the type's own doing rather than a
+deviation: an ordinary lemma that lacks the relation is not a negative here, it is the
+answer `ne`. What remains is a word the base does not hold at all — which is the
+distinction the type exists to draw, from the other side.
 
 ### T24 — `stevilo/koliko`
 
@@ -1441,6 +1530,36 @@ before writing any of step 6):
   since a phrase containing *biti* is common and one containing a technical term is not —
   and whichever is chosen has to be stated in D9 rather than inherited by accident.
 
+**Both are now settled, and how.** `seeds.build_phrase_pool` draws a bounded, seeded
+sample (`PHRASE_POOL = 80,000`) and builds `Entry` objects for the draw. `seeds.phrase_proxy`
+bands a phrase by the **minimum** over its constituents' proxies — chosen by measuring the
+family's band spread under each aggregate against the core pool's:
+
+| aggregate | B0 | B1 | B2 | B3 | B4 | B5 | B6 |
+|---|---|---|---|---|---|---|---|
+| today (`n_col + mwe`) | **100.0** | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| **min** | 0.0 | 1.5 | 2.7 | 7.4 | 23.1 | 39.9 | 25.4 |
+| median | 0.0 | 0.1 | 0.1 | 0.4 | 3.4 | 20.6 | **75.4** |
+| max | 0.0 | 0.1 | 0.1 | 0.2 | 1.4 | 10.6 | **87.7** |
+| sum | 0.0 | 0.0 | 0.1 | 0.1 | 0.9 | 7.9 | **91.0** |
+
+`max`, `sum` and `median` are all dominated by the phrase's function word — `biti` is a
+constituent of 423,510 phrases — so they band the family by its most common part and pile
+75–91 % into B6, as flat as the B0 collapse they were meant to fix. `min` is also the only
+reading that means anything: a phrase is at most as common as its rarest constituent. B0
+comes out empty by construction, since every constituent belongs to at least the phrase
+being scored.
+
+**A third same-split rule, for the constituent-naming types only.** T30 and T34 name word
+lemmas in their *answers*, so C11 applies to them exactly as it does to H.3's pairs — a
+train phrase built on a test seed breaks lemma-disjointness. Measured: only **39.9 %** of
+phrase seeds have every seeded constituent in their own split, a steeper loss than H.3's
+because a phrase has a median of 3 constituents and each agrees only by chance. It is a
+filter rather than a blocker — 39.9 % of an 80 k pool is ~32,000 usable seeds against the
+few hundred a type draws — and it is `seeds.constituents_agree`, applied by those two types
+and by nothing else: a phrase type asking for a definition or an example names no
+constituent lemma and must not pay the cost.
+
 ### T30 — `zveze/sestava_zveze`
 
 *"Iz katerih besed je sestavljena zveza *beli kumulusi*?"* → the constituent **headwords**,
@@ -1455,6 +1574,61 @@ old policy and D5c, so the list is always complete.
 ```
 ODGOVOR: iztočnica: bel | iztočnica: kumulus
 ```
+
+**Landed** (`qa/gen.py:gen_T30`), and it is the type that proves the phrase machinery
+end to end. Measured on the real store:
+
+* **Two filters, ~29.6 % of the phrase pool surviving both.** The constituent same-split
+  filter (H.3) keeps 40.2 % — 32,280 of 80,000 seeds — and every refusal in a
+  4,000-seed sample was that filter, none an empty constituent list. C26 then removes a
+  further **26.4 %** of what is left, because the KG's constituent edges name a word
+  that is not in the phrase. ~23,700 usable seeds against the few hundred one type
+  draws, so both are filters and neither is a blocker. Constituent counts before C26:
+  2 (48 %), 3 (46 %), 4 (5 %), 5 (0.1 %).
+* Canonical order is **Slovene alphabetical** (`VALUE_SORTED`), not the order the words
+  appear in the phrase. `seeds.constituents` walks graph edges, whose order is node id,
+  so a "phrase order" read off it would be a tie-break dressed up as a fact.
+* Negatives are **mismatch, from the word pool**: a single-word entry asked a phrase's
+  question. That is the one place the word and phrase pools meet, and it is why the
+  frames say *zveza* and never *beseda* — with `beseda {L}` the negative's own question
+  would assert the premise it is testing.
+
+**The extractor had to be taught this type, and only a full run could have shown it.**
+On the first end-to-end build T30's entity-linking recall was **21.3 %** against T23's
+**99.0 %**, with **1.75 extra strings per item**. The extractor was not failing to find
+the phrase; it was *answering the question* — `Katere iztočnice sestavljajo besedno
+zvezo retrobulbarni nevritis?` returned `["retrobulbarni", "nevritis"]`. Every other
+type's question asks *about* its subject, so nothing before this had put a question in
+front of the extractor whose surface task is to take the subject apart.
+
+The consequence is quiet in every direction. 78.7 % of T30 items became `extract_miss`
+negatives, and the corpus that came out was well formed: it passed C9, C10, C11, C15 and
+C6. The number that showed it was **C13** — always answering the sentinel scored
+**84.0 %** on T30, and the most common label set was `ni podatka v bazi`.
+
+Note that D3c would have *hidden* this if the check had been containment alone. The
+constituents each resolve on their own, so the union ball holds exactly the words the
+gold names — an item that looks answerable while the retrieval has already done the
+decomposition the model is being asked to do.
+
+The fix is in `prompts/extractor_prompt.txt`: one rule (a question about the composition
+of a phrase takes the whole phrase, because the decomposition is the *answer* and not
+the subject) and two examples. Changing the prompt changes every future extraction, and
+the run record carries its `prompt_sha256` for exactly that reason.
+
+**Confirmed by the re-run** (job 139963): T30 recall **21.3 % → 92.7 %**, resolved
+**92.7 %** (every phrase it names now resolves, so D3b is doing its job), extra strings
+per item **1.75 → 0.15**, and `keep` across both types **58.2 % → 89.9 %** with
+`extract_miss` **40.9 % → 8.6 %**. C28's unresolved multi-word subjects fell from 36 to
+**6 of 4,821**. The C13 signature that exposed the bug is gone: T30's answer baseline is
+now **18.5 %** and its most common label set is `iztočnica, iztočnica`.
+
+`seeds.constituents` grew a guard in the same landing: it now returns `[]` for a word
+anchor. Its filter reads "an anchor neighbour that is not itself an MWE", which for a
+phrase means its parts — but on a word it means *the other words that word is linked
+to*, so T30 would have answered "what is X made of?" with a list of X's relatives. Only
+ever called on phrases before, so nothing had exercised the other direction; the type's
+own negatives are what would have hit it.
 
 ### T31 — `zveze/zveze_z_besedo`
 
@@ -1591,9 +1765,9 @@ are in §1.
 | C16 | **`sl_key`** against a fixture including `č`, `š`, `ž` and a non-Slovene character. |
 | C17 | **`T14 gold == len(T12 gold)`** for every lemma in both, and a lemma is a negative in both or in neither. T12 records its choices and T14 replays them, which is exact rather than probable — drawing negatives from two random streams made their agreement a coincidence that held in one generation and broke in the next. |
 | C18 | **Sampler reproducibility and gold-in-ball**: the candidate pool is sorted by node id before drawing, the RNG seed derives from the anchor's node code and nothing else, and every gold item is inside its own ball. The first two are silent failures — CSR adjacency order is not stable across builds, so an unsorted pool or an order-dependent seed makes the dataset unreproducible without failing anything. **§0.1 made (d) much stronger**: containment is over every atom of the `oznaka: vrednost` pair, so it now asserts that a paradigm cell holds *that* cell's surface and that T12's sense ordinal names a node the ball really has — neither of which the positional line could express. Three enumerated exemptions, all declared rather than inferred: the eight labels of §0.1's budget, which no ball carries by definition; T5/T6's composed auxiliary *and person*, which sit on the `biti` form and not on the participle (§0.7); and T14, whose **value** is composed too — a count is not a node, and the old check scored it 100 % only because a one-token gold of `3` matched any node containing a 3. |
-| C25 | **Label derivability.** Every `oznaka` in every gold is present in that item's own ball, or is one of the eight declared constants of §0.1 — `preteklik`, `prihodnjik`, `besedna vrsta`, `vid`, `število pomenov`, `več`, `manj`, `enako`. Matching is whole-word against node text only. Without it a generator can take a label from a per-type table instead of from the graph and emit **byte-identical** output, so the defect §0.1 exists to remove comes back invisibly, one type at a time; the two implementations differ by one line and look equally reasonable in review. The constant list is a **budget, not an exemption**: its length is how many labels the model must still memorise rather than read, and a ninth cannot be added without a diff that shows it. Run over Tier C the same check is the **fairness proof** that those items are unseen rather than unanswerable. |
-| C26 | **Constituent validity** (§1) asserted over T30/T34 gold: every constituent lemma the answer names has a surface — its own lemma or one of its `oblika:` forms — occurring in the phrase. It is a generation filter and a check, because the failure is silent: a wrong constituent is a well-formed lemma in the right shape. |
-| C27 | **D5c is a no-op on word balls.** *Live in `qa/selftest.py`.* A fixed sample of single-word anchors is built twice in one process — `ball_nodes(..., d5c=True)` and `d5c=False`, the second being the pre-D5c expansion exactly — and the node sets must be equal. **300 / 300 today.** D5c exists to make MWE balls finite; the day it changes a word ball, it has changed the corpus every published number was measured on. The `d5c=False` flag exists for this check and for nothing else: there is no reason to build a real ball without the cap. |
+| C25 | **Label derivability.** Every `oznaka` in every gold is present in that item's own ball, or is one of the eight declared constants of §0.1 — `preteklik`, `prihodnjik`, `besedna vrsta`, `vid`, `število pomenov`, `več`, `manj`, `enako`. Matching is whole-word against node text only. Without it a generator can take a label from a per-type table instead of from the graph and emit **byte-identical** output, so the defect §0.1 exists to remove comes back invisibly, one type at a time; the two implementations differ by one line and look equally reasonable in review. The constant list is a **budget, not an exemption**: its length is how many labels the model must still memorise rather than read, and a ninth cannot be added without a diff that shows it. Run over Tier C the same check is the **fairness proof** that those items are unseen rather than unanswerable. **A third status arrived with T23: *in the question*.** T23's answer label is the relation the question names, and a correct `ne` is exactly the case where that relation is *absent* from the ball — so the label of a true answer can never be found there, and requiring it would leave the type able to say only `da`. Reading the label off the question satisfies C25's actual criterion (can the model copy the label from something it is shown) rather than bending it, since the question is input too. It is reported in **its own column and never merged into *derived***: a type leaning on it asks the model to read the question rather than the graph, which is weaker evidence and should be visible as a number. The question spells the relation in whatever case its frame needed, so the form is folded back through `sl.RELATIONS` — the same closed table the frames are built from, never a stemmer — and the frames and the check cannot drift into two ideas of what *sopomenko* is a form of. |
+| C26 | **Constituent validity** (§1) asserted over T30/T34 gold: every constituent lemma the answer names has a surface — its own lemma or one of its `oblika:` forms — occurring in the phrase. It is a generation filter and a check, because the failure is silent: a wrong constituent is a well-formed lemma in the right shape. **Live in `qa/selftest.py`, and it caught something.** The KG's own `sestavina` edges are wrong for a small, concentrated set of anchors: over 2,365 sampled phrases, **49 anchors account for every failure and the top ten for 93.6 %**, all of them function words whose anchor carries a misleading lemma — node 100762 reads `iztočnica: prikazati (zaimek, naslonska oblika)` and is the clitic *se*, in 270 phrases; nodes 260, 261 and 277 read `celoti`, `na` and `silo`, are all tagged `predlog`, and stand in for *v* and *z*. Unfiltered, **11.3 % of constituents** and **26.4 % of T30 items** name a word that is not in the phrase they are decomposing. The item is refused rather than repaired: dropping the bad constituent would ship an answer that is silently incomplete about a phrase whose composition we know we cannot read. **Two halves, and both are needed:** every word the gold names is a *recorded* constituent of the phrase, and it *occurs* in it. The first half needs the phrase's own anchor, and the first implementation went looking for it in the surface index — which does not hold every constituent anchor, so `letoštetje`, `zorjenje` and `Lepant` were reported as failures against a phrase that plainly contains them, 378 of them in one run. It resolves the anchor from the item's `node_code` instead. Both halves were then proven non-vacuous by mutation: inventing a constituent trips the first, swapping the phrase trips the second. Walking the paradigm per phrase cost 35 min of a 68 min run; an anchor→surface cache makes it **34.9× faster** (115.3 s → 3.3 s over 8,000 seeds, identical verdicts), and the whole self-test now runs in **25 s**. |
+| C27 | **D5c is a no-op on word balls.** *Live in `qa/selftest.py`.* A fixed sample of single-word anchors is built twice in one process — `ball_nodes(..., d5c=True)` and `d5c=False`, the second being the pre-D5c expansion exactly — and the node sets must be equal. **300 / 300 today.** D5c exists to make MWE balls finite; the day it changes a word ball, it has changed the corpus every published number was measured on. The `d5c=False` flag exists for this check and for nothing else: there is no reason to build a real ball without the cap. C27 and C18 now **skip** rather than fail when their population is absent — a `--types` subset legitimately has no T17 items and, before stage 4, no item has targets at all, and two red lines that are always there is how a real failure gets scrolled past. Skipping is only ever about the input being empty: T17 rows that exist but are all negative, or targets that exist but are all phrases, remain failures. |
 | C28 | **Phrase items resolve.** No item of a phrase type may ship the single-node `iztočnica: … (ni v bazi)` ball. This is the check the group would most have benefited from having earlier: before D3b/D3c the corpus resolved **0 of 55** multi-word spans, and nothing failed, because an unresolved item still produces a well-formed ball, a well-formed question and a gold answer nothing in it supports. Since there are no phrase types yet, the live assertion is the wider one — **no positive item of any type** ships that ball (11,179 checked) — with the multi-word cohort reported beside it. That cohort is what moved: **42 items, 37 unresolved before D3b/D3c and 0 after.** |
 
 C25 lives in **`qa/check_labels.py`** rather than in `selftest.py`, for the same reason

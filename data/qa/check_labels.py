@@ -64,6 +64,7 @@ import unicodedata
 # uses, which is the property that makes those types indistinguishable from each
 # other in output space.
 from qa.spec import DECLARED_LABELS as DECLARED
+from qa.sl import RELATION_FORMS
 
 CASES = ("imenovalnik", "rodilnik", "dajalnik", "tožilnik", "mestnik", "orodnik")
 NUMS = ("ednine", "dvojine", "množine")
@@ -125,6 +126,35 @@ def carries(text, oznaka):
     return all(word(text, a) for a in atoms(oznaka))
 
 
+def in_question(question, oznaka):
+    """Is the label sitting in the item's OWN QUESTION, inflected?
+
+    A third source, between `derived` and `declared`, and it satisfies C25's real
+    criterion rather than bending it: the criterion is whether the model can COPY
+    the label from something it is shown, and it is shown the question.
+
+    T23 is what needs it.  It asks whether a relation is recorded for a word, and
+    a correct `ne` answer is exactly the case where the relation is NOT in the
+    ball -- so the label of a true answer can never be found there, and requiring
+    it would mean the type could only ever say `da`.  The relation is named in
+    the question instead, where Slovene declines it (`sopomenko`, `zgledov`), so
+    the form is folded back through the same table the frames were built from
+    (`sl.RELATION_FORMS`) rather than through a stemmer.
+
+    Reported in its own column, never merged into `derived`: a type leaning on
+    this is asking the model to read the question rather than the graph, which is
+    weaker evidence and should be visible as a number.
+    """
+    want = set(atoms(oznaka))
+    have = set()
+    for w in nfc(question).split():
+        w = w.strip(".,;:!?()»«\"'—-")
+        if not w:
+            continue
+        have.add(RELATION_FORMS.get(w, NORM.get(w, w)))
+    return want <= have
+
+
 def is_declared(oznaka):
     """A constant may be one COMPONENT of a compound label.
 
@@ -153,6 +183,7 @@ def main(argv=None):
 
     hit = collections.Counter()
     tot = collections.Counter()
+    q_hit = collections.Counter()
     misses = collections.defaultdict(list)
     items = 0
     for split in ("train", "dev", "test"):
@@ -171,21 +202,25 @@ def main(argv=None):
                     tot[key] += 1
                     if carries(text, oznaka):
                         hit[key] += 1
+                    elif in_question(d.get("question", ""), oznaka):
+                        q_hit[key] += 1
                     else:
                         misses[key].append(d["id"])
 
-    derived = constant = partial = 0
+    derived = constant = asked = partial = 0
     print(f"{'type':5} {'oznaka':34} {'in ball':>17}  status")
     print("-" * 74)
     for key in sorted(tot, key=lambda k: (int(k[0][1:]), k[1])):
         t, oznaka = key
-        n, h = tot[key], hit[key]
+        n, h, q = tot[key], hit[key], q_hit[key]
         if is_declared(oznaka):
             status, constant = "CONSTANT (declared)", constant + 1
         elif h == n:
             status, derived = "derived", derived + 1
+        elif h + q == n:
+            status, asked = f"in the question ({q} of {n})", asked + 1
         else:
-            status, partial = f"partial -- {n - h} item(s) below", partial + 1
+            status, partial = f"partial -- {n - h - q} item(s) below", partial + 1
         print(f"{t:5} {oznaka:34} {h:6}/{n:<6} {100*h/n:5.1f}%  {status}")
 
     if partial:
@@ -198,10 +233,12 @@ def main(argv=None):
             print(f"  {key[0]:5} {key[1]:26} {', '.join(misses[key])}")
 
     print(f"\n{items:,} positive items · {derived} labels derived from the ball · "
+          f"{asked} readable in the question only · "
           f"{constant} label(s) hitting a declared constant · {partial} partial")
 
     if not args.legacy:
-        bad = [k for k in tot if hit[k] != tot[k] and not is_declared(k[1])]
+        bad = [k for k in tot
+               if hit[k] + q_hit[k] != tot[k] and not is_declared(k[1])]
         if bad:
             print("\nC25 FAILS. A label outside DECLARED is not read from the "
                   "graph, so the model must memorise it per type -- the defect "
