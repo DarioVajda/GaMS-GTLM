@@ -1266,14 +1266,31 @@ single anchor, a pair costs about double and nothing overflows.
 **Same-split pairs only.** These are the first types whose item names two lemmas, and
 C11 is a statement about lemmas, not about items: a test item naming a training lemma
 breaks it just as surely as a duplicated seed does. `qa/seeds.py` decides the split by
-hashing a single lemma, so agreement between a pair's two halves is chance — 64.9 %
-measured on synonym partners, 24.1 % on antonym partners, against a Σ share² ≈ 0.60
-baseline. The pair is therefore drawn from **within one split**, at a cost of ~40 % of
-the candidate pool. Two consequences worth stating rather than discovering later: the
-distractor for a negative is drawn from the same split as well, and `prevod`-style
-thin relations lose proportionally more pairs than dense ones, so per-relation
-capacity has to be recomputed after the filter rather than inherited from the coverage
-table above.
+hashing a single lemma, so agreement between a pair's two halves is chance. The pair is
+therefore drawn from **within one split**, and the distractor for a negative is drawn
+from the same split as well.
+
+**Capacity after the filter, measured over the whole 72,334-entry pool** (not over the
+corpus sample the first draft used):
+
+| relation | partner mentions | partner is itself a seed | …and in the same split |
+|---|---|---|---|
+| `sopomenka` | 206,476 | 160,843 (77.9 %) | **96,456** (60.0 %) |
+| `protipomenka` | 5,654 | 5,119 (90.5 %) | **3,044** (59.5 %) |
+
+Two corrections to what this section used to claim. First, the same-split rate is
+**60.0 % and 59.5 %** — both sitting on the Σ share² ≈ 0.5998 chance baseline, exactly
+as the argument predicts. The earlier figures of 64.9 % and 24.1 % were corpus samples
+of n = 467 and **n = 29**; the antonym number in particular was noise, and nothing
+should be read into antonyms behaving differently from synonyms. Second, the claim that
+thin relations lose proportionally more does **not** hold here: `protipomenka` is
+40× thinner and loses *less* (46.2 % of mentions against 53.3 %), because its partners
+are likelier to be seeds. Recomputing per relation is still right — but as a rule, not
+because thinness predicts the loss.
+
+96,456 same-split synonym pairs is ample for T25–T27. 3,044 antonym pairs is thin in
+absolute terms but sufficient, since `protipomenka` is a **test-only** slot value under
+H.0 and needs a test slice rather than a training population.
 
 ### T25 — `primerjava/ali_sta_v_relaciji`
 
@@ -1402,6 +1419,27 @@ tiskarne*. Two consequences, both measured:
   if every constituent's lemma or one of its forms actually occurs in the phrase —
   passes **74.2 %** of MWEs, and what it rejects is overwhelmingly `predlog` (463 of 853)
   and `zaimek` (309). Clean pool ≈ **2.93 M**.
+
+**Two things the seed pool cannot do as written** (measured on a 20,000 MWE sample,
+before writing any of step 6):
+
+* **`entry_for`'s content rule does not filter phrases.** It keeps an anchor with any of
+  {definition, synonym, collocation, example}, and **95.4 %** of MWEs have an example —
+  so the rule keeps essentially everything and projects a pool of **≈ 3.76 M entries
+  against today's 72,334**, a 52× pool that takes 14.3 min to walk before a single item
+  is generated. Tightening the rule is the wrong fix: the example-bearing half *is* the
+  capability H.5 exists to reach, and requiring a definition instead would cut the pool
+  to ≈ 62,849 by throwing that half away. **The pool must be bounded by sampling, not by
+  content** — draw the phrase seeds first and build `Entry` objects for the draw, rather
+  than materialising 3.76 M of them and sampling after.
+* **D9's band is meaningless for a phrase.** `proxy` is collocations + MWE memberships,
+  and a phrase has neither: of the phrase seeds sampled, **316 of 319 land in B0** and
+  3 in B1, against a core pool that spreads 6,260 / 11,058 / 13,883 / 15,455 / 14,177 /
+  8,426 / 3,075 across B0–B6. Banding phrases on `proxy` would put the whole family in
+  one band and flatten the stratification the sampler depends on. A phrase needs its own
+  frequency proxy — the natural candidate is an aggregate over its constituents' proxies,
+  since a phrase containing *biti* is common and one containing a technical term is not —
+  and whichever is chosen has to be stated in D9 rather than inherited by accident.
 
 ### T30 — `zveze/sestava_zveze`
 
