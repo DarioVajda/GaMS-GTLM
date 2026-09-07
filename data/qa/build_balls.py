@@ -122,23 +122,50 @@ def _split_hop1(store, a):
     return plain, mwes
 
 
-def ball_nodes(store, a, k_mwe=K_MWE, k_colloc=K_COLLOC_CAP, stats=None):
-    """The node ids of one anchor's hop-2 ball, D5 and D5b applied.
+def _cap_mwes(store, mwes, k_mwe, stats=None):
+    """D5's `word -> MWE` cap: keep the k best-ranked, deterministically.
 
-    A plain BFS to depth 2 with exactly two expansion filters: the root's
-    upward `sestavina` edges, and the collocation edges of the root's own
-    senses.  Everything else -- forms, senses, examples, synonyms, antonyms,
-    translations, and the constituents/forms/senses of a kept MWE -- is
-    traversed unrestricted, because nothing else in the graph explodes.
+    Extracted so that the root and every hop-1 node apply the SAME rule -- see
+    `ball_nodes` for why applying it in one place only was the bug.
+    """
+    if len(mwes) <= k_mwe:
+        return sorted(mwes)
+    cand = mwes
+    if len(cand) > MWE_SCAN_CAP:
+        if stats is not None:
+            stats["mwe_scan_capped"] += 1
+        cand = sorted(cand)[:MWE_SCAN_CAP]
+    return sorted(sorted(cand, key=lambda m: _mwe_sort_key(store, m))[:k_mwe])
+
+
+def ball_nodes(store, a, k_mwe=K_MWE, k_colloc=K_COLLOC_CAP, stats=None,
+               d5c=True):
+    """The node ids of one anchor's hop-2 ball, D5, D5b and D5c applied.
+
+    A plain BFS to depth 2 with exactly two expansion filters: the `sestavina`
+    edges upward into MWEs, and the collocation edges of the root's own senses.
+    Everything else -- forms, senses, examples, synonyms, antonyms,
+    translations -- is traversed unrestricted, because nothing else in the
+    graph explodes.
+
+    **D5c: the MWE cap applies at EVERY expansion, not only at the root.**  It
+    used to sit on the root's hop-1 list alone, and this comment used to claim
+    that "the constituents/forms/senses of a kept MWE" needed no cap because
+    nothing else explodes.  That is true of a single-word root and false of an
+    MWE one: an MWE's constituents are ordinary words sitting at hop 1, and
+    `biti` is a constituent of 423,510 phrases, so hop 2 pulls all of them.
+    The cap was always meant to bound this hub -- it was only ever applied in
+    the one place a word-seeded ball could reach it.
+
+    On a single-word root this is a no-op, because no hop-1 node of a word ball
+    has more than `k_mwe` MWE neighbours.  That is not an argument, it is the
+    checkpoint: `d5c=False` restores the pre-D5c expansion exactly, and C27
+    builds word balls both ways and asserts the node sets are identical.  The
+    flag exists for that check and for nothing else -- there is no reason to
+    build a real ball without the cap.
     """
     plain, mwes = _split_hop1(store, a)
-    if len(mwes) > k_mwe:
-        cand = mwes
-        if len(cand) > MWE_SCAN_CAP:
-            if stats is not None:
-                stats["mwe_scan_capped"] += 1
-            cand = sorted(cand)[:MWE_SCAN_CAP]
-        mwes = sorted(sorted(cand, key=lambda m: _mwe_sort_key(store, m))[:k_mwe])
+    mwes = _cap_mwes(store, mwes, k_mwe, stats)
 
     # D5b picks from the pool over ALL of the anchor's senses, so it has to be
     # resolved once for the anchor rather than per sense.
@@ -150,11 +177,24 @@ def ball_nodes(store, a, k_mwe=K_MWE, k_colloc=K_COLLOC_CAP, stats=None):
     nodes = {int(a)} | set(hop1)
     for u in hop1:
         restrict = u in own_senses
+        near, up = [], []
         for v in store.nbrs(u):
             v = int(v)
             if restrict and store.kind[v] == K_COLLOC and v not in keep_colloc:
                 continue
-            nodes.add(v)
+            (up if (store.kind[v] == K_ANCHOR and store.mwe[v]) else near
+             ).append(v)
+        nodes.update(near)
+        if not d5c:
+            nodes.update(up)
+            continue
+        # The root's own MWEs were ranked and cut above; re-capping the set
+        # they belong to would be capping twice, so anything already kept
+        # stays and only the surplus this node introduces is ranked.
+        extra = [v for v in up if v not in nodes]
+        nodes.update(_cap_mwes(store, extra, k_mwe, stats))
+        if stats is not None and len(extra) > k_mwe:
+            stats["d5c_capped"] += 1
     return nodes
 
 
@@ -431,9 +471,14 @@ def run(dataset, out, store=None, k_mwe=K_MWE, k_colloc=K_COLLOC_CAP, types="",
     print(f"stale type fields dropped:  {stats['stale_type_fields_dropped']:,} "
           f"(mode copies, and the sep/arity/regex 0.1 retired; qa/spec.py owns "
           f"what is left)")
+    if stats["d5c_capped"]:
+        print(f"D5c cap hit at hop 2 on {stats['d5c_capped']:,} expansions "
+              f"(a constituent's MWE hub -- uncapped, `biti` alone brings "
+              f"423,510)")
     if stats["mwe_scan_capped"]:
-        print(f"MWE scan cap hit on {stats['mwe_scan_capped']} anchors "
-              f"(ranked a {MWE_SCAN_CAP:,}-candidate prefix by node id)")
+        print(f"MWE scan cap hit on {stats['mwe_scan_capped']} expansions "
+              f"(ranked a {MWE_SCAN_CAP:,}-candidate prefix by node id; since "
+              f"D5c this counts hop-2 expansions as well as roots)")
     print(f"\n[wrote] {args.out}")
     if args.dataset_out:
         print(f"[wrote] {args.dataset_out}  (dataset rows, membership targets "

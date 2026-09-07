@@ -13,15 +13,27 @@ on purpose, leaving the two halves of the pipeline disagreeing about one input.
 
 The source is the KG's own long tail: 4.24 M single-word lexical units outside
 D8's core frame (`id >= 1M`, non-MWE) -- proper nouns, neologisms, technical
-terms -- none of which resolve, because `QAStore.surface_index` is built over the
-core pool only.
+terms -- none of which resolve, because `QAStore.surface_index` reaches the core
+pool and, since D3b, MWE phrases, and these are neither.
 
 **What the sentinel therefore claims.**  "ni podatka v bazi" means *not reachable
 by the D3 lookup*, not *absent from the KG*: `triskajdekafobija` has 17 forms and
 2 senses in the graph.  That is the honest statement about what the deployed
-pipeline can answer, and it is the same reading that makes the T8 MWE negatives
-correct.  If the surface index is ever widened past the core pool, every flavour
-(a) item has to be regenerated -- this docstring is the warning.
+pipeline can answer.
+
+**D3b widened the index, and this docstring used to warn that doing so meant
+regenerating every flavour (a) item.  It did not, and the reason is worth
+keeping.**  D3b adds only keys containing a space, and `_candidates` below skips
+any lemma containing one, so the two populations cannot intersect -- checked, not
+assumed: rebuilding this list against the widened index returns the same 19,781
+words, 0 gained and 0 lost.  The warning stands for any *future* widening that
+adds single-word keys, which would move words out of this pool silently and make
+their gold false.
+
+What D3b did change is the neighbouring claim, and correctly: the T8 MWE
+negatives were negatives because the lookup could not reach a phrase.  Now it
+can, so 37 of them became positives at the relabel stage.  The sentinel's meaning
+did not move; the lookup did.
 """
 import os
 import re

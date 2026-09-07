@@ -123,6 +123,46 @@ def decoys(r, idx, boiler):
     return None, []
 
 
+def resolve(spans, idx, stats=None):
+    """D3/D3c: the union of anchors the extractor's strings name.
+
+    A span is looked up whole first.  A MULTI-WORD span that does not resolve
+    whole falls back to the union of its constituents' anchors -- D3c.  The
+    fallback is per span and only for phrases: a single word that misses is a
+    genuine miss, and rescuing it by splitting nothing would be rescuing it by
+    doing nothing.
+
+    Why the fallback is needed even with D3b keying MWE canonical forms: an MWE
+    *entry* is not the only multi-word thing an extractor returns.  Measured on
+    the 55 multi-word spans of the current run -- 43 (78.2 %) resolve whole,
+    and the remaining 12 are analytic comparatives (`bolj nebistven`) and
+    extraction noise (`mm popisanih`), which are not dictionary entries and
+    never will be.  All 12 have every constituent in the index, so D3b and D3c
+    together leave **0 of 55 unresolved**, against 55 of 55 before either.
+
+    The union is deliberately wider than one anchor.  It is what D3 says the
+    model's input is, and narrowing it here would be the pipeline consulting
+    knowledge the deployed lookup does not have.
+    """
+    out = set()
+    for x in spans:
+        hit = idx.get(x, ())
+        if hit:
+            out.update(int(a) for a in hit)
+            if stats is not None:
+                stats["span_whole"] += 1
+            continue
+        if " " not in x:
+            if stats is not None:
+                stats["span_miss"] += 1
+            continue
+        parts = [int(a) for t in x.split() for a in idx.get(t, ())]
+        if stats is not None:
+            stats["span_constituents" if parts else "span_miss"] += 1
+        out.update(parts)
+    return sorted(out)
+
+
 def to_negative(r):
     """Rewrite a record's answer side to the sentinel, in build_dataset's shape."""
     r["answer"] = spec.sentinel_line()
@@ -184,7 +224,7 @@ def run(dataset, extraction, out, wrong_rate=0.015, seed=0, store=None):
             if e is None:
                 continue
             got = [x.casefold() for x in e.get("parsed") or []]
-            anchors = sorted({int(a) for x in got for a in idx.get(x, ())})
+            anchors = resolve(got, idx, stats)
             i = int(np.searchsorted(codes, r["node_code"]))
             own = i if (i < len(codes)
                         and int(codes[i]) == r["node_code"]) else None
@@ -261,6 +301,12 @@ def run(dataset, extraction, out, wrong_rate=0.015, seed=0, store=None):
           f"({100*stats['empty_targets']/n:.2f} %)")
     print(f"union of >1 anchor:                  {stats['multi_target']:,} "
           f"({100*stats['multi_target']/n:.2f} %)")
+    span_n = (stats["span_whole"] + stats["span_constituents"]
+              + stats["span_miss"])
+    if span_n:
+        print(f"\nspans: {span_n:,} looked up -- {stats['span_whole']:,} whole, "
+              f"{stats['span_constituents']:,} by constituents (D3c), "
+              f"{stats['span_miss']:,} unresolved")
     if tiers:
         print(f"decoy tiers: {dict(tiers)}")
         print(f"distinct decoys: {len(used)}, most used: {used.most_common(5)}")

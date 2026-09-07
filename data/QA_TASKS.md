@@ -913,6 +913,18 @@ is fair rather than impossible: `protipomenka` is present in **104 / 104** anton
 balls, so every Tier C item is answerable by copying, and whatever the model scores is
 a statement about the model.
 
+**Read the Tier C score against C13's `morph` column, not against zero.** 28.7 % of
+T16's test items have their gold antonym sitting inside the question already — not as a
+word, but as the stem of it: *neangažiranost → angažiranost*, *nepriročnost →
+priročnost*, *nesramežljiv → sramežljiv*.
+Slovene forms a large share of its antonyms by `ne-` prefixation, so a model that has
+learned nothing about the `protipomenka` relation can still clear roughly a third of
+this type by deleting two letters. That is a fact about Slovene rather than a defect in
+the sample — filtering the prefixed pairs out would leave an antonym set that is not
+what the dictionary holds — but it means **a Tier C score near 28.7 % is not evidence
+of generalisation at all**, and the interesting quantity is the margin above it. The
+un-prefixed remainder is the part that actually requires reading the graph.
+
 ```
 ODGOVOR: protipomenka: sodelovanje
 ```
@@ -1013,11 +1025,15 @@ cell it should share was never inflected, and the result is a *plausible* wrong 
 Emits **T21's shape exactly** and shares its generator — T20 is T21 with a sentence
 around it, and giving one analysis two shapes across two types would make one of them
 wrong by construction. Unambiguity means one pair rather than several, which is now a
-count and not a different template. Read this type against its **majority-class
-baseline of 53.9 %**
-(C13): a dictionary example cites its headword in the base form more often than not,
-and forcing that distribution flat would mean discarding true items to manufacture a
-balance the language does not have.
+count and not a different template. Read this type against its **label baseline of
+57.4 %, all of it `quote`-reachable** (C13): a dictionary example cites its headword
+in the base form more often than not, and forcing that distribution flat would mean
+discarding true items to manufacture a balance the language does not have. Note what
+the two C13 columns say together — the *value* is never work here, because the
+question quotes the very form it asks about, so T20 is a question about the label and
+nothing else. Under the pre-§0.1 format this read as a 53.9 % constant-*answer*
+baseline; the constant string is gone but the type is exactly as cheap as it was, and
+only the split measure shows it.
 
 ```
 ODGOVOR: tožilnik ednine: hišo
@@ -1058,27 +1074,46 @@ label words (`več`, `manj`, `enako`), taking §0.1's constant budget from 5 to 
 
 | | change | measured cost |
 |---|---|---|
-| **D3b** | the surface reverse index also keys MWE canonical forms | 911,404 → ~4.9 M keys. Of 20,000 sampled MWE phrases, **100 % are genuinely multi-word and 0 collide** with an existing single-word key, so a phrase can never shadow a word. |
-| **D3c** | when a multi-word span does not resolve **whole**, `qa/relabel.py` falls back to the union of its constituents' anchors | Rescues **55 / 55** of the multi-word spans the current extraction run produced: 100 % have ≥ 1 constituent in the index, 90.9 % have all of them. |
-| **D5c** | D5's `word → MWE` cap applies at **every** expansion, not only at the root | On MWE-anchored balls: median **106,727 → 1,641 tokens** (p99 5,327, max 8,918) — the size of an ordinary word ball. On single-word anchors: **300 / 300 balls byte-identical, median token delta 0.** |
+| **D3b** | the surface reverse index also keys MWE canonical forms | **Landed.** 911,404 word keys + **3,871,485 phrase keys** = 4,782,889. A phrase can never shadow a word, and that is now *enforced* rather than sampled: only keys containing a space are added and never over a key the core pool owns. The sampled claim was wrong in one half — over the full 3,940,417 MWE anchors, **711 have a single-word lemma** (`klorat`, `n-kotnik`), which a 20,000 sample read as 100 % multi-word. Measured collisions under the space rule: **0**. |
+| **D3c** | when a multi-word span does not resolve **whole**, `qa/relabel.py` falls back to the union of its constituents' anchors | **Landed.** Of the 55 multi-word spans the current extraction run produced, D3b resolves **43 (78.2 %)** whole and D3c the remaining **12** — analytic comparatives (`bolj nebistven`) and extraction noise (`mm popisanih`), which are not dictionary entries and never will be. Together: **0 of 55 unresolved**, against 55 of 55 before either. On the corpus this flips **39 items from `extract_miss` to `keep`** and rescues **37 T8 items** from the single-node ball — exactly the cohort C28 reports. |
+| **D5c** | D5's `word → MWE` cap applies at **every** expansion, not only at the root | **Landed, and it is not optional once D3b/D3c are in.** Making the phrase items resolve is what exposed the hub: the first build with D3c and without D5c put three balls of **423,606 nodes / 5,028,776 tokens** into `train` — `zgoditi se`, `obnašati se`, `zaljubiti se`, whose clitic constituent sits at hop 1 and belongs to ~423 k phrases. With D5c they are **109, 75 and 79 nodes**; train's mean falls **268.5 → 88.0** and its token max **5,028,776 → 14,055**, while p50 holds at **1,317**. Diffed over the whole corpus: **12,450 of 12,490 balls byte-identical, the 40 that changed are exactly the MWE-anchored ones, and all 40 shrank.** |
 
-D5c is a correction, not a tuning knob. `qa/build_balls.py` says everything but the
+D5c is a correction, not a tuning knob. `qa/build_balls.py` said everything but the
 root's two hubs "is traversed unrestricted, because nothing else in the graph
 explodes." That is false for an MWE root: its constituents sit at hop 1, and *biti* is
-a constituent of 423,510 phrases, so hop 2 pulls all of them. The uncapped p90 is
-**2.7 M tokens**. The cap was always meant to bound this hub; it was only ever applied
-in the one place a word-seeded ball could reach it.
+a constituent of 423,510 phrases, so hop 2 pulls all of them. The cap was always meant
+to bound this hub; it was only ever applied in the one place a word-seeded ball could
+reach it.
+
+**Order these two correctly: D3b/D3c without D5c is worse than neither.** While the
+phrase spans resolved to nothing, the hub was unreachable and the omission cost
+nothing — every phrase item shipped a harmless single-node ball. Making them resolve is
+what walks the builder into the hub, and the first build with D3c and without D5c put
+three balls of 423,606 nodes / 5,028,776 tokens into `train`. The explosion is not a
+pre-existing bug that D3c happens to reveal; it is *created* by fixing the lookup, and
+the two changes belong in the same landing.
+
+**A note on reading a ball row.** `anchors` on a ball row are positions inside that
+row's own `nodes` list — they index `edges`, not the store. The store anchors are the
+dataset row's `targets`, which are node **codes** and need `searchsorted` against
+`store.codes`. The two are both small integers and neither errors when mistaken for the
+other; it just silently compares a different entry. This cost a wrong D5c measurement
+before the corpus-wide diff caught it.
 
 D3c is the one that makes the phrase types exist at all, and it is not the change the
 first draft of this group named. **The extractor is already correct**: its prompt
 carries `Za besedno zvezo: ["črni pes"]`, it returned 55 multi-word spans over the
-12,490-item run, and it returned more than one span on 1.6 % of them. The break is one
-line downstream — `qa/relabel.py:169` resolves a span by `idx.get(x)`, a whole-string
-lookup into an index that today holds **0 keys containing a space out of 911,404**. So
+12,490-item run, and it returned more than one span on 1.6 % of them. The break was one
+line downstream — `qa/relabel.py` resolved a span by `idx.get(x)`, a whole-string
+lookup into an index that held **0 keys containing a space out of 911,404**. So
 every phrase the extractor found resolved to nothing, and the failure was invisible
 because an unresolved item still ships a well-formed `ni v bazi` ball. D3b fixes this
 for MWE entries; D3c fixes it for everything else, including the collocation phrases of
 T35, which are *not* MWE entries 70.4 % of the time.
+
+Both now live behind `qa/relabel.py:resolve()`, one span at a time: whole first, and the
+constituent union only for a span that contains a space. A single word that misses is a
+genuine miss — "rescuing" it by splitting it would be rescuing it by doing nothing.
 
 **Two-anchor items and the split.** C11 says the split is lemma-disjoint, and
 `qa/seeds.py` assigns it by hashing **one** lemma. An item naming two lemmas therefore
@@ -1513,15 +1548,15 @@ are in §1.
 | C9 | **The grader over the gold itself** — every item must score correct against its own answer. Catches separator collisions, stray whitespace and normalization bugs before they are misread as model failures, and it is the one test that validates the grading contract end to end. |
 | C10 | **Every gold matches the one shape regex** of §0.9, no value contains ` \| `, and no *label* contains a colon. There is no per-type regex left and no single-item exemption — one shape, one check, all 34 types. The value rule is what the T19 and T33 seed filters must satisfy. |
 | C11 | **The split is lemma-disjoint.** Group H makes this a check over *every lemma an item names*, not over its seed: T25, T26 and T27 name two, and a test item whose second lemma is a training seed breaks lemma-disjointness exactly as a duplicated seed would. The pair filter (H.3) is the generation-side rule; this is the assertion that it held. |
-| C13 | **A majority-class baseline for every type**, reported beside the score. T9 (3 values), T10 (3 values), T14 (37.1 %), T16 (75 % single-antonym) and T20 (53.9 %) all admit cheap constant strategies, and a score without its baseline is unreadable. Group H raises the stakes: **T23, T25 and T27 are two- and three-way decisions**, so always-`da` and always-`več` are strong constant strategies and their baselines are not optional. The rates are balanced per relation for exactly this reason. |
+| C13 | **The no-knowledge baselines for every type**, reported beside the score. A score without its baseline is unreadable, and since §0.1 a *constant answer string* is no longer the cheap strategy: the label came apart from the value, and the two are cheap for different reasons. C13 reports four numbers — `answer` (the old constant string), `labels` (the most common label multiset, i.e. how often the answer's shape is free), `quote` (that label set *and* every value standing in the question as a whole word) and `morph` (that label set and every value inside the question but not as a word — the answer is a derivation of something quoted). Measured on the current test split: **T20 is 57.4 % `quote`** — its question supplies the very form it asks about, so the type is entirely about the label; **T4 is 47.8 % `morph`** (strip the inflection) and **T7 30.4 %**; and **T16 is 28.7 % `morph`**, because its antonyms are dominated by `ne-` prefixation, so almost a third of the Tier C type is reachable by deleting two letters and never consulting the graph. `quote` and `morph` are upper bounds, not scores — they say the information suffices, not that a model finds it — but they are what a retrieval arm must beat before its gap over the no-retrieval control means anything. Group H raises the stakes further: **T23, T25 and T27 are two- and three-way decisions**, so always-`da` and always-`več` are strong constant strategies and their baselines are not optional. The rates are balanced per relation for exactly this reason. |
 | C15 | **Every gold is in its type's canonical order** — now including the paradigm types, whose order stopped being graded when §0.1 removed positions. Grading tolerance is not a licence for non-canonical training data: the model must see exactly one ordering for a given set, or it is being taught noise on a surface it is forced to emit. |
 | C16 | **`sl_key`** against a fixture including `č`, `š`, `ž` and a non-Slovene character. |
 | C17 | **`T14 gold == len(T12 gold)`** for every lemma in both, and a lemma is a negative in both or in neither. T12 records its choices and T14 replays them, which is exact rather than probable — drawing negatives from two random streams made their agreement a coincidence that held in one generation and broke in the next. |
 | C18 | **Sampler reproducibility and gold-in-ball**: the candidate pool is sorted by node id before drawing, the RNG seed derives from the anchor's node code and nothing else, and every gold item is inside its own ball. The first two are silent failures — CSR adjacency order is not stable across builds, so an unsorted pool or an order-dependent seed makes the dataset unreproducible without failing anything. **§0.1 made (d) much stronger**: containment is over every atom of the `oznaka: vrednost` pair, so it now asserts that a paradigm cell holds *that* cell's surface and that T12's sense ordinal names a node the ball really has — neither of which the positional line could express. Three enumerated exemptions, all declared rather than inferred: the eight labels of §0.1's budget, which no ball carries by definition; T5/T6's composed auxiliary *and person*, which sit on the `biti` form and not on the participle (§0.7); and T14, whose **value** is composed too — a count is not a node, and the old check scored it 100 % only because a one-token gold of `3` matched any node containing a 3. |
 | C25 | **Label derivability.** Every `oznaka` in every gold is present in that item's own ball, or is one of the eight declared constants of §0.1 — `preteklik`, `prihodnjik`, `besedna vrsta`, `vid`, `število pomenov`, `več`, `manj`, `enako`. Matching is whole-word against node text only. Without it a generator can take a label from a per-type table instead of from the graph and emit **byte-identical** output, so the defect §0.1 exists to remove comes back invisibly, one type at a time; the two implementations differ by one line and look equally reasonable in review. The constant list is a **budget, not an exemption**: its length is how many labels the model must still memorise rather than read, and a ninth cannot be added without a diff that shows it. Run over Tier C the same check is the **fairness proof** that those items are unseen rather than unanswerable. |
 | C26 | **Constituent validity** (§1) asserted over T30/T34 gold: every constituent lemma the answer names has a surface — its own lemma or one of its `oblika:` forms — occurring in the phrase. It is a generation filter and a check, because the failure is silent: a wrong constituent is a well-formed lemma in the right shape. |
-| C27 | **D5c is a no-op on word balls.** Rebuilding a fixed sample of single-word anchors under the new cap must reproduce the old ball byte for byte — 300 / 300 today. D5c exists to make MWE balls finite; the day it changes a word ball, it has changed the corpus every published number was measured on. |
-| C28 | **Phrase items resolve.** No item of a phrase type may ship the single-node `iztočnica: … (ni v bazi)` ball. This is the check the group would most have benefited from having earlier: the current corpus resolves **0 of 55** multi-word spans, and nothing failed, because an unresolved item still produces a well-formed ball, a well-formed question and a gold answer nothing in it supports. `qa/build_balls.py` already counts these as `empty_ball`; C28 is the assertion that the count is zero for T30–T35 rather than merely printed. |
+| C27 | **D5c is a no-op on word balls.** *Live in `qa/selftest.py`.* A fixed sample of single-word anchors is built twice in one process — `ball_nodes(..., d5c=True)` and `d5c=False`, the second being the pre-D5c expansion exactly — and the node sets must be equal. **300 / 300 today.** D5c exists to make MWE balls finite; the day it changes a word ball, it has changed the corpus every published number was measured on. The `d5c=False` flag exists for this check and for nothing else: there is no reason to build a real ball without the cap. |
+| C28 | **Phrase items resolve.** No item of a phrase type may ship the single-node `iztočnica: … (ni v bazi)` ball. This is the check the group would most have benefited from having earlier: before D3b/D3c the corpus resolved **0 of 55** multi-word spans, and nothing failed, because an unresolved item still produces a well-formed ball, a well-formed question and a gold answer nothing in it supports. Since there are no phrase types yet, the live assertion is the wider one — **no positive item of any type** ships that ball (11,179 checked) — with the multi-word cohort reported beside it. That cohort is what moved: **42 items, 37 unresolved before D3b/D3c and 0 after.** |
 
 C25 lives in **`qa/check_labels.py`** rather than in `selftest.py`, for the same reason
 C18's containment half lives in `check_balls.py`: it needs the written balls, not the

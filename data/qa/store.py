@@ -110,7 +110,9 @@ class QAStore:
         self.manifest = self.G["manifest"]
         self.convention = (self.manifest.get("meta") or {}).get("text_convention")
         self._core = None
+        self._mwe_anchors = None
         self._surface_index = None
+        self._phrases = None
         self._colloc_deg = None
 
     # -- basics ------------------------------------------------------------
@@ -255,34 +257,99 @@ class QAStore:
             self._colloc_deg = (cs[ip[1:]] - cs[ip[:-1]]).astype(np.int32)
         return self._colloc_deg
 
-    # -- the surface-form reverse index -----------------------------------
-    def surface_index(self, cache=True):
-        """{casefolded surface -> (anchor, ...)} over core entries' lemmas and forms.
+    # -- the MWE anchors ---------------------------------------------------
+    def mwe_anchors(self):
+        """Indices of multi-word lexical-unit anchors -- `core_anchors`' complement.
 
-        Used for two things only: T4's lemmatisation targets, and verifying that a
-        word really is unreachable by the lookup (0.2 flavour (a)).  It is built over
-        the CORE pool rather than the whole KG, because that is the population the
-        dataset draws from and a whole-KG index is 3.1M strings.
+        The same lexical-unit test, `mwe_set` true instead of false.  Every one
+        of them has id >= 1M, so they are disjoint from D8's core frame by two
+        independent criteria rather than one.
         """
-        if self._surface_index is not None:
+        if self._mwe_anchors is None:
+            a = np.flatnonzero(self.kind[:self.n_real] == K_ANCHOR)
+            c = self.codes[a]
+            self._mwe_anchors = a[((c >> TYPE_SHIFT) == T_LU) & self.mwe[a]]
+        return self._mwe_anchors
+
+    # -- the surface-form reverse index -----------------------------------
+    def surface_index(self, cache=True, phrases=True):
+        """{casefolded surface -> (anchor, ...)} for the D3 lookup.
+
+        Core entries' lemmas and forms, plus -- since D3b -- the canonical form
+        of every MWE entry, so that a multi-word span can resolve at all.  The
+        single-word half is built over the CORE pool rather than the whole KG,
+        because that is the population the dataset draws from and a whole-KG
+        index is 3.1M strings.
+
+        **A phrase can never shadow a word.**  Only a phrase key containing a
+        space is added, and never over a key the core pool already owns.  This
+        is enforced rather than assumed, because half the assumption is false:
+        over the full 3,940,417 MWE anchors, **711 have a single-word lemma**
+        (`klorat`, `n-kotnik`, `pfff!`) -- D3b's sample of 20,000 read that as
+        100 % multi-word.  711 is a rounding error until one of them lands on
+        the word a flavour (a) item was built from, at which point that item's
+        gold silently stops being true.  With the space rule the measured
+        collision count is **0**, which is what lets `qa/unlisted.py`'s warning
+        stay answered: its candidates are single words, no phrase key can reach
+        one, and flavour (a) does NOT have to be regenerated for D3b.
+
+        Result: 911,404 word keys + 3,871,485 phrase keys.  Fewer keys than
+        anchors, because ~68k phrases have more than one entry -- they are extra
+        anchors on a shared key, not skipped.
+        """
+        if self._surface_index is not None and self._phrases == phrases:
             return self._surface_index
         path = os.path.join(self.path, "qa_surface_index.json")
         if cache and os.path.exists(path):
             with open(path, encoding="utf-8") as f:
                 raw = json.load(f)
-            self._surface_index = {k: tuple(v) for k, v in raw.items()}
-            return self._surface_index
+            # A cache written before D3b holds no phrases and would make the
+            # change a silent no-op -- the worst outcome, since every phrase
+            # then resolves to nothing exactly as it did before and the ball is
+            # still well-formed.  The stamp is what forces the rebuild.
+            if raw.get("phrases") == phrases:
+                self._surface_index = {k: tuple(v)
+                                       for k, v in raw["index"].items()}
+                self._phrases = phrases
+                return self._surface_index
+            print(f"[surface_index] cache at {path} was built "
+                  f"{'without' if phrases else 'with'} phrases -- rebuilding",
+                  flush=True)
         idx = collections.defaultdict(set)
         for a in self.core_anchors():
             a = int(a)
             idx[self.lemma(a).casefold()].add(a)
             for _v, s, _f in self.forms(a):
                 idx[s.casefold()].add(a)
+        if phrases:
+            # Snapshot the word keys: the shadow test is against THOSE, not
+            # against the index as it grows.  Testing the growing dict would
+            # admit the first anchor of a phrase and skip every later one, so
+            # a phrase with two entries would silently keep only one -- the
+            # rule is "a phrase never shadows a word", not "one anchor each".
+            words = frozenset(idx)
+            single = collide = 0
+            for a in self.mwe_anchors():
+                a = int(a)
+                k = self.lemma(a).casefold()
+                if " " not in k:
+                    single += 1
+                    continue
+                if k in words:
+                    collide += 1
+                    continue
+                idx[k].add(a)
+            print(f"[surface_index] {len(words):,} word keys + "
+                  f"{len(idx) - len(words):,} phrase keys ({single:,} MWE "
+                  f"lemmas skipped as single words, {collide:,} as a key the "
+                  f"core pool already owns)", flush=True)
         self._surface_index = {k: tuple(sorted(v)) for k, v in idx.items()}
+        self._phrases = phrases
         if cache:
             try:
                 with open(path, "w", encoding="utf-8") as f:
-                    json.dump(self._surface_index, f)
+                    json.dump({"phrases": phrases,
+                               "index": self._surface_index}, f)
             except OSError:
                 pass
         return self._surface_index
