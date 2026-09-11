@@ -53,9 +53,22 @@ def resolve(strings, index):
     map to more than one anchor, and training saw all of them.  Sorted because
     `build()` promises a ball that is a pure function of (store, targets) and
     not of the order the extractor happened to return its strings in.
+
+    A MULTI-WORD string also contributes its constituents' anchors -- D3c.  This
+    was missing here while `qa/relabel.py` had it, so serving resolved strictly
+    LESS than training did and the divergence was silent: a question whose phrase
+    is not itself an entry got the one-node `ni v bazi` ball at serving time and a
+    real ball in training.  The two are one rule and must stay one rule; the
+    reasoning, and the measurements behind unioning rather than falling back, are
+    in `qa/relabel.py:resolve`.
     """
-    return sorted({int(a) for s in strings
-                   for a in index.get(s.casefold(), ())})
+    out = set()
+    for s in strings:
+        s = s.casefold()
+        out |= {int(a) for a in index.get(s, ())}
+        if " " in s:
+            out |= {int(a) for t in s.split() for a in index.get(t, ())}
+    return sorted(out)
 
 
 def missing_ball(strings):

@@ -18,9 +18,10 @@ Three numbers, in increasing order of what they actually license:
 
   parsed        the output is a Python list at all
   recall        the gold target string is in that list, case-blind
-  resolved      some returned string resolves through the surface index (D3
-                step 2) to the item's OWN anchor -- the only criterion that
-                predicts whether the right ball gets built
+  resolved      the returned strings resolve through the surface index to the
+                item's OWN anchor, by `qa/relabel.py:resolve` (D3, and D3c's
+                constituent route) -- the only criterion that predicts whether
+                the right ball gets built
 
 `resolved` can beat `recall`: returning an inflected form that still indexes to
 the same lexical unit is a win for the pipeline even though the string differs.
@@ -154,8 +155,22 @@ def generate_with(ex, prompts, batch_size, max_new_tokens, progress=True):
     t0 = time.time()
     for i in range(0, len(chats), batch_size):
         batch = chats[i:i + batch_size]
+        # `pad_to_multiple_of=8` is not a throughput tweak, it is a correctness
+        # workaround.  Torch's memory-efficient SDPA kernel requires the
+        # attention bias to be 16-byte aligned; in bf16 that means the mask's
+        # last dimension must be a multiple of 8, and `padding=True` alone pads
+        # to whatever the longest row in the batch happens to be.  When that
+        # length is not a multiple of 8 the kernel raises
+        # `p.attn_bias_ptr is not correctly aligned` and the shard dies mid-run.
+        #
+        # It is data-dependent, which is why it stayed hidden: the same code ran
+        # nineteen types without complaint and failed on one shard of thirty-four
+        # (job 140576), because the questions the new types write -- T29 quotes a
+        # whole corpus sentence -- moved the batch maxima onto a bad length.
+        # Padding up costs a few tokens per batch and removes the class of
+        # failure rather than this instance of it.
         enc = tok(batch, return_tensors="pt", padding=True,
-                  add_special_tokens=False).to(device)
+                  pad_to_multiple_of=8, add_special_tokens=False).to(device)
         with torch.inference_mode():
             gen = model.generate(**enc, max_new_tokens=max_new_tokens,
                                  do_sample=False,
@@ -268,6 +283,8 @@ def run(model=DEFAULT_MODEL, prompt=EXTRACTOR_PROMPT,
                                  for r in items],
                     args.batch_size, args.max_new_tokens)
 
+    from qa.relabel import resolve
+
     store = open_store(args.store, verbose=False)
     codes = np.asarray(store.codes)
     idx = store.surface_index()
@@ -280,8 +297,10 @@ def run(model=DEFAULT_MODEL, prompt=EXTRACTOR_PROMPT,
         low = {g.casefold() for g in got}
         i = int(np.searchsorted(codes, r["node_code"]))
         anchored = (i < len(codes) and int(codes[i]) == r["node_code"])
-        resolved = anchored and any(
-            i in [int(a) for a in idx.get(g, ())] for g in low)
+        # The dataset's own rule, not a private copy of it.  The copy here had no
+        # constituent route, so this column read T35 at 9.5 % in job 141387
+        # while stage 4 -- which decides what ships -- kept 87 % of it.
+        resolved = anchored and i in resolve(low, idx)
         c = rows[r["type"]]
         c["n"] += 1
         c["parsed"] += ok

@@ -126,40 +126,61 @@ def decoys(r, idx, boiler):
 def resolve(spans, idx, stats=None):
     """D3/D3c: the union of anchors the extractor's strings name.
 
-    A span is looked up whole first.  A MULTI-WORD span that does not resolve
-    whole falls back to the union of its constituents' anchors -- D3c.  The
-    fallback is per span and only for phrases: a single word that misses is a
-    genuine miss, and rescuing it by splitting nothing would be rescuing it by
-    doing nothing.
+    A MULTI-WORD span contributes BOTH its whole-string anchors and its
+    constituents' anchors -- D3c.  A single word contributes only itself:
+    splitting it would be rescuing it by doing nothing.
 
-    Why the fallback is needed even with D3b keying MWE canonical forms: an MWE
-    *entry* is not the only multi-word thing an extractor returns.  Measured on
-    the 55 multi-word spans of the current run -- 43 (78.2 %) resolve whole,
-    and the remaining 12 are analytic comparatives (`bolj nebistven`) and
-    extraction noise (`mm popisanih`), which are not dictionary entries and
-    never will be.  All 12 have every constituent in the index, so D3b and D3c
-    together leave **0 of 55 unresolved**, against 55 of 55 before either.
+    Why the constituents are added rather than used as a fallback.  They were a
+    fallback at first -- constituents only when the whole string resolved to
+    nothing -- and that is wrong for any span whose whole-string match is real
+    but is not the anchor the question is about.  T35 is the case that showed
+    it: the question names a collocation (`Poišči besedo, ki ji pripada
+    kolokacija leten Hingisov`) and asks which word owns it.  The extractor
+    returns the collocation verbatim, correctly; the surface index holds 3.87 M
+    phrase keys, so the whole lookup SUCCEEDS -- and therefore the fallback never
+    fired and the owning word was never reached.  Only 5 of 51 items resolved.
+    Adding instead of falling back resolves 40 of 40 sampled misses.
+
+    A collocation-aware hop (sense -> collocation -> owning anchor) was measured
+    against the same items and recovers exactly the same 40: the generic union
+    already reaches them, so the special case would be code that never decides
+    anything.
+
+    The cost is bounded and was measured before the change: mean anchors per item
+    goes 1.1 -> 3.0 on T35 and 1.0 -> 3.8 on T33, with a maximum of 12 across the
+    phrase types.  What is NOT affordable is going one hop further -- a word's MWE
+    memberships -- which reaches 212,286 anchors for a common constituent.  That
+    is the hub D5c exists to cap, and it is why T34 cannot be resolved this way
+    and is parked (`spec.PARKED`).
+
+    Why the fallback was needed at all, even with D3b keying MWE canonical forms:
+    an MWE *entry* is not the only multi-word thing an extractor returns.
+    Measured on the 55 multi-word spans of an early run -- 43 (78.2 %) resolve
+    whole, and the remaining 12 are analytic comparatives (`bolj nebistven`) and
+    extraction noise (`mm popisanih`), which are not dictionary entries and never
+    will be.  All 12 have every constituent in the index.
 
     The union is deliberately wider than one anchor.  It is what D3 says the
     model's input is, and narrowing it here would be the pipeline consulting
-    knowledge the deployed lookup does not have.
+    knowledge the deployed lookup does not have.  `ask/retrieve.py` runs the same
+    rule for the same reason -- see the note there.
     """
     out = set()
     for x in spans:
-        hit = idx.get(x, ())
-        if hit:
-            out.update(int(a) for a in hit)
-            if stats is not None:
-                stats["span_whole"] += 1
-            continue
-        if " " not in x:
-            if stats is not None:
-                stats["span_miss"] += 1
-            continue
-        parts = [int(a) for t in x.split() for a in idx.get(t, ())]
+        hit = {int(a) for a in idx.get(x, ())}
+        out |= hit
+        parts = set()
+        if " " in x:
+            parts = {int(a) for t in x.split() for a in idx.get(t, ())}
+            out |= parts
         if stats is not None:
-            stats["span_constituents" if parts else "span_miss"] += 1
-        out.update(parts)
+            # Not exclusive any more: a span can contribute through both routes,
+            # and the two counts say how much each is carrying.  `span_miss` is
+            # the only one that means the span reached nothing.
+            stats["span_total"] += 1
+            stats["span_whole"] += bool(hit)
+            stats["span_constituents"] += bool(parts)
+            stats["span_miss"] += not (hit or parts)
     return sorted(out)
 
 
@@ -301,12 +322,14 @@ def run(dataset, extraction, out, wrong_rate=0.015, seed=0, store=None):
           f"({100*stats['empty_targets']/n:.2f} %)")
     print(f"union of >1 anchor:                  {stats['multi_target']:,} "
           f"({100*stats['multi_target']/n:.2f} %)")
-    span_n = (stats["span_whole"] + stats["span_constituents"]
-              + stats["span_miss"])
+    # The three routes OVERLAP -- a multi-word span usually contributes through
+    # both -- so the total is counted, not summed.  Adding them was correct only
+    # while `resolve` fell back rather than unioned.
+    span_n = stats["span_total"]
     if span_n:
-        print(f"\nspans: {span_n:,} looked up -- {stats['span_whole']:,} whole, "
-              f"{stats['span_constituents']:,} by constituents (D3c), "
-              f"{stats['span_miss']:,} unresolved")
+        print(f"\nspans: {span_n:,} looked up -- {stats['span_whole']:,} matched "
+              f"whole, {stats['span_constituents']:,} contributed constituents "
+              f"(D3c), {stats['span_miss']:,} reached nothing")
     if tiers:
         print(f"decoy tiers: {dict(tiers)}")
         print(f"distinct decoys: {len(used)}, most used: {used.most_common(5)}")
