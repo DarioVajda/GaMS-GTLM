@@ -6,14 +6,11 @@ shape it declares and the grader parses that same shape, so the two cannot be ed
 apart. Dataset-level design (seeds, bands, splits, the extraction policy) is in
 [`QA_DATASET_DESIGN.md`](QA_DATASET_DESIGN.md).
 
-> **Status — the output format below is specified, not yet implemented.** §0.1 states
-> the labelled-pair rule that replaces the 19 per-type templates, and every type's
-> block gives its output under that rule. `qa/spec.py`, `qa/gen.py` and the grader
-> still implement the old per-type contract, and `datasets/generated/` still holds
-> data in it, so *for now this document and its executable half disagree on purpose*.
-> The measurements quoted in §0.1 and C25 were taken against the existing corpus and
-> hold regardless. Closing the gap is one regeneration and one retrain
-> ([`../TODO.md`](../TODO.md) §2).
+> **Status — implemented.** §0.1's labelled-pair rule replaced the 19 per-type
+> templates; `qa/spec.py`, `qa/gen.py`, `qa/pairs.py` and the grader all speak it, and
+> `datasets/generated/` holds data in it. All **34** types now have generators: Group H's
+> last thirteen landed with §H.7. What remains is the full regeneration at the new
+> sizes (§0.4) and the retrain that follows it.
 
 ## 0. Conventions that apply to every type
 
@@ -86,7 +83,7 @@ components are derived:
 | `preteklik` · `prihodnjik` | T5, T6 | **0 / 1,233** | constant |
 | `besedna vrsta` | T8 | **1 / 617** | constant |
 | `vid` | T8, T10 | **2 / 1,233** — both incidental (*kolokacija: okvariti vid*) | constant |
-| `število pomenov` | T14, T24 | **11 / 621**, all incidental (*oksidacijsko število …*) | constant |
+| `število` | T14, T24 | **11 / 621**, all incidental (*oksidacijsko število …*) | constant |
 | `več` · `manj` · `enako` | T27 only | not lexical content at all | constant |
 
 The derived rows are 100 % **wherever the pair is emitted**, and the ten apparent
@@ -113,6 +110,16 @@ reviews.
 The budget is the reason Group H is cheap: it adds 15 types and **3** constants, because
 fourteen of the fifteen answer with a label an existing type already uses (see that
 group's header).
+
+**The entry that moved is `število`, and it did not cost a ninth.** T14 declared
+`število pomenov` whole; T24 counts four relations and would have needed
+`število sopomenk`, `število oblik` and `število zgledov` beside it — four entries for
+one idea. `is_declared` already matches a constant as one **component** of a compound
+label (that is what makes `preteklik 1. osebe ednine` a single constant), so the entry
+was narrowed to its head, `število`, and every count label of every relation is
+covered by it. T27's comparison heads work the same way: `manj sopomenk` is declared
+because `manj` is. The budget is still eight, and the two Group H types that count and
+compare added none.
 
 C25 is also the **fairness proof for Tier C**: `protipomenka` is present in **104 /
 104** antonym balls, so those items are *unseen* rather than unanswerable, and the
@@ -174,6 +181,47 @@ Core entries passing a content filter, banded by a graph-internal frequency prox
 split lemma-disjointly with three held-out tiers. Numbers and rationale:
 `QA_DATASET_DESIGN.md` §§4–5. What matters per type below is the **seed filter** —
 which entries can produce an item at all.
+
+#### The size of a split is a per-type CAP, not a total to be filled
+
+`build_dataset.py` carries `TARGET = {"train": 40000, "dev": 2000}` and
+`TEST_PER_TYPE = 200`, and every one of those is divided or applied **per type**:
+
+* **train** — 40,000 ÷ **31 trainable types** = **1,290 per type**. The denominator is
+  the types that actually take the split, so the two Tier C types (T16, T36), which are
+  test-only, do not silently shrink everybody else's share. It is 31 rather than 33
+  because Tier C is out of it, and 33 rather than 34 because T34 is parked
+  (`spec.PARKED`); the denominator is **computed from `TYPES`**, never written down, so
+  parking or unparking a type re-divides the budget instead of leaving a stale constant.
+* **dev** — 2,000 ÷ 31 = **64.5 per type**, kept small on purpose.
+* **test** — a flat **200 per type**, so a per-type score is read off the same
+  denominator everywhere and the reporting table needs no weighting.
+
+**Negatives count inside the cap** — 200 test items are 180 positives and 20 negatives,
+1,290 train items are 1,161 and 129. The first full build (job 141387) added them 10 % on
+top, shipping 220 per test type and 42,013 train items. The rate is 10 % of what a type
+can *supply*, not of its cap, so a thin type is not made mostly of negatives.
+
+**A type with the capacity lands on its cap exactly.** Three changes made that true,
+each for a shortfall the same build measured:
+
+* the availability pass runs each generator with the rng generation will use, not
+  `Random(0)` — T35 draws which phrase to try, and made 827 of its 1,290 train items
+  from entries that had passed under the other draw;
+* each band is walked until it has *made* its share rather than over its first *k*
+  entries, so an entry that yields no item is replaced — T1 shipped 179 of 200 test
+  items from thousands of eligible entries;
+* negatives that come up short are topped up with positives from entries no band spent.
+
+Whatever a type still cannot supply is recorded under `short` in `report.json`.
+
+A type that cannot fill its cap contributes what it has and **nothing else moves**: the
+total falls, no other type grows to compensate, and no cap is redistributed. That is
+what makes the sizes above a ceiling rather than a quota — a quota would be filled by
+over-sampling whichever type is cheapest, which is the one thing a per-type score must
+not be contaminated by. The published `report.json` records `per_type_cap` beside the
+realised counts, so a short type is visible as a short type rather than inferred from a
+total.
 
 ### 0.5 What the model actually reads
 
@@ -456,7 +504,9 @@ type's pairs may carry — and how many of them a given item asks for.
 
 T13 and T18 are retired — the first into T12, the second into T17's `exact` band — so
 the inventory is 34 types numbered to 36. **T16 and T36 are Tier C**, held out of
-training entirely.
+training entirely. **T34 is specified and implemented but not built**: it is parked in
+`spec.PARKED` because its subject is not in its own question and therefore cannot be
+retrieved — see §H.7. So **33 types are built, 31 of them trainable.**
 
 **Twenty-one of them share six key sets.** T1/T2/T3/T20/T21/T22 are one key set at six
 sizes, T5/T6 one at two, T8/T9/T10/T26 one at three, T12/T29/T32 one, T15/T17/T19/T28
@@ -473,7 +523,7 @@ answer contract filled, and there is no longer a contract to overfill.
 
 | filter | what it rejects | why |
 |---|---|---|
-| `gen.healthy_grid` (C23) | nominal paradigms whose nominative plural equals the nominative singular, or whose filled cells hold fewer than 6 distinct surfaces | The KG stores lemma-filled paradigms — `odstotek` has `rodilnik/množina → odstotek`. 8.98 % of noun entries with ≥12 filled cells fail. It makes T1/T2/T3 a table of one repeated surface, and it makes T20's ambiguity test pass on a cell that only *looks* unambiguous. Decided per entry, never per lemma. |
+| `gen.healthy_grid` (C23) | nominal paradigms whose nominative plural equals the nominative singular, or whose filled cells hold fewer than 6 distinct surfaces | The KG stores lemma-filled paradigms — `odstotek` has `rodilnik/množina → odstotek`. 8.98 % of noun entries with ≥12 filled cells fail. It makes T1/T2/T3 a table of one repeated surface, and it makes T20's ambiguity test pass on a cell that only *looks* unambiguous. Decided per entry, never per lemma. **Unchanged by the gender axis (A.0), and deliberately so:** both tests keep their meaning read within one gender — re-measured at **87.1 %** passing over 6,000 adjectives × 3 genders, against ~91 % for nouns. T20/T21 read every gender at once, so they take it from `healthy_paradigm`, which requires **all** genders to pass: one lemma-filled gender injects spurious readings into an answer that spans the paradigm. |
 | degenerate gradation (C22) | a comparative equal to the positive or the lemma | The KG stores `oblika: mikaven (…, primernik, …)` — the cell exists, the surface was never inflected. 29 % of comparative-bearing entries; they become truthful negatives. |
 | premise truth (C20) | a frame naming a word class used on an entry of another class | *"…samostalnika izbrisen?"* where *izbrisen* is an adjective makes the question false before the model reads anything. A filter on the frame pool, not a hand-kept list. |
 | constituent validity (C26) | an MWE whose `decomp:constituent` list names a word that is not in the phrase | The KG resolves function-word components to junk entries: `za → silo`, `v → celoti`, `se → prikazati`, plus typo lemmas like `abramba`. Keeping only MWEs whose every constituent's lemma or one of its forms occurs in the phrase passes **74.2 %** of them (clean pool ≈ 2.93 M); what it rejects is `predlog` (463 of 853) and `zaimek` (309). Without it, T30/T34 gold is confidently wrong on a quarter of the pool. |
@@ -490,6 +540,144 @@ deduplicate on (surface, case, number) before rendering. And **capitalisation is
 heuristic**: the builder prefers the least-capitalised variant, so never build a
 question whose gold turns on it.
 
+## A.0 The gender axis
+
+**This section's seed filter always said `POS ∈ {noun, adjective, numeral, pronoun}`.
+The code said `{samostalnik, števnik, zaimek}`, and had for as long as the group
+existed.** The comment gave the reason: an adjective declines by gender too, so a
+`(case, number)` cell holds three surfaces and *"a positional 18-cell line would not be
+well defined"*. That was a true objection to the **positional** contract, and §0.1
+deleted the positional contract — the distinguishing feature now moves into the label,
+exactly as T6 already does with `preteklik 1. osebe ednine (ženski spol)`. The
+objection outlived its premise by one section.
+
+It was expensive while it lasted:
+
+| | |
+|---|--:|
+| core anchors that are adjectives | **26,612 / 100,801 (26.4 %)** — second only to nouns |
+| adjectives **already in the seed pool** | **20,455 / 72,334 (28.3 %)** |
+| form leaves unreachable by any type, adjectival | **1,476,688 (55.2 %)** |
+| form leaves in the grid six types are built on | 861,014 (32.2 %) |
+
+The unreachable half was larger than the reachable one, and it was one part of speech.
+What the five types actually gained, measured on the same pool before and after:
+
+| | eligible seeds, nouns only | with the gender axis | |
+|---|--:|--:|--:|
+| T1 | 33,267 | **51,433** | +54.6 % |
+| T2 | 33,537 | **51,726** | +54.2 % |
+| T3 | 33,553 | **51,740** | +54.2 % |
+| T21 | 33,550 | **39,101** | +16.5 % |
+| T20 | 2,386 | **2,923** | +22.5 % |
+
+T20 and T21 gain least because they read the whole paradigm and take their health check
+from `healthy_paradigm`, which requires every gender to pass — three chances to fail
+instead of one.
+
+**This is not a new type and must not become one.** §0.9 already says the key set is a
+property of the item rather than of the type; adding `pridevnik` to the grid and gender
+to the key set is that sentence being taken at its word. A `T37 — sklanjanje pridevnika`
+would reintroduce the type-keyed shape §0.1 exists to remove.
+
+**The seed pool does not move, and this is the reason the change was cheap.** `build_pool`
+has no part-of-speech filter and never had one: adjectives were already entries, already
+banded by D10, already assigned a side by D11's lemma-disjoint split. Only the grid
+refused them. So no band profile changes, no lemma changes sides, and nothing generated
+before this needed to be regenerated to *stay* correct — the change is additive.
+
+### The key stays a pair, and the gender is fixed per item
+
+The obvious move is to widen the grid key from `(case, number)` to carry gender and
+definiteness. It is the wrong one, for three reasons found by reading the consumers:
+
+* Two generators destructure the key directly and would raise; `_cell` and its three
+  call sites would need the axes threaded through.
+* **`healthy_grid` would break silently.** It looks up `("imenovalnik", "ednina")` by
+  name. Against a 4-tuple key both lookups return `None`, the lemma-filled-paradigm test
+  stops firing, and the check degenerates to its six-distinct-surfaces floor — which any
+  54-cell adjective passes without being inflected at all. That check exists because a
+  lemma-filled paradigm is *plausible* gold for T20.
+* The question has to name the gender anyway (§0.1 clause 3), so fixing it per item
+  costs nothing that widening the key would have bought.
+
+So **T1/T2/T3 fix one gender per item and name it in the frame**, and the grid is the
+same 18-cell object it always was. `healthy_grid` is unchanged and both of its tests
+keep their meaning within a gender — re-measured over 6,000 adjectives × 3 genders,
+**87.1 % pass**, against ~91 % for nouns.
+
+Definiteness is a **cell-level tie-break**, not a key axis: the form carrying the
+requested definiteness wins and the unmarked form fills every cell with no such split.
+Under that rule **0 of 318,089 cells hold more than one surface**. Unlike the noun
+accusative — whose doublet is separated by animacy, which §0.6 does not render — this
+one is separated by something the store spells, so widening *resolves* the cell instead
+of discarding the entry:
+
+| key | ambiguous cells | entries affected |
+|---|--:|--:|
+| `(case, number)` | 81,024 / 143,287 = **56.55 %** | 7,930 / 8,000 |
+| `+ gender` | 7,865 / 424,259 = **1.85 %** | 7,864 / 8,000 |
+| `+ gender, definiteness` | 0 / 435,206 = **0.00 %** | **0** / 8,000 |
+
+Definiteness is also **scoped to the cells the question asks about** — the whole
+paradigm for T1, one number for T2, one cell for T3. Only the masculine nominative and
+accusative singular carry the split, so choosing it per item would have put *"v določni
+obliki"* on a question about the dual: an axis the answer does not vary over.
+
+### T20 and T21 must NOT fix a gender
+
+They answer **with a reading** rather than with a surface, so their ambiguity test has
+to run over the whole paradigm at once. Fixing a gender first and then asking "what form
+is this?" would be wrong most of the time: measured over 4,000 adjectives, **91.4 % of
+surfaces that carry exactly one reading inside some gender carry more than one across
+the paradigm** — `Shakespearejevi` has seven, `jetijeve` four spanning two genders.
+That is exactly the mislabelling D15 and T20's unambiguity filter exist to prevent, and
+it is the one place where treating this as a single edit to a shared grid would have
+produced confident, well-formed, wrong gold.
+
+The consequence is that the two types move in opposite directions. **T21 gains a lot** —
+cross-gender homography is abundant, and it is genuine ambiguity supervision. **T20 gains
+almost nothing**: only 2,728 of 31,784 adjective surfaces (8.6 %) are unambiguous across
+the paradigm, which is the whole population it can draw from. Both take their health
+check from `healthy_paradigm`, which requires every gender to pass — without it they
+would have lost `healthy_grid` entirely, since they no longer call `nominal_grid`.
+
+### A known source-data defect, reported and not filtered
+
+Some adjective entries store the citation form in an oblique cell: `zložen` (anchor
+39246) gives `zložen` for the masculine genitive and instrumental singular, where the
+real forms are `zloženega` and `zloženim`. `healthy_grid` misses it — the nominative
+plural differs and there are far more than six distinct surfaces.
+
+**It is not filtered, because the obvious filter is wrong.** "The lemma may not occupy
+an oblique cell" rejects **44.0 % of adjectives**, and the examples it rejects are
+correct Slovene: `aachenski` really is the feminine dative singular, and `otrok` really
+is the genitive plural. Homography with the citation form is ordinary in this language,
+so at this level the defect is indistinguishable from correct data. Nouns carry the same
+class of error (9.4 %) and have shipped with it since the group was written. Recorded
+here so nobody re-derives the filter and loses half the adjectives to it.
+
+### Landed, and run end to end
+
+Job 140096, `--types T1,T2,T3,T20,T21`, **12,804 items in 20.2 minutes** on two B200s —
+every stage ran and every check passed:
+
+* **containment 100 %** over 61,414 gold pairs, 0 bad, 0 empty cells;
+* **306 distinct labels, every one derivable from its own ball** (C25), 0 partial, and
+  **none hitting a declared constant** — the label budget stays at eight, because
+  `moški spol`, `nedoločna oblika` and the rest are literal node text;
+* `keep` **93.3 %** after entity linking, extraction recall 95.5 % overall; T21's 84.7 %
+  is its own pre-existing shape and is *better* than the noun-only run's 80.7 %;
+* the grader scores its own gold 100 % on all three splits, the split stays
+  lemma-disjoint over 11,243 lemmas, and all variants match.
+
+**The one number worth carrying forward is `infl/p`**, which only exists because of this
+change: a regular-morphology guesser with no graph gets **44.4 % of T1's cells, 42.0 %
+of T2's, 36.1 % of T3's and 56.9 % of T21's**. Every one of those had been reported as
+**0.0 % `morph`** since the baselines were written. The types are not broken by this —
+a retrieval arm has a large margin to win — but the margin is smaller than the old
+column implied, and it should be read beside the score from here on.
+
 ### T1 — `sklanjanje/celotna_sklanjatev`
 
 The complete declension table: 6 cases × 3 numbers = 18 cells, ednina then dvojina
@@ -497,12 +685,20 @@ then množina, and inside each im, rod, daj, tož, mest, or. Seed filter: POS �
 adjective, numeral, pronoun}, ≥ 12 of 18 cells populated, `healthy_grid`, and no cell
 holding two surfaces — the doublets are 0.2 % of nouns and every one is the animacy
 alternation in `tožilnik, ednina` (*vidim Mercator* / *vidim Mercatorja*), which the
-model cannot see because `animate` is not rendered.
+model cannot see because `animate` is not rendered. For an adjective the item also fixes
+a **gender**, and a **definiteness** when the paradigm marks one, both named in the
+question and the gender carried in every label (A.0).
 
 The 18 pairs are emitted in that canonical order, and graded without it (§0.8.1).
 
 ```
 ODGOVOR: imenovalnik ednine: gora | rodilnik ednine: gore | dajalnik ednine: gori | tožilnik ednine: goro | mestnik ednine: gori | orodnik ednine: goro | imenovalnik dvojine: gori | … | orodnik množine: gorami
+```
+
+and, for *"Zanima me celotna sklanjatev pridevnika lončarski v ženskem spolu."*:
+
+```
+ODGOVOR: imenovalnik ednine (ženski spol): lončarska | rodilnik ednine (ženski spol): lončarske | dajalnik ednine (ženski spol): lončarski | … | orodnik množine (ženski spol): lončarskimi
 ```
 
 ### T2 — `sklanjanje/sklanjatev_po_stevilu`
@@ -527,6 +723,12 @@ distribution. Several cells can share a surface (`gori` is dative and locative
 singular); harmless in this direction, because the question fixes the cell. The
 reverse direction is T21 — and under §0.1 the two emit **the same string**, which is
 the point: nothing in the output tells the model which type it was given.
+
+For an adjective the cell is chosen **before** the definiteness, not after (A.0): this
+type asks about one cell, 16 of the 18 do not distinguish definiteness at all, and
+choosing it first put *"v določni obliki"* on a question about the dual — an axis whose
+own answer does not vary over it. Caught by reading the generated questions, not by a
+check.
 
 ```
 ODGOVOR: mestnik ednine: gori
@@ -562,6 +764,12 @@ disjunction".
 Always **full case+number labels**, even when the number is shared: one shape for one
 fact costs a repeated *ednine* and buys a key set identical to T1's. T20 is this type
 with a sentence around it and shares its generator outright.
+
+**Adjectives are where this type earns its keep** (A.0). It answers *with a reading*, so
+unlike T1–T3 it must not fix a gender — the reading spans the whole paradigm, and
+**91.4 %** of adjective surfaces that look unambiguous inside one gender are ambiguous
+across it. `jetijeve` is four readings over two genders; `Shakespearejevi` is seven.
+That is real ambiguity supervision this group had no source for before.
 
 The disjunction is no longer spelled — the ` ali ` separator is gone, and two readings
 are simply two pairs sharing a value. That is what makes T21 and T3 the same contract
@@ -958,6 +1166,20 @@ rather than on the count. And **`min(·, |ALL|)` everywhere**, so under-supply i
 an error: if the anchor has 3 phrases and the question asks for 5, giving 3 is correct.
 That is the *refusal to invent* slice, expressed in the count rule instead of prose.
 
+**The floor is what the ball shows, the ceiling what the store holds.** `|ALL|` is the
+store's set and can be far wider than the ball, so the table above, applied with `|ALL|`
+at both ends, graded an honest answer wrong whenever the ball held fewer members than the
+band asks for: *natanko 8* against a ball showing 7 of 30 wanted 8 (T31, job 141387). Stage
+5 now writes `n_pool` — the members the target could be drawn from — and every lower
+bound is taken against `min(n_pool, |ALL|)` while every upper bound keeps `|ALL|`, so
+`exact` accepts `min(N, n_pool) ≤ k ≤ min(N, |ALL|)`. A row without `n_pool` grades
+exactly as the table says.
+
+`n_pool` excludes, outside test, any member carrying a Tier C tag word
+(`spec.tier_c_tagged`): the target is redrawn from the ball after stage 2's filter has
+run, and the same build shipped six train targets such as `madžarska velemojstrica`. The
+allow-list is built before that filter, so naming one is still correct.
+
 Since the collocation node's text **is** the phrase, gold is read straight off the node
 with no post-processing. The gold is drawn from the ball's own sample, so it is
 in-ball by construction. The graph carries no frequency on a collocation node, so
@@ -1017,6 +1239,12 @@ The form is matched to the sentence by case-insensitive word-boundary string mat
 rejecting a surface that occurs twice with different analyses or that matches more than
 one form leaf of the entry — that is the ambiguity test, done cheaply. **No tagger**,
 so no tagger's errors enter the gold.
+
+The ambiguity test runs over the **whole** paradigm, every gender at once (A.0). This
+type gains almost nothing from adjectives and that is the correct outcome, not a
+shortfall: only **2,728 of 31,784** adjective surfaces (8.6 %) carry a single reading
+across the paradigm, and the other 91.4 % belong to T21. Fixing a gender first would
+have manufactured a large, confident, wrong-gold population out of exactly that 91.4 %.
 
 The ambiguity test is only as good as the paradigm, which is what `healthy_grid` (C23)
 protects: a lemma-filled paradigm makes a genitive plural look unambiguous because the
@@ -1272,9 +1500,10 @@ illustration is how a held-out relation quietly becomes a seen one.
 `sopomenka`, `zgled`, `kolokacija`, `oblika` — plus `protipomenka` in test items only.
 The three that are absent are absent for reasons, all recorded in `spec.T23_RELATIONS`:
 
-* `prevod (madžarsko)` is the *other* held-out relation and T36, which holds it out, has
-  not landed. Putting it in the slot now would be a Tier C value in training with no tag
-  words registered and so no check watching it.
+* ~~`prevod (madžarsko)` is the *other* held-out relation and T36, which holds it out,
+  has not landed.~~ **Resolved.** T36 has landed and registered its tag words, which is
+  exactly the condition this bullet was waiting on, so `prevod` now sits beside
+  `protipomenka` in `spec.T23_HELD_OUT`: test items only, never training.
 * MWE membership has no node prefix of its own, and inventing a tag for the question is
   a decision about the label vocabulary (§0.1), not a detail of this type.
 * **`pomen` cannot answer `ne` truthfully, and this is the one that had to be measured.**
@@ -1438,6 +1667,14 @@ The tie is two pairs sharing a label, not one pair holding a list — §0.1 has 
 comma-separated values anywhere, and a lemma may contain a comma-free space but a
 value list would be indistinguishable from a definition.
 
+**Containment checks the value alone** (`VALUE_ONLY` in `qa/check_balls.py`). The
+label is a declared constant plus the relation's genitive plural, and only the constant
+is declared, so `enako oblik: X` demanded one node carrying both `oblik` and `X` — none
+does, and the first build to reach stage 5 scored **0 of 71 items**. The ball was right:
+it holds both compared lemmas as `iztočnica:` nodes. T27 is not `COMPOSED_VALUE` — its
+value is a real node, and exempting it would retire a check that can fail. With the
+value alone, 71 of 71.
+
 ---
 
 ### H.4 Sense-scoped relations
@@ -1446,15 +1683,37 @@ value list would be indistinguishable from a definition.
 relation — at ~3 %, and it was never built. These two types are its natural first
 instances, and `QA_TASKS.md` §T15 already names the first of them.
 
-The scoping is real rather than decorative. Over 4,000 core anchors, 45.5 % have ≥ 2
+The scoping is real rather than decorative. Over 4,000 core anchors, **47.2 %** have ≥ 2
 senses, and where a relation is present on a multi-sense entry it sits on **some but not
 all** senses almost always:
 
-| relation | sense-scoped on a multi-sense entry | of those, discriminating | attaches to exactly one sense |
-|---|--:|--:|--:|
-| `sopomenka` | 33.4 % of anchors | 95.3 % | 100 % |
-| `kolokacija` | 38.8 % | 96.3 % | 100 % |
-| `zgled` | 11.4 % | 100 % | 99.9 % |
+| relation | present on a multi-sense entry | of those, discriminating | the relation sits on one sense | a given CHILD NODE hangs off one sense |
+|---|--:|--:|--:|--:|
+| `sopomenka` | 86.1 % | 92.1 % | 34.7 % | **100 %** (n = 14,212) |
+| `kolokacija` | 87.0 % | 97.4 % | 75.7 % | **100 %** (n = 558,287) |
+| `zgled` | 25.2 % | 100 % | 32.4 % | **99.8 %** (n = 4,722) |
+
+**Three of the first table's four numbers per row were wrong, and the reason is worth
+keeping.** The probe that produced them filtered sense children with `v < n_real`.
+`K_SYN`, `K_ANT` and `K_COLLOC` nodes all live **past** `n_real` — only `K_EXAMPLE`,
+`K_TRANS` and `K_ANCHOR` live before it — so the filter silently deleted every synonym,
+antonym and collocation, and the two relation rows were read off almost nothing. The
+same mistake made a later capacity probe report T28 as having *zero* eligible entries.
+Nothing in the pipeline had it; it was twice in throwaway measurement code, which is
+exactly where it is least likely to be noticed, so: **`n_real` is not a validity
+boundary for sense children.**
+
+The old table's last column was also two claims wearing one heading. Whether a relation
+*as a whole* sits on a single sense is 34.7 % / 75.7 % / 32.4 % — nowhere near the 100 %
+it claimed. Whether a given child **node** hangs off exactly one sense is the 100 % /
+100 % / 99.8 % above, and that is the one **T29** depends on, so T29's precondition
+survives the correction intact.
+
+T28 and T29 both seed from **defined** senses only (§D, `sense_class`), and that scope is
+thinner: 26.9 % of anchors have ≥ 2 defined senses, and `sopomenka` is present on
+10.2 % of those. That, not the 86.1 % above, is the population T28 draws from — which
+is why its yield is under 1 % of the word pool and why it is one of the two types that
+cannot fill a 1,250-item train share.
 
 ### T28 — `pomen/relacija_pomena`
 
@@ -1465,6 +1724,17 @@ Grading and labels are T15/T17/T19's exactly — the same contract, asked of a s
 scope. The distractor is the entry's *other* senses' children, sitting in the same ball,
 so an answer that ignores the scope is wrong on content rather than on shape. That is
 what makes this a Tier B probe instead of a rephrasing of T15.
+
+**The sense is named two ways, and the second one is most of the type.** A definition can
+be quoted — *"v pomenu 'zbirka knjig'"* — but most senses in this base do not have one,
+and requiring one left the type able to fill 759 of a 1,250-item train share and 112 of a
+200-item test one. The ball **numbers** every sense it renders, so an ordinal names one
+just as exactly: *"Za 2. pomen besede X navedi sopomenke."* Those items use their own
+frame pool (`T28/ord`), because no frame there may reach for a definition slot the item
+does not carry — a frame reaching for a missing slot is dropped silently, which is how a
+type loses half its items without anything failing. What is still refused is a sense with
+**neither**: the store renders a placeholder as `pomen None: Shakespeare`, with the
+headword for a body and no ordinal, and naming that asks the model to scope by nothing.
 
 ```
 ODGOVOR: sopomenka: biblioteka | sopomenka: knjigarna
@@ -1645,6 +1915,16 @@ T17's count bands and `ALL` = the ball's own set, shipped on the item.
 ODGOVOR: iztočnica: beli kumulusi | iztočnica: podjetje Kumulus
 ```
 
+**The ball's prefix set is not the allow-list, and `check_balls`' contract-gap guard
+skips T31.** `iztočnica:` is every anchor's prefix — the subject's, and every hop-2
+constituent's — so stage 4 intersects the ball's `iztočnica:` nodes with the store's
+membership truth (`member_strict`, `build_balls.member_pool`). The guard asserts *every
+member node the ball shows is allowed*, which for T31 is false by design: the first build
+to reach it flagged 800 nodes on 74 items, all word entries such as
+`dolar (samostalnik, …)`, the subject `us` among them. The ball cannot tell a member from
+a word; only the store can, and stage 4 already asks it. Containment is unaffected: 74 of
+74.
+
 ### T32 — `zveze/pomen_zveze`
 
 *"Kaj pomeni zveza X?"* — T12's contract with an MWE anchor. Narrow by the 1.4 %
@@ -1717,6 +1997,23 @@ nodes that are not linked to each other**; the collocation hangs off the sense, 
 off the anchor. They coincide textually in 29.6 % of cases and the type must not assume
 it.
 
+**A collocation always has two owners, and that is what the uniqueness filter is for.**
+A collocation is a relation between two lexical units, and the store reifies it as *one*
+node hanging off a sense of **each**: over 785 sampled nodes, every single one has
+exactly two sense parents and exactly two anchor owners — `dekan blagoslovi` off `dekan`
+and off `blagosloviti`, `SMS pošlje` off `SMS` and off `poslati`. So the question *"whose
+collocation is this?"* has two right answers in the source, always, and the type would be
+ill-posed if it stopped there.
+
+What makes it well-posed is that uniqueness is asked of **the input**, not of the store.
+The ball is built from the phrase's words through the surface index (D3c), so the second
+owner is visible to the model only when one of the phrase's own words resolves to it.
+`glasovi pred Gorom` is owned by `Gore` and by `glas`, and *glasovi* does not resolve to
+the `glas` anchor in the index, so the ball the model reads holds exactly one headword
+listing this phrase. That is the condition the generator tests, and it is the only one
+that can be tested: an answer is unambiguous exactly when its input is. It costs about
+five sixths of the candidate phrases.
+
 ```
 ODGOVOR: iztočnica: kumulus
 ```
@@ -1748,6 +2045,168 @@ ODGOVOR: prevod (madžarsko): kényes
 
 ---
 
+### H.7 Landed — the thirteen that were left
+
+T23 and T30 landed with the groundwork. The remaining **thirteen** — T22, T24, T25, T26,
+T27, T28, T29, T31, T32, T33, T34, T35, T36 — are now in `qa/gen.py`, with frames in
+`qa/templates.py`, answer handlers in `qa/pairs.py` and `SPEC` rows carrying their mode,
+keys and grading. Every one produces positives and a negative end to end, and `C7` now
+holds fixtures for the group's own renderers and for **all 218 of its frames**, rendered
+against the exact slot set its generator supplies.
+
+**What the group needed from outside itself, all small and all measured.**
+
+| | why |
+|---|---|
+| `K_TRANS` gets a tag | T36's 77,570 translation nodes were **unreachable**: `TAG` had no entry for the kind, so `sense_children` raised on it. The type is one accessor and one tag; without the tag it is nothing. |
+| `MEMBER_STRICT` for T31 | Membership grading accepts anything in the ball under the node prefix, and T31's prefix is `iztočnica:` — which is not relation-specific. Without the flag, the ball's own subject word is an accepted answer to *"which phrases is this word part of?"*. `build_balls.member_pool` now intersects the pool with the truth set for these types. |
+| `PHRASE_POOL` 80 k → 500 k | Sized twice: once for T32's train share, once for the small splits. See `qa/seeds.py` for both. |
+| `sl.COUNTED` gains `stalna besedna zveza` | T31's `exact` band counts phrases in the question, and a missing row is a `KeyError` inside the generator, not a bad phrasing. |
+| a `prevod` branch in `relation_values` | T24 and T27 name it as a held-out countable, so without the branch every test item drawing it raised. |
+
+**Eight defects the end-to-end smoke test found, worth recording because none would have
+shown up in review** — and one type parked, which is the ninth finding and the only one
+that could not be fixed.
+
+* **T28 answered with the reified node text** (`sopomenka: deček ~ otrok`) where T15
+  answers `sopomenka: deček`. Sense-scoped walks return the relation node, and the node
+  *is* the pair; `sense_partners()` splits it and drops the anchor's own side.
+* **T29 answered `pomen 1: Pierre`** — a placeholder sense whose body is the headword,
+  which is the same defect §T23 records for `pomen: ne`, reached from the other side.
+  Both types now seed from **defined** senses only.
+* **T26 asked `lexeme_property` for a list and got a `(pos, extra)` pair.** It emitted a
+  POS where a value belonged, and `pairs._property_pair` raised on it.
+* **T27 answered a question it had not been asked.** The label was read off the *seed*
+  (`manj pomenov: Shakespearov`) while every frame asked which word had **more**. The
+  direction is now drawn, put in the question as `{PRIM}`, and repeated by the label, so
+  the answer names the word the question asked for and `manj` is half the items rather
+  than an accident of which word was the seed.
+* **T7 made no negatives at all in train or dev** — not a Group H type, but the first
+  build to run all 34 at once is what surfaced it. A negative draws from
+  `templates.neutral_frames`, which keeps only the frames naming no word class, because
+  *kakšnega spola je samostalnik teči* has already asserted the false premise the item
+  tests. All ten of T7's train frames say `glagol`, so the filter left exactly one frame
+  — and that one is tier A, which train and dev may not use. `render_question` returned
+  `None` every time, silently, and the type shipped positives only. Three neutral train
+  frames were written for it, and **selftest C7 now asserts that all 34 types keep a
+  neutral frame their own splits can reach**, per axis set. The tier is the half a reader
+  misses: the existing Group H check counted neutral frames and would have passed.
+* **C26 was pointed at a type that does not make its claim.** T34 was put in
+  `CONSTITUENT_TYPES` because it is a phrase type, but C26 asserts *every word the answer
+  names is a recorded part of the phrase in the question* — and T34's answer is the
+  **completed phrase**, its question a fragment. So the check read the gold `jagnjetina in
+  kozličevina` as a constituent of `jagnjetina ___ kozličevina` and failed all 57 items.
+  The check was right and the membership list was wrong. T34 now has **C26b**, which
+  asserts what it actually claims: exactly one gold and one gap, the gold is the fragment
+  with the gap filled, and that phrase is the anchor's own recorded lemma — the last read
+  from the store, so the item cannot be asking the model to reproduce our concatenation.
+* **The extractor died mid-shard on an attention-mask alignment bug.** Torch's
+  memory-efficient SDPA kernel needs the attention bias 16-byte aligned — in bf16, the
+  mask's last dimension must be a multiple of 8 — and the extractor padded each batch to
+  whatever its longest row happened to be. One shard of two raised `p.attn_bias_ptr is not
+  correctly aligned` after 150 s and the build refused to merge a partial run. **It is
+  data-dependent**, which is why nineteen types never hit it: the questions the new types
+  write — T29 quotes a whole corpus sentence — moved the batch maxima onto a bad length.
+  `pad_to_multiple_of=8` costs a few tokens per batch and removes the class of failure.
+  The same code path serves `ask/`, so it was live there too.
+* **D3c was a fallback where it should have been a union, and T35 paid for it.** `resolve`
+  looked a span up whole and consulted its constituents *only when the whole lookup
+  returned nothing*. T35 names a collocation and asks which word owns it; the extractor
+  returns the collocation verbatim and correctly (86.8 % recall), the surface index holds
+  3.87 M phrase keys so the whole lookup **succeeds** — and therefore the constituent path
+  never ran and the owning word was never reached. **5 of 51 items resolved.** Adding the
+  constituents instead of falling back to them: **46 of 51**, and T29 gained five points on
+  the way. A collocation-specific reverse hop was measured against the same items and
+  recovers exactly the same ones, so it would have been code that never decides anything.
+  Cost, measured before the change: mean anchors per item 1.1 → 3.0 on T35, max 12 across
+  the phrase types. The corpus-wide share of items with more than one anchor goes 20.1 % →
+  29.5 %.
+* **`ask/retrieve.py` had no constituent path at all** — the same rule, in a second copy,
+  which had silently drifted. Serving resolved strictly *less* than training did, so a
+  question whose phrase is not itself an entry got the one-node `ni v bazi` ball in
+  deployment and a real ball in training. Nothing was checking that the two agreed. Fixed
+  in both, and each now points at the other.
+
+**T34 is parked (`spec.PARKED`), and the reason is worth stating in full**, because it is
+the one problem in this group that is not a bug. **It is the only type whose subject is not
+in its own question.** The item shows `sredozemna ___` and is about the phrase `sredozemna
+medvedjica`, so entity linking — which sees the question and nothing else — can reach the
+phrase only through *every phrase containing the word `sredozemna`*, a hub of up to
+**212,286 anchors**. Measured: **0 of 57 items resolved**; the unbounded membership hop
+gives a mean of **11,066 anchors an item**; capped the way `gen_T34` caps its own scan it
+buys 73 % resolution for **373-anchor balls**, against a corpus norm of 1–4. There is no
+honest retrieval that lands on the one phrase, and building its ball from the seed anchor
+instead would train the model on a lookup that cannot happen at serving time. The type's
+generator, frames and C26b stay in the tree; what it loses is a place in
+`build_dataset.TYPES`. **What would unpark it is a question shape that names the phrase it
+asks about.**
+
+**Generation had to get about eight times cheaper, and the reason is structural.**
+`availability()` runs every generator over its entire seed pool — that is what makes
+"this type is available for this lemma" a fact rather than a prediction — so a type
+costing 0.1 s a seed costs two hours by itself. Measured over all 34, the pass was
+**106 minutes**. Four changes, none of which weakens a filter:
+
+* **`store.sense_children` and `store.senses` mask with numpy** instead of testing each
+  neighbour in Python. Every relation type in the corpus walks these two, and a sense of
+  a function word has hundreds of thousands of neighbours. Verified identical — same
+  values, same order — against the 40 highest-degree anchors plus 400 random ones.
+* **`store.n_memberships` counts without materialising.** T34 ranks a phrase's
+  constituents by membership count on every seed and reads only the smallest, and one
+  constituent is routinely a function word in hundreds of thousands of phrases, so
+  `len(memberships(c))` was decoding that many lemma strings to produce a number.
+* **T35 stops at the first usable phrase** (`T35_TRIES = 12`) rather than proving all
+  2,386 of a busy anchor's collocations usable to pick one, and settles the common
+  rejection with the reverse hop above before running the expensive scan: 9 s a seed →
+  0.014 s.
+* **The availability scan stops when a type's every band already holds more than
+  allocation can spend** (`AVAIL_MARGIN`), over a *shuffled* pool so what it collects is
+  a random sample rather than the lowest node ids. A thin band still drags the scan over
+  the whole pool, which is what keeps a thin type honest.
+
+**T26 deviates from its specification, deliberately.** When two words share no property,
+it returns `None` rather than the §0.2 sentinel: the sentinel means *this is not in the
+base*, and both words plainly are. The item simply is not built.
+
+**Capacity, measured with the real generators.** The first capacity table in this section
+used optimistic proxies because the generators did not exist. Re-measured over random
+samples of each type's own seed pool — random, because node id correlates with entry age
+and the head of the pool is all proper nouns, which made T22 read as a 1.7 % yield when
+it is really 71 %:
+
+| type | train | dev | test |
+|---|--:|--:|--:|
+| T22 | 38,526 | 3,375 | 8,353 |
+| T24 | 53,000 | 5,063 | 12,745 |
+| T25 · T26 · T27 | ~53,400 | 5,063 | 13,020 |
+| T28 | 13,345 | 1,140 | 3,194 |
+| T29 | 7,433 | 675 | 1,843 |
+| T31 | 49,564 | 4,584 | 11,975 |
+| T32 | 5,000 | 466 | 1,139 |
+| T33 | 145,671 | 13,805 | 35,704 |
+| T34 | 54,000 | 140 | 359 |
+| T35 | 8,897 | 688 | 1,926 |
+| T36 | 7,076 | 607 | 1,607 |
+
+against caps of **1,250 train / 63 dev / 200 test**. Every type clears every cap, but
+three of them did not at first, and each was short in a way worth naming:
+
+* **T28 — 759 train, 112 test.** A contract problem wearing a capacity costume: the type
+  demanded a *definition* to name the sense by, and most senses in this base have none.
+  Naming by ordinal instead (see T28) took its yield from 1.4 % to 24.6 %.
+* **T32 — 196 test against a flat 200.** Only 1.4 % of MWEs carry a definition, and the
+  phrase pool was sized by the train share. `PHRASE_POOL` 200 k → 500 k.
+* **T34 — dev sampled at zero.** Its constituents must all land in the same split
+  (C11), which for a median of three constituents costs the split share cubed, and dev
+  is 7 %. The same pool raise puts it at ~140, against 63 needed. It is the thinnest
+  cell in the corpus and the one to watch if the split shares ever move.
+
+The two small splits are where a per-type cap bites, and neither is visible in a
+train-sized measurement — which is why the numbers above are sampled **per split**
+rather than scaled down from one pool-wide yield.
+
+---
+
 ## 2. The checks
 
 `qa/selftest.py` runs these against a generated dataset; the four generation filters
@@ -1756,17 +2215,18 @@ are in §1.
 | # | check |
 |---|---|
 | C6 | **Tier C leakage** — no training item contains a tag word, and no training *question* contains a soft word. Two held-out relations now: T16's (`protipomenka`, `antonim`) and T36's (`prevod`, `madžarsko`, `madžarski`). T36's tag words need the same two-part treatment, since *prevod* is ordinary Slovene that can appear inside a definition. **Group H widens what this check has to cover.** T23, T24, T25 and T27 take the relation as a *slot*, so a held-out relation can now enter training as a question's subject rather than as its answer — and `Ali ima beseda X protipomenko?` leaks T16 whether the gold says `da` or `ne`. Those two slot values are test-only (H.0), and C6 is what enforces it: the check is over the item, not over the answer, so it already catches this the moment a generator forgets. |
-| C7 | **Unit tests** for the Slovene number-agreement table, the canonical orderings, and `sense_class` against a fixture holding one placeholder, one fallback with an example snippet, one definition equal to the headword, and one ordinary definition. |
+| C7 | **Unit tests** for the Slovene number-agreement table, the canonical orderings, and `sense_class` against a fixture holding one placeholder, one fallback with an example snippet, one definition equal to the headword, and one ordinary definition. **Group H adds two of its own.** The first covers its renderers — the selection phrase (which inflects the number differently along each axis, so a swap writes `mestnik v ednina` into the question the answer must be determined by), the count and comparison labels over every relation, and the assertion that the declared-constant budget is still **eight** and that every one of those labels hits it. The second renders **all 231 frames** of the thirteen new types against the exact slot set their generators supply, per relation, per axis combination and per frame pool. That one is not decoration: `render_question` swallows a missing slot and returns `None`, so a frame reaching for a slot its type does not produce costs items silently, and the failure looks like a thin type rather than a bug. **A third, added after T7:** every one of the 34 types must keep a category-neutral frame that is *not* tier A, for each axis set it uses. Negatives are drawn from the neutral frames and then the tier-A ones are dropped outside the test split, so a type whose only neutral frame is tier A renders no negative in train or dev — silently, exactly as above. Counting neutral frames is not enough; the tier is the half a reader misses. |
 | C9 | **The grader over the gold itself** — every item must score correct against its own answer. Catches separator collisions, stray whitespace and normalization bugs before they are misread as model failures, and it is the one test that validates the grading contract end to end. |
 | C10 | **Every gold matches the one shape regex** of §0.9, no value contains ` \| `, and no *label* contains a colon. There is no per-type regex left and no single-item exemption — one shape, one check, all 34 types. The value rule is what the T19 and T33 seed filters must satisfy. |
 | C11 | **The split is lemma-disjoint.** Group H makes this a check over *every lemma an item names*, not over its seed: T25, T26 and T27 name two, and a test item whose second lemma is a training seed breaks lemma-disjointness exactly as a duplicated seed would. The pair filter (H.3) is the generation-side rule; this is the assertion that it held. |
-| C13 | **The no-knowledge baselines for every type**, reported beside the score. A score without its baseline is unreadable, and since §0.1 a *constant answer string* is no longer the cheap strategy: the label came apart from the value, and the two are cheap for different reasons. C13 reports four numbers — `answer` (the old constant string), `labels` (the most common label multiset, i.e. how often the answer's shape is free), `quote` (that label set *and* every value standing in the question as a whole word) and `morph` (that label set and every value inside the question but not as a word — the answer is a derivation of something quoted). Measured on the current test split: **T20 is 57.4 % `quote`** — its question supplies the very form it asks about, so the type is entirely about the label; **T4 is 47.8 % `morph`** (strip the inflection) and **T7 30.4 %**; and **T16 is 28.7 % `morph`**, because its antonyms are dominated by `ne-` prefixation, so almost a third of the Tier C type is reachable by deleting two letters and never consulting the graph. `quote` and `morph` are upper bounds, not scores — they say the information suffices, not that a model finds it — but they are what a retrieval arm must beat before its gap over the no-retrieval control means anything. Group H raises the stakes further: **T23, T25 and T27 are two- and three-way decisions**, so always-`da` and always-`več` are strong constant strategies and their baselines are not optional. The rates are balanced per relation for exactly this reason. |
+| C13 | **The no-knowledge baselines for every type**, reported beside the score. A score without its baseline is unreadable, and since §0.1 a *constant answer string* is no longer the cheap strategy: the label came apart from the value, and the two are cheap for different reasons. C13 reports four numbers — `answer` (the old constant string), `labels` (the most common label multiset, i.e. how often the answer's shape is free), `quote` (that label set *and* every value standing in the question as a whole word) and `morph` (that label set and every value inside the question but not as a word — the answer is a derivation of something quoted). Measured on the current test split: **T20 is 57.4 % `quote`** — its question supplies the very form it asks about, so the type is entirely about the label; **T4 is 47.8 % `morph`** (strip the inflection) and **T7 30.4 %**; and **T16 is 28.7 % `morph`**, because its antonyms are dominated by `ne-` prefixation, so almost a third of the Tier C type is reachable by deleting two letters and never consulting the graph. `quote` and `morph` are upper bounds, not scores — they say the information suffices, not that a model finds it — but they are what a retrieval arm must beat before its gap over the no-retrieval control means anything. Group H raises the stakes further: **T23, T25 and T27 are two- and three-way decisions**, so always-`da` and always-`več` are strong constant strategies and their baselines are not optional. The rates are balanced per relation for exactly this reason. **A fifth and sixth number, `infl` and `infl/p`, were added with the gender axis (A.0), because the four above have a blind spot that the adjectives walk straight into.** `quote` and `morph` both require the gold value to be a *substring of the question*, so between them they can only see an answer that is the question **shortened** — T4 strips an inflection and reads 47.8 %. Declension goes the other way (`Molierjev` → `Molierjevega`), so T1 and T2 have always reported **0.0 % `morph`** no matter how predictable they are. That did not matter while the grid held nouns only and nobody argued from the number; it matters the moment the honest question about Group A is "how much of this is just regular morphology?". `infl` learns **one (strip, append) edit per label on `train` and applies it to `test`** — lemma-disjoint, so it measures generalisation and not lookup — and reports both the share of items it gets entirely right and the share of individual cells (`infl/p`), because all-or-nothing over an 18-cell table reads ~0 % even when 17 cells are predictable. On the store directly, over lemma-disjoint halves: **adjectives 53.7 %, nouns 36.8 %**. The gap is real and is not disqualifying — the six types built on nouns already live with 36.8 % — and part of it is an artefact of the finer key, since the noun grid collapses three declension classes into one cell where no single rule can win. |
 | C15 | **Every gold is in its type's canonical order** — now including the paradigm types, whose order stopped being graded when §0.1 removed positions. Grading tolerance is not a licence for non-canonical training data: the model must see exactly one ordering for a given set, or it is being taught noise on a surface it is forced to emit. |
 | C16 | **`sl_key`** against a fixture including `č`, `š`, `ž` and a non-Slovene character. |
 | C17 | **`T14 gold == len(T12 gold)`** for every lemma in both, and a lemma is a negative in both or in neither. T12 records its choices and T14 replays them, which is exact rather than probable — drawing negatives from two random streams made their agreement a coincidence that held in one generation and broke in the next. |
 | C18 | **Sampler reproducibility and gold-in-ball**: the candidate pool is sorted by node id before drawing, the RNG seed derives from the anchor's node code and nothing else, and every gold item is inside its own ball. The first two are silent failures — CSR adjacency order is not stable across builds, so an unsorted pool or an order-dependent seed makes the dataset unreproducible without failing anything. **§0.1 made (d) much stronger**: containment is over every atom of the `oznaka: vrednost` pair, so it now asserts that a paradigm cell holds *that* cell's surface and that T12's sense ordinal names a node the ball really has — neither of which the positional line could express. Three enumerated exemptions, all declared rather than inferred: the eight labels of §0.1's budget, which no ball carries by definition; T5/T6's composed auxiliary *and person*, which sit on the `biti` form and not on the participle (§0.7); and T14, whose **value** is composed too — a count is not a node, and the old check scored it 100 % only because a one-token gold of `3` matched any node containing a 3. |
 | C25 | **Label derivability.** Every `oznaka` in every gold is present in that item's own ball, or is one of the eight declared constants of §0.1 — `preteklik`, `prihodnjik`, `besedna vrsta`, `vid`, `število pomenov`, `več`, `manj`, `enako`. Matching is whole-word against node text only. Without it a generator can take a label from a per-type table instead of from the graph and emit **byte-identical** output, so the defect §0.1 exists to remove comes back invisibly, one type at a time; the two implementations differ by one line and look equally reasonable in review. The constant list is a **budget, not an exemption**: its length is how many labels the model must still memorise rather than read, and a ninth cannot be added without a diff that shows it. Run over Tier C the same check is the **fairness proof** that those items are unseen rather than unanswerable. **A third status arrived with T23: *in the question*.** T23's answer label is the relation the question names, and a correct `ne` is exactly the case where that relation is *absent* from the ball — so the label of a true answer can never be found there, and requiring it would leave the type able to say only `da`. Reading the label off the question satisfies C25's actual criterion (can the model copy the label from something it is shown) rather than bending it, since the question is input too. It is reported in **its own column and never merged into *derived***: a type leaning on it asks the model to read the question rather than the graph, which is weaker evidence and should be visible as a number. The question spells the relation in whatever case its frame needed, so the form is folded back through `sl.RELATIONS` — the same closed table the frames are built from, never a stemmer — and the frames and the check cannot drift into two ideas of what *sopomenko* is a form of. |
-| C26 | **Constituent validity** (§1) asserted over T30/T34 gold: every constituent lemma the answer names has a surface — its own lemma or one of its `oblika:` forms — occurring in the phrase. It is a generation filter and a check, because the failure is silent: a wrong constituent is a well-formed lemma in the right shape. **Live in `qa/selftest.py`, and it caught something.** The KG's own `sestavina` edges are wrong for a small, concentrated set of anchors: over 2,365 sampled phrases, **49 anchors account for every failure and the top ten for 93.6 %**, all of them function words whose anchor carries a misleading lemma — node 100762 reads `iztočnica: prikazati (zaimek, naslonska oblika)` and is the clitic *se*, in 270 phrases; nodes 260, 261 and 277 read `celoti`, `na` and `silo`, are all tagged `predlog`, and stand in for *v* and *z*. Unfiltered, **11.3 % of constituents** and **26.4 % of T30 items** name a word that is not in the phrase they are decomposing. The item is refused rather than repaired: dropping the bad constituent would ship an answer that is silently incomplete about a phrase whose composition we know we cannot read. **Two halves, and both are needed:** every word the gold names is a *recorded* constituent of the phrase, and it *occurs* in it. The first half needs the phrase's own anchor, and the first implementation went looking for it in the surface index — which does not hold every constituent anchor, so `letoštetje`, `zorjenje` and `Lepant` were reported as failures against a phrase that plainly contains them, 378 of them in one run. It resolves the anchor from the item's `node_code` instead. Both halves were then proven non-vacuous by mutation: inventing a constituent trips the first, swapping the phrase trips the second. Walking the paradigm per phrase cost 35 min of a 68 min run; an anchor→surface cache makes it **34.9× faster** (115.3 s → 3.3 s over 8,000 seeds, identical verdicts), and the whole self-test now runs in **25 s**. |
+| C26 | **Constituent validity** (§1) asserted over T30 gold — **T30 only; see C26b for why T34 is not here**: every constituent lemma the answer names has a surface — its own lemma or one of its `oblika:` forms — occurring in the phrase. It is a generation filter and a check, because the failure is silent: a wrong constituent is a well-formed lemma in the right shape. **Live in `qa/selftest.py`, and it caught something.** The KG's own `sestavina` edges are wrong for a small, concentrated set of anchors: over 2,365 sampled phrases, **49 anchors account for every failure and the top ten for 93.6 %**, all of them function words whose anchor carries a misleading lemma — node 100762 reads `iztočnica: prikazati (zaimek, naslonska oblika)` and is the clitic *se*, in 270 phrases; nodes 260, 261 and 277 read `celoti`, `na` and `silo`, are all tagged `predlog`, and stand in for *v* and *z*. Unfiltered, **11.3 % of constituents** and **26.4 % of T30 items** name a word that is not in the phrase they are decomposing. The item is refused rather than repaired: dropping the bad constituent would ship an answer that is silently incomplete about a phrase whose composition we know we cannot read. **Two halves, and both are needed:** every word the gold names is a *recorded* constituent of the phrase, and it *occurs* in it. The first half needs the phrase's own anchor, and the first implementation went looking for it in the surface index — which does not hold every constituent anchor, so `letoštetje`, `zorjenje` and `Lepant` were reported as failures against a phrase that plainly contains them, 378 of them in one run. It resolves the anchor from the item's `node_code` instead. Both halves were then proven non-vacuous by mutation: inventing a constituent trips the first, swapping the phrase trips the second. Walking the paradigm per phrase cost 35 min of a 68 min run; an anchor→surface cache makes it **34.9× faster** (115.3 s → 3.3 s over 8,000 seeds, identical verdicts), and the whole self-test now runs in **25 s**. |
+| C26b | **T34's fragment and its gold are one phrase apart.** *Live in `qa/selftest.py`.* T34 is the one type whose subject is **not in its question**: the item shows `jagnjetina ___ kozličevina` and the answer is the whole phrase. It was originally handed to C26, on the strength of being a phrase type — but C26 asserts that every word the answer names is a *constituent* of the phrase in the question, and T34's answer is not a constituent of anything, it is the phrase itself. All 57 of its items failed, correctly, against a claim the type never made. Three assertions replace it, each a failure mode unique to this shape and none visible in the output: exactly one gold and exactly one gap; the gold is the fragment with that gap filled and **nothing else changed** (checked by comparing the differing positions rather than splicing the gold in, so a fragment that blanked one word and altered another is caught); and that phrase is the **anchor's own recorded lemma**, read from the store — without which the item can ask the model to reproduce a string we concatenated rather than one the KG holds. |
 | C27 | **D5c is a no-op on word balls.** *Live in `qa/selftest.py`.* A fixed sample of single-word anchors is built twice in one process — `ball_nodes(..., d5c=True)` and `d5c=False`, the second being the pre-D5c expansion exactly — and the node sets must be equal. **300 / 300 today.** D5c exists to make MWE balls finite; the day it changes a word ball, it has changed the corpus every published number was measured on. The `d5c=False` flag exists for this check and for nothing else: there is no reason to build a real ball without the cap. C27 and C18 now **skip** rather than fail when their population is absent — a `--types` subset legitimately has no T17 items and, before stage 4, no item has targets at all, and two red lines that are always there is how a real failure gets scrolled past. Skipping is only ever about the input being empty: T17 rows that exist but are all negative, or targets that exist but are all phrases, remain failures. |
 | C28 | **Phrase items resolve.** No item of a phrase type may ship the single-node `iztočnica: … (ni v bazi)` ball. This is the check the group would most have benefited from having earlier: before D3b/D3c the corpus resolved **0 of 55** multi-word spans, and nothing failed, because an unresolved item still produces a well-formed ball, a well-formed question and a gold answer nothing in it supports. Since there are no phrase types yet, the live assertion is the wider one — **no positive item of any type** ships that ball (11,179 checked) — with the multi-word cohort reported beside it. That cohort is what moved: **42 items, 37 unresolved before D3b/D3c and 0 after.** |
 
@@ -1847,3 +2307,17 @@ cannot silently depend on which store version is mounted.
 | register, style, dialect, domain, frequency, typo metadata | Absent from the KG entirely — which is what makes about half of the older reference file's types unanswerable. |
 | valency, word formation | No valency frames, no derivational morphology. |
 | role-play personas, JSON output, multi-turn | Not part of the service. Output shape is fixed for every item, and every item is one self-contained question and one answer. |
+| **inflected comparative / superlative** — *"primernik v mestniku množine"* | Measured while adding the gender axis (A.0): only **106 of 4,000** adjectives carry a case-bearing comparative and **95** a superlative. Gradation stays T11's, where it is a three-cell answer and not a paradigm. The new axes in Group A are gender and definiteness; degree is not one of them. |
+| `pogojnik`, and `prihodnjik` as a **stored** cell | **256** and **164** occurrences in the whole store. The future tense is reachable only because Group B composes it from the auxiliary's own table, which is why T5–T7 have one and this row is about stored cells. |
+| anything needing `phoneticRep` or `lexinfo:category` | Both are real in the KG — the category tags alone are 10.3 M — and **neither is parsed** by `data/build/build_graph.py`. Either would cost a full store rebuild before a single item could be generated, which is a different size of decision from adding a type. |
+
+**Measured, cheap, and deliberately deferred** — recorded so the measurement is not
+repeated, not because they were rejected:
+
+* **shared-partner joins**, *"ali imata X in Y skupno sopomenko?"* — **81,416 of 128,133**
+  synonym partner strings are owned by more than one core anchor, so the population is
+  there.
+* a **sense-by-ordinal** slice of T12, three-way comparison over T27's relations, and the
+  **reverse-example** direction of T35.
+
+None is cheaper to build before Group H has been measured, which is what step 8 does.

@@ -161,7 +161,12 @@ class Entry:
                  # entry's position in the MWE graph rather than about a
                  # relation, and T24/T27 compare counts across entries, so they
                  # have to be exact here rather than recomputed per generator.
-                 "mwe", "n_mwe", "n_const")
+                 "mwe", "n_mwe", "n_const",
+                 # T36's relation.  Counted here rather than probed per entry
+                 # because the negative pool is chosen by a predicate that runs
+                 # over the WHOLE pool once per split, and a sense walk there
+                 # costs more than the one extra walk this adds to the build.
+                 "n_trans")
 
     def __init__(self, **kw):
         for k, v in kw.items():
@@ -265,6 +270,7 @@ def entry_for(store, a, split=None, require_content=True, proxy_cache=None):
     n_ex = len(store.examples(a))
     if require_content and not (n_def or n_col or n_syn or n_ex):
         return None
+    n_trans = len(store.translations(a))
     mwe = bool(store.mwe[a])
     n_mwe = _mwe_memberships(store, a)
     n_const = len(constituents(store, a)) if mwe else 0
@@ -273,7 +279,7 @@ def entry_for(store, a, split=None, require_content=True, proxy_cache=None):
                  feat=store.anchor_features(a), proxy=proxy,
                  band=band_of(proxy), split=split, n_def=n_def, n_syn=n_syn,
                  n_ant=n_ant, n_ex=n_ex, n_col=n_col,
-                 mwe=mwe, n_mwe=n_mwe, n_const=n_const)
+                 mwe=mwe, n_mwe=n_mwe, n_const=n_const, n_trans=n_trans)
 
 
 def build_pool(store, progress=None):
@@ -306,7 +312,21 @@ def build_pool(store, progress=None):
 # supports is 12,490 items; the phrase family is a minority of the type
 # inventory, so a pool of the same order is generous and nothing about it wants
 # to be 3.76 M.
-PHRASE_POOL = 80_000
+# Raised from 80,000 when the rest of H.5 landed, and the reason is one type:
+# T32 asks a phrase for its DEFINITION and only 1.4 % of MWEs carry one, so an
+# 80 k sample yielded 973 train seeds against the 1,250 a 40,000-item train
+# split needs -- measured, not projected.  200 k puts it at ~2,400 with margin,
+# and fixes T34's dev side too (32 seeds, where the split agreement of a median
+# 3 constituents costs 0.07**3).  Every other phrase type had headroom at 80 k.
+#
+# Raised again to 500,000 once the real generators could be measured instead of
+# proxied.  The TRAIN side was never the binding constraint: at 200 k T32 had
+# 2,416 train seeds and ~196 test ones, against a flat 200-per-type test split,
+# and T34's dev side sampled at zero.  Both are the small splits -- 18 % and
+# 7 % -- so a pool sized by the train share leaves them short, and the fix is
+# the pool rather than the caps.  The cost is the pool build: ~130 s -> ~320 s,
+# paid once per run.
+PHRASE_POOL = 500_000
 
 
 def build_phrase_pool(store, limit=PHRASE_POOL, seed=20260821, progress=None):

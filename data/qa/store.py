@@ -33,7 +33,13 @@ PAYLOAD = (1 << TYPE_SHIFT) - 1
 T_LU = 1
 
 TAG = {K_ANCHOR: "iztočnica: ", K_FORM: "oblika: ", K_EXAMPLE: "zgled: ",
-       K_COLLOC: "kolokacija: ", K_SYN: "sopomenka: ", K_ANT: "protipomenka: "}
+       K_COLLOC: "kolokacija: ", K_SYN: "sopomenka: ", K_ANT: "protipomenka: ",
+       # K_TRANS was the one kind with no tag here, which is why nothing could
+       # read it: `sense_children` looks the tag up and would have raised.  The
+       # 77,570 translation nodes carry the prefix in their own text already
+       # (`prevod (madžarsko): boróka`), so this line is what strips it, exactly
+       # as it does for every other kind.  Added with T36 (QA_TASKS.md H.6).
+       K_TRANS: "prevod (madžarsko): "}
 
 _SENSE_RE = re.compile(r"^pomen(?: (\d+))?: (.*)$", re.S)
 _SNIPPET_RE = re.compile(r" \(zgled: .*\)$", re.S)
@@ -166,10 +172,11 @@ class QAStore:
         with no definition, never lexicographic content.
         """
         out = []
-        for v in self.nbrs(a):
+        nb = np.asarray(self.nbrs(a))
+        if not nb.size:
+            return out
+        for v in nb[self.kind[nb] == K_SENSE]:
             v = int(v)
-            if self.kind[v] != K_SENSE:
-                continue
             m = _SENSE_RE.match(self.text(v))
             if not m:
                 continue
@@ -190,11 +197,20 @@ class QAStore:
         tag = TAG[k]
         seen = {}
         for s, _o, _b in self.senses(a):
-            for v in self.nbrs(s):
-                v = int(v)
-                if self.kind[v] == k and v not in seen:
-                    t = self.text(v)
-                    seen[v] = t[len(tag):] if t.startswith(tag) else t
+            # Masked with numpy rather than tested per element: a sense of a
+            # function word has hundreds of thousands of neighbours (`biti` is a
+            # constituent of 423,510 phrases and carries collocations to match),
+            # and every relation type in the corpus walks this method.  Same
+            # result, same order -- node id, so downstream sampling stays a pure
+            # function of the store (D5b).
+            v = np.asarray(self.nbrs(s))
+            if not v.size:
+                continue
+            for u in v[self.kind[v] == k]:
+                u = int(u)
+                if u not in seen:
+                    t = self.text(u)
+                    seen[u] = t[len(tag):] if t.startswith(tag) else t
         return [(v, seen[v]) for v in sorted(seen)]
 
     def examples(self, a):
@@ -208,6 +224,60 @@ class QAStore:
 
     def antonyms(self, a):
         return self.sense_children(a, K_ANT)
+
+    def translations(self, a):
+        """Hungarian equivalents (T36).  Sense-hung, like every other relation.
+
+        Measured before the type was written: all 77,570 of them hang off a
+        SENSE and none off an anchor directly, so they sit at hop 2 and the ball
+        holds them wherever it holds the sense.
+        """
+        return self.sense_children(a, K_TRANS)
+
+    def memberships(self, a):
+        """[(node, phrase lemma)] -- the MWEs this anchor is a constituent of.
+
+        The upward `sestavina` direction, and the only relation in the store
+        whose members are ANCHORS rather than leaves: a phrase is a lexical unit
+        in its own right, so it renders as `iztočnica:` exactly like a word.
+        That is what makes T31's membership prefix non-specific, and why its
+        allow-list has to be intersected with this (spec.MEMBER_STRICT).
+
+        Uncapped here on purpose.  D5 caps what goes into the BALL; this is the
+        store's own truth, which is what the grader accepts.
+        """
+        out = []
+        for v in self._membership_nodes(a):
+            v = int(v)
+            w = self.lemma(v)
+            if w:
+                out.append((v, w))
+        return out
+
+    def _membership_nodes(self, a):
+        v = np.asarray(self.nbrs(a))
+        if not v.size:
+            return v
+        v = v[(v < self.n_real) & (self.kind[v] == K_ANCHOR)
+              & self.mwe[v].astype(bool)]
+        # Unique, because the count and the list must agree: the list is a dict
+        # keyed by node, so a repeated edge collapses there and would otherwise
+        # be counted twice here.  `np.unique` sorts, which is the order the list
+        # promises anyway.
+        return np.unique(v)
+
+    def n_memberships(self, a):
+        """How many MWEs `a` is a constituent of, WITHOUT materialising them.
+
+        The count and the list are not the same operation at this scale.  A
+        function word is a constituent of hundreds of thousands of phrases --
+        `biti` of 423,510 -- so `len(memberships(a))` on one of them decodes that
+        many lemma strings to produce a number.  T34 ranks a phrase's
+        constituents by this count on every seed and reads only the smallest,
+        which made ranking the whole cost of the type: 0.115 s a seed against a
+        500,000-entry phrase pool.
+        """
+        return int(self._membership_nodes(a).size)
 
     def partners(self, a, k):
         """Partner lemmas from reified `A ~ B` nodes, minus this anchor's lemma."""

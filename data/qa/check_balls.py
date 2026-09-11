@@ -95,7 +95,19 @@ DECLARED_ATOMS = frozenset(
 #: `ne`, a VERDICT ABOUT the ball rather than a node in it, and a `ne` item is
 #: precisely the case where the thing being asked about is absent.  Requiring
 #: containment would make every correct `ne` look like a defect.
-COMPOSED_VALUE = ("T14", "T23")
+#: T24 counts, exactly as T14 does, and T25 answers `da`/`ne`, exactly as T23
+#: does -- a verdict about the ball rather than a node inside it.  T27 is
+#: deliberately NOT here: its value is one of the two lemmas the question named,
+#: which really is in the ball.  See VALUE_ONLY.
+COMPOSED_VALUE = ("T14", "T23", "T24", "T25")
+
+#: Types whose LABEL is composed but whose value is read.  T27's label is
+#: `več`/`manj`/`enako` plus the relation's genitive plural (`enako oblik`), and
+#: DECLARED_ATOMS strips only the first word -- `oblik` survived, and no node
+#: carries it beside the lemma, so all 71 items missed on the first build that
+#: reached this check.  The label is a verdict about two nodes; the value is one
+#: of them.  Containment checks the value, which keeps a check that can fail.
+VALUE_ONLY = ("T27",)
 
 
 def is_composed(gold):
@@ -215,8 +227,18 @@ def contract_gap(r, b):
     several into the ball.  Stage 4's `build_balls.member_contract` derives the
     allow-list FROM the ball, so this is empty by construction on a current
     dataset; it stays as a guard against one built by an older pipeline.
+
+    Not computable for spec.MEMBER_STRICT types.  T31's prefix is `iztočnica:`,
+    which every anchor in the ball renders under -- the subject and each hop-2
+    constituent included -- so the ball's prefix cannot tell a member from a
+    word.  Stage 4 separates them with the store's truth (`member_pool`), and the
+    allow-list is narrower than the ball's prefix set ON PURPOSE: the first build
+    to reach this check flagged 800 nodes on 74 items, every one a word entry
+    such as `dolar (samostalnik, ...)`, the subject `us` among them.
     """
     if r.get("negative") or grade.contract(r)["mode"] != "membership":
+        return set()
+    if r["type"] in spec.MEMBER_STRICT:
         return set()
     return member_nodes(r, b) - allowed_values(r)
 
@@ -296,6 +318,8 @@ def run(dataset, balls, show=8):
             items_n[t] += 1
             continue
         empty[t] += len(vacuous)
+        if t in VALUE_ONLY:
+            gold = [g.split(": ", 1)[1] for g in gold]
         miss = [g for g in gold if not any(atoms(g) <= s for s in nodes)]
         tot[t] += len(gold)
         hit[t] += len(gold) - len(miss)

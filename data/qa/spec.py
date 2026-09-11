@@ -42,16 +42,23 @@ GAP = "/"
 #   besedna vrsta / vid      the graph renders the VALUES (`samostalnik`,
 #       `dovršni`) and never names the property.  `spol` is NOT here: node text
 #       says `ženski spol`, so the label is present and only the suffix moves.
-#   število pomenov          a count is a fact about the ball, not a node in it.
+#   število                  a count is a fact about the ball, not a node in it.
+#       Was the literal `število pomenov` while T14 was the only counting type.
+#       T24 counts every complete relation, so the constant is the HEAD and the
+#       tail (`sopomenk`, `zgledov`) is the relation's own genitive plural --
+#       which `is_declared` already handles, since it matches a constant as one
+#       component of a compound label.  The budget is unchanged at eight: this
+#       is one constant either way, and writing out six would have been six.
 #   več / manj / enako       Group H's T27 compares two anchors, and a comparison
-#       is a relation between two ball facts rather than a third one.
+#       is a relation between two ball facts rather than a third one.  Same
+#       head-plus-relation shape as `število`.
 #
 # Two checks read this and they must not drift: `qa/check_labels.py` (C25) asks
 # whether each label is in the ball, and `qa/check_balls.py` (C18 d) asks whether
 # each gold item is -- so a declared label has to be excused from the second as
 # well, or the two would disagree about the same eight strings.
 DECLARED_LABELS = frozenset({
-    "preteklik", "prihodnjik", "besedna vrsta", "vid", "število pomenov",
+    "preteklik", "prihodnjik", "besedna vrsta", "vid", "število",
     "več", "manj", "enako",
 })
 
@@ -98,12 +105,74 @@ SPEC = {
     "T20": dict(name="primeri_uporabe/analiza_oblike_v_povedi", mode="pairs",
                 keys=GRID),
     "T21": dict(name="sklanjanje/analiza_oblike", mode="pairs", keys=GRID),
-    # ── Group H, the first two (step 7: prove the machinery on two types) ──
+    # ── Group H ────────────────────────────────────────────────────────────
+    # H.1 selection over the paradigm
+    "T22": dict(name="izbor/izbrane_oblike", mode="pairs", keys=GRID),
+    # H.2 polarity and quantity, with the RELATION as a slot
     "T23": dict(name="preveri/ali_obstaja", mode="pairs",
                 keys="the relation's own tag"),
+    "T24": dict(name="stevilo/koliko", mode="pairs",
+                keys="število <relation, genitive plural>"),
+    # H.3 two anchors
+    "T25": dict(name="primerjava/ali_sta_v_relaciji", mode="pairs",
+                keys="the relation's own tag"),
+    "T26": dict(name="primerjava/skupne_lastnosti", mode="pairs", keys=LEXEME),
+    "T27": dict(name="primerjava/vec_ali_manj", mode="pairs",
+                keys="več/manj/enako <relation, genitive plural>"),
+    # H.4 sense-scoped relations
+    "T28": dict(name="pomen/relacija_pomena", mode="pairs", keys="sopomenka"),
+    "T29": dict(name="pomen/kateri_pomen", mode="pairs", keys="pomen N"),
+    # H.5 phrases
     "T30": dict(name="zveze/sestava_zveze", mode="pairs", keys="iztočnica",
                 seed_pool="phrase"),
+    # `membership` for the reason H.5 gives, which is NOT T17's: the ball holds
+    # D5's top-10 by a deterministic content-independent rank rather than a
+    # seeded sample, so the set is reproducible and still a SELECTION -- the
+    # anchor's true membership reaches 162,004.  `member_strict` is what keeps
+    # the allow-list honest: `iztočnica:` is not this relation's own prefix (it
+    # is every anchor's), so the ball's word anchors -- the subject included --
+    # would otherwise be admitted as answers.  See build_balls.member_pool.
+    "T31": dict(name="zveze/zveze_z_besedo", mode="membership", keys="iztočnica",
+                member_kind="iztočnica", member_strict=True),
+    "T32": dict(name="zveze/pomen_zveze", mode="pairs", keys="pomen N",
+                seed_pool="phrase"),
+    "T33": dict(name="zveze/zgled_za_zvezo", mode="membership", keys="zgled",
+                member_kind="zgled", band="exact", n_asked=1,
+                seed_pool="phrase"),
+    "T34": dict(name="zveze/dopolni_zvezo", mode="pairs", keys="iztočnica",
+                seed_pool="phrase"),
+    "T35": dict(name="kolokacije/beseda_kolokacije", mode="pairs",
+                keys="iztočnica"),
+    # H.6 the second held-out relation
+    "T36": dict(name="prevodi/madzarski_prevod", mode="pairs",
+                keys="prevod (madžarsko)"),
 }
+
+#: Types that are DEFINED but not built.  They keep their spec row, generator,
+#: frames and checks -- what they lose is a place in `build_dataset.TYPES`, so no
+#: item of theirs reaches a split.  Parking rather than deleting is deliberate:
+#: the work is sound and the reason it is out is a property of the pipeline, not
+#: of the code, so the code should still be here when that property changes.
+#:
+#: T34 (`dopolni_zvezo`) is parked because it is the only type whose SUBJECT IS
+#: NOT IN ITS QUESTION.  The item shows `sredozemna ___` and is about the phrase
+#: `sredozemna medvedjica`, so entity linking -- which sees the question and
+#: nothing else -- can reach it only through "every phrase containing
+#: *sredozemna*", a hub of up to 212,286 anchors.  Measured: 0 of 57 items
+#: resolved; unbounded, the membership hop gives a mean of 11,066 anchors an
+#: item; capped at 2,000 memberships it buys 73 % resolution for 373-anchor
+#: balls, against a corpus norm of 1-4.  There is no honest retrieval that lands
+#: on the one phrase, and building its ball from the seed anchor instead would
+#: train the model on a lookup that cannot happen at serving time.
+#:
+#: What would unpark it is a question shape that NAMES the phrase it asks about.
+PARKED = frozenset({"T34"})
+
+#: Membership types whose `member_kind` prefix is NOT specific to their relation,
+#: so the ball's nodes under it must be intersected with the store's own truth
+#: before they may enter the allow-list.  Only T31: every anchor renders as
+#: `iztočnica:`, so without this the phrase question would accept its own subject.
+MEMBER_STRICT = frozenset(k for k, v in SPEC.items() if v.get("member_strict"))
 
 #: Types seeded from the PHRASE pool rather than the word pool.  `availability`
 #: runs every generator over every seed, and a phrase type over word seeds
@@ -142,7 +211,28 @@ PHRASE_SEEDED = frozenset(k for k, v in SPEC.items()
 #:       DEFINITION rather than the sense, which is a §0.1 decision and not this
 #:       type's to make.
 T23_RELATIONS = ("sopomenka", "zgled", "kolokacija", "oblika")
-T23_HELD_OUT = ("protipomenka",)
+#: `prevod` joins the held-out side now that T36 has landed and registered its
+#: tag words above -- which is the condition the note said it was waiting on.
+T23_HELD_OUT = ("protipomenka", "prevod")
+
+# ── T24 / T27: the COUNTABLE relations ─────────────────────────────────────
+# Counting grades the model on a total, so the relation has to be COMPLETE in
+# the ball.  Two of the coverage table's relations are not:
+#
+#   `kolokacija`      D5b draws a seeded SAMPLE, so a count over it would grade
+#       the model on the sampler's seed rather than on the graph.
+#   MWE membership    capped at ten per anchor by D5, and the true membership
+#       reaches 162,004 -- which is exactly why T31 is graded `membership`.
+#
+# That both are listable (T17, T31) but not countable is itself a thing the
+# model has to read rather than assume.  Two of the six that remain are held
+# out, so training sees four and test sees all six (H.0).
+COUNTABLE = ("sopomenka", "zgled", "pomen", "oblika")
+COUNTABLE_HELD_OUT = ("protipomenka", "prevod")
+
+#: H.3's relation slot, on the same held-out rule as T23's.
+PAIR_RELATIONS = ("sopomenka",)
+PAIR_HELD_OUT = ("protipomenka",)
 
 # ── The set rule ───────────────────────────────────────────────────────────
 # ORDER IS NOT A PROPERTY OF THIS DATA.  The KG stores the examples of a sense,
@@ -186,7 +276,7 @@ def check_set_rule():
 
 # Tier C: held out of training entirely (D12).  Every item of these types is a
 # test item, and no training item anywhere may contain their tag words (C6).
-TIER_C = ("T16",)
+TIER_C = ("T16", "T36")
 
 # Two lists, because two different things can leak and only one of them is ours
 # to control.
@@ -209,12 +299,38 @@ TIER_C_TAG_WORDS = ("protipomenka", "protipomenke", "protipomenko",
                     "protipomenk", "protipomenki",
                     "antonim")
 TIER_C_SOFT_WORDS = ("nasprotje", "nasproten", "nasprotno", "nasprotna")
+
+# T36, the second held-out relation, with the same two-part boundary.
+#
+# TAG WORDS.  `prevod` and the language name identify the task.  Unlike
+# `protipomenka` these are ORDINARY Slovene, so the cost is real and worth
+# stating: a training sentence or definition containing `prevod` is dropped, not
+# just a question we authored.  Measured on the current corpus before landing
+# this, so the size of the loss is known rather than discovered later.
+#
+# SOFT WORDS are the ordinary verb for "translate", banned from training
+# QUESTIONS only, on TIER_C_SOFT_WORDS' reasoning exactly: knowing the word
+# `prevesti` is not knowing that `prevod (madžarsko):` nodes exist.
+TIER_C_TAG_WORDS += ("prevod", "prevoda", "prevodi", "prevode", "prevodov",
+                     "prevodu", "prevodom",
+                     "madžarsko", "madžarski", "madžarska", "madžarskem",
+                     "madžarščina", "madžarščino", "madžarščini",
+                     "madžarščine", "madžarsko-slovenski")
+TIER_C_SOFT_WORDS += ("prevesti", "prevede", "prevedi", "prevajati", "prevaja",
+                      "prevedeno", "preveden")
+
 TIER_C_LEAK_WORDS = TIER_C_TAG_WORDS + TIER_C_SOFT_WORDS
 
-# Group H adds a second held-out relation (T36, Hungarian translations) and four
-# types that take the relation as a SLOT, so a held-out relation can enter
-# training as a question's subject rather than as its answer.  C6 is over the
-# whole item and already catches that; the tag words go here when T36 lands.
+
+def tier_c_tagged(text):
+    """True if `text` carries a Tier C tag word -- C6's test, as a substring.
+
+    Substring on purpose, and so deliberately coarse: `sprevod` and `neprevodni`
+    match `prevod`.  It is the rule C6 enforces, so anything that decides what a
+    train/dev answer may contain has to apply this one and not a smarter one.
+    """
+    t = text.casefold()
+    return any(w in t for w in TIER_C_TAG_WORDS)
 
 
 # The template pool a type draws its question from.  T6 splits on whether the
@@ -222,8 +338,16 @@ TIER_C_LEAK_WORDS = TIER_C_TAG_WORDS + TIER_C_SOFT_WORDS
 def template_key(type_key, slots):
     if type_key == "T6" and slots.get("SPOL"):
         return "T6G"
-    if type_key == "T17":
-        return f"T17/{slots['band']}"
+    # The two quantity-banded types.  T31 bands for a different reason than T17
+    # (a rank, not a sample -- see its SPEC entry) but asks the same question of
+    # the frame pool: how many did the user ask for?
+    if type_key in ("T17", "T31"):
+        return f"{type_key}/{slots['band']}"
+    # T28 names the sense it scopes to.  With a definition it can quote one;
+    # without, the ordinal names it and every frame must use that instead --
+    # a frame reaching for a slot the item does not carry is dropped silently.
+    if type_key == "T28" and not slots.get("POMEN"):
+        return "T28/ord"
     return type_key
 
 

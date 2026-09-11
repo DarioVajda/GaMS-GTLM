@@ -94,17 +94,23 @@ def to_pairs(type_key, slots, items):
 # --------------------------------------------------------------------------
 # one rule per type
 # --------------------------------------------------------------------------
+# The gender is part of the CELL for a paradigm that has a gender axis, so it
+# belongs in the label.  Definiteness does not: the question names it, only 2 of
+# the 18 cells mark it, and asserting it on the other 16 would be a label the
+# ball cannot support (`qa/sl.py:cell_label`).
 def _t1(slots, items):
-    return list(zip(sl.GRID_LABELS, items))
+    return list(zip(sl.grid_labels(slots.get("gender")), items))
 
 
 def _t2(slots, items):
     number, items[0] = _split_leader(items[0])
-    return [[sl.cell_label(c, number), v] for c, v in zip(sl.CASES, items)]
+    return [[sl.cell_label(c, number, slots.get("gender")), v]
+            for c, v in zip(sl.CASES, items)]
 
 
 def _t3(slots, items):
-    return [[sl.cell_label(slots["case"], slots["number"]), items[0]]]
+    return [[sl.cell_label(slots["case"], slots["number"],
+                           slots.get("gender")), items[0]]]
 
 
 def _t4(slots, items):
@@ -190,6 +196,26 @@ def _t23(slots, items):
     return out
 
 
+def _glued(slots, items):
+    """The label travels with its value, `oznaka: vrednost` (T7, T12, Group H).
+
+    The one handler for every type whose label is chosen from the data rather
+    than fixed by the type.  It is deliberately not clever: splitting on the
+    first `": "` is the whole contract, and 0.1 forbids a colon inside a label
+    precisely so that this stays true.
+    """
+    return [_split_leader(c) for c in items]
+
+
+def _t25(slots, items):
+    """`sopomenka: da`.  T23's rule, over two anchors instead of one."""
+    out = [_split_leader(c) for c in items]
+    bad = [v for _, v in out if v not in ("da", "ne")]
+    if bad:
+        raise ValueError(f"T25 answers `da` or `ne`, got {bad!r}")
+    return out
+
+
 def _tagged(tag):
     return lambda slots, items: [[tag, v] for v in items]
 
@@ -202,9 +228,23 @@ _BY_TYPE = {
     "T15": _tagged("sopomenka"), "T16": _tagged("protipomenka"),
     "T17": _tagged("kolokacija"), "T19": _tagged("zgled"),
     "T20": _analysis,
-    # Group H.  T30 shares T4's rule and its label: a phrase's constituents are
-    # headwords, named the way every other headword in this corpus is named.
-    "T23": _t23, "T30": _t4,
+    # ── Group H ────────────────────────────────────────────────────────────
+    # Most of these glue the label on themselves (`_glued`), because a Group H
+    # label is chosen from the DATA -- which cell, which relation, which sense
+    # -- and so cannot be rebuilt from the type and the position the way T1's
+    # can.  T7 and T12 already work this way; nothing new is being introduced.
+    #
+    # T30/T34/T35 share T4's label: a phrase's constituents, a completed
+    # phrase and a collocation's owner are all headwords, named the way every
+    # other headword in this corpus is named.  T31 shares it too and is graded
+    # `membership`, so `build_balls` re-verbalises it through this same table.
+    "T22": _glued,
+    "T23": _t23, "T24": _glued,
+    "T25": _t25, "T26": _glued, "T27": _glued,
+    "T28": _glued, "T29": _glued,
+    "T30": _t4, "T31": _tagged("iztočnica"), "T32": _glued, "T33": _tagged("zgled"),
+    "T34": _glued, "T35": _glued,
+    "T36": _glued,
 }
 
 

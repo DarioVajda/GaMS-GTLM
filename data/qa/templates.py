@@ -50,6 +50,38 @@ TEMPLATES = {
         ("Sklanjatev besede {L}, prosim.", "A"),
         ("Pišem besedilo in ne vem, kako se sklanja {L}. Lahko pomagaš?", "A"),
         ("Prikaži, kako se beseda {L} spreminja po sklonih.", "A"),
+        # --- the paradigm has a GENDER axis (adjectives; gendered numerals and
+        # pronouns).  Naming it is not decoration: without it the question is
+        # under-specified against a 54-cell paradigm and its answer would not be
+        # determined by it (0.1 clause 3).  Most are category-neutral so that a
+        # gendered numeral or pronoun can draw them too.
+        ("Navedi vse sklone besede {L} v {SPOL_LOC} spolu.", "train"),
+        ("Sklanjaj besedo {L} v {SPOL_LOC} spolu.", "train"),
+        ("Prikaži pregled sklanjatvenih oblik besede {L} v {SPOL_LOC} spolu.", "train"),
+        ("Izpiši vse sklone in števila za besedo {L} v {SPOL_LOC} spolu.", "train"),
+        ("Sklanjaj besedo {L} v {SPOL_LOC} spolu, po vseh treh številih.", "train"),
+        ("Kako se beseda {L} sklanja v {SPOL_LOC} spolu?", "train"),
+        ("Prikaži celotno sklanjatev besede {L} za {SPOL_NOM} spol.", "train"),
+        ("Sestavi sklanjatveno tabelo za besedo {L} v {SPOL_LOC} spolu.", "train"),
+        ("Zanima me celotna sklanjatev pridevnika {L} v {SPOL_LOC} spolu.", "train"),
+        ("Katere sklanjatvene oblike ima {L} v {SPOL_LOC} spolu?", "train"),
+        ("Sklanjatev besede {L} v {SPOL_LOC} spolu, prosim.", "A"),
+        ("Pišem besedilo in ne vem, kako se {L} sklanja v {SPOL_LOC} spolu. "
+         "Lahko pomagaš?", "A"),
+        ("Prikaži, kako se {L} v {SPOL_LOC} spolu spreminja po sklonih.", "A"),
+        # --- and a DEFINITENESS axis as well: the masculine nominative and
+        # accusative singular are the only cells that carry the split, and it is
+        # what separates the doublet instead of discarding the entry.
+        ("Navedi vse sklone besede {L} v {SPOL_LOC} spolu, v {DOLOCNOST_LOC}.", "train"),
+        ("Sklanjaj besedo {L} v {SPOL_LOC} spolu, {DOLOCNOST}.", "train"),
+        ("Izpiši sklanjatev besede {L} v {SPOL_LOC} spolu v {DOLOCNOST_LOC}.", "train"),
+        ("Kako se beseda {L} sklanja v {SPOL_LOC} spolu, v {DOLOCNOST_LOC}?", "train"),
+        ("Prikaži celotno sklanjatev besede {L} za {SPOL_NOM} spol v {DOLOCNOST_LOC}.", "train"),
+        ("Sestavi sklanjatveno tabelo za {L} v {SPOL_LOC} spolu, {DOLOCNOST}.", "train"),
+        ("Zanima me sklanjatev pridevnika {L} v {SPOL_LOC} spolu v {DOLOCNOST_LOC}.", "train"),
+        ("Katere oblike ima {L} v {SPOL_LOC} spolu, v {DOLOCNOST_LOC}?", "train"),
+        ("Sklanjatev besede {L}, {SPOL_NOM} spol, {DOLOCNOST}.", "A"),
+        ("Kako bi {L} sklanjal v {SPOL_LOC} spolu, če rabim {DOLOCNOST}?", "A"),
     ],
     # {STEV_LOC} "v ednini" · {STEV_ACC} "za ednino" · {STEV_GEN} "sklone ednine"
     "T2": [
@@ -66,6 +98,31 @@ TEMPLATES = {
         ("Sklanjatev besede {L}, samo {STEV_NOM}.", "A"),
         ("Kako bi {L} sklanjal v {STEV_LOC}?", "A"),
         ("Ali ima beseda {L} posebne oblike v {STEV_LOC}?", "A"),
+        # --- gender axis
+        ("Izpiši vse sklanjatvene oblike besede {L} v {STEV_LOC}, "
+         "v {SPOL_LOC} spolu.", "train"),
+        ("Sklanjaj besedo {L} v {STEV_LOC}, {SPOL_NOM} spol.", "train"),
+        ("Katere sklone ima beseda {L} v {STEV_LOC} v {SPOL_LOC} spolu?", "train"),
+        ("Prikaži tabelo sklanjatve besede {L} v {STEV_LOC}, "
+         "v {SPOL_LOC} spolu.", "train"),
+        ("Kako se beseda {L} v {SPOL_LOC} spolu sklanja v {STEV_LOC}?", "train"),
+        ("Izpiši {STEV_ACC} besede {L} po sklonih, v {SPOL_LOC} spolu.", "train"),
+        ("Prikaži sklanjatev pridevnika {L} v {STEV_LOC} za {SPOL_NOM} spol.", "train"),
+        ("Rabim oblike besede {L} v {STEV_LOC} v {SPOL_LOC} spolu, "
+         "po vseh sklonih.", "train"),
+        ("Sklanjatev besede {L}, {STEV_NOM}, {SPOL_NOM} spol.", "A"),
+        ("Kako bi {L} sklanjal v {STEV_LOC}, v {SPOL_LOC} spolu?", "A"),
+        # --- gender and definiteness
+        ("Izpiši sklanjatvene oblike besede {L} v {STEV_LOC}, v {SPOL_LOC} "
+         "spolu, v {DOLOCNOST_LOC}.", "train"),
+        ("Sklanjaj besedo {L} v {STEV_LOC}, {SPOL_NOM} spol, {DOLOCNOST}.", "train"),
+        ("Katere sklone ima {L} v {STEV_LOC} v {SPOL_LOC} spolu, "
+         "v {DOLOCNOST_LOC}?", "train"),
+        ("Prikaži tabelo sklanjatve besede {L} v {STEV_LOC} za {SPOL_NOM} spol "
+         "v {DOLOCNOST_LOC}.", "train"),
+        ("Rabim oblike besede {L} v {STEV_LOC}, {SPOL_NOM} spol, "
+         "{DOLOCNOST}.", "train"),
+        ("Sklanjatev besede {L}, {STEV_NOM}, {SPOL_NOM} spol, {DOLOCNOST}.", "A"),
     ],
     # {SKLON} nominative · {SKLON_LOC} "v mestniku" · {STEV_GEN} "ednine"
     "T3": [
@@ -82,6 +139,42 @@ TEMPLATES = {
         ("{SKLON} {STEV_GEN} besede {L}?", "A"),
         ("Ali mi lahko poveš {SKLON} {STEV_GEN} besede {L}?", "A"),
         ("Kako se glasi beseda {L}, če jo dam v {SKLON} {STEV_GEN}?", "A"),
+        # --- gender axis
+        ("Izpiši {ORD}. sklon ({SKLON}) {STEV_GEN} besede {L} "
+         "v {SPOL_LOC} spolu.", "train"),
+        ("Kako se glasi {SKLON} {STEV_GEN} besede {L} v {SPOL_LOC} spolu?", "train"),
+        ("Katero obliko ima {SKLON} {STEV_GEN} pridevnika {L} "
+         "v {SPOL_LOC} spolu?", "train"),
+        ("V kakšni obliki je {SKLON} {STEV_GEN} pri besedi {L} "
+         "v {SPOL_LOC} spolu?", "train"),
+        ("Kako zapišemo {SKLON} {STEV_GEN} besede {L} v {SPOL_LOC} spolu?", "train"),
+        ("Izpiši obliko: {SKLON} {STEV_GEN}, {SPOL_NOM} spol, za {L}.", "train"),
+        ("Kateri je {SKLON} {STEV_GEN} besede {L} v {SPOL_LOC} spolu?", "train"),
+        ("Zapiši besedo {L} v {SKLON_LOC} {STEV_GEN}, v {SPOL_LOC} spolu.", "train"),
+        ("Rabim {SKLON} {STEV_GEN} od {L} v {SPOL_LOC} spolu.", "train"),
+        ("Kako bi besedo {L} postavil v {SKLON} {STEV_GEN} "
+         "{SPOL_NOM} spola?", "train"),
+        ("{SKLON} {STEV_GEN} besede {L}, {SPOL_NOM} spol?", "A"),
+        ("Ali mi lahko poveš {SKLON} {STEV_GEN} besede {L} "
+         "v {SPOL_LOC} spolu?", "A"),
+        ("Kako se glasi {L}, če jo dam v {SKLON} {STEV_GEN} "
+         "{SPOL_NOM} spola?", "A"),
+        # --- gender and definiteness
+        ("Izpiši {ORD}. sklon ({SKLON}) {STEV_GEN} besede {L} v {SPOL_LOC} "
+         "spolu, v {DOLOCNOST_LOC}.", "train"),
+        ("Kako se glasi {SKLON} {STEV_GEN} besede {L} v {SPOL_LOC} spolu "
+         "v {DOLOCNOST_LOC}?", "train"),
+        ("Katero obliko ima {SKLON} {STEV_GEN} pridevnika {L} v {SPOL_LOC} "
+         "spolu, {DOLOCNOST}?", "train"),
+        ("Kako zapišemo {SKLON} {STEV_GEN} besede {L} za {SPOL_NOM} spol "
+         "v {DOLOCNOST_LOC}?", "train"),
+        ("Izpiši obliko: {SKLON} {STEV_GEN}, {SPOL_NOM} spol, {DOLOCNOST}, "
+         "za {L}.", "train"),
+        ("Rabim {SKLON} {STEV_GEN} od {L} v {SPOL_LOC} spolu, "
+         "v {DOLOCNOST_LOC}.", "train"),
+        ("{SKLON} {STEV_GEN} besede {L}, {SPOL_NOM} spol, {DOLOCNOST}?", "A"),
+        ("Ali mi lahko poveš {SKLON} {STEV_GEN} besede {L} v {SPOL_LOC} spolu, "
+         "v {DOLOCNOST_LOC}?", "A"),
     ],
     "T4": [
         ("Katera beseda v osnovni obliki predstavlja obliko {F}?", "train"),
@@ -180,6 +273,15 @@ TEMPLATES = {
         ("Naštej nedoločnik, namenilnik in velelnik glagola {L}.", "train"),
         ("Zanimajo me nedoločnik, namenilnik in velelnik glagola {L}.", "train"),
         ("Kaj so nedoločnik, namenilnik in velelnik pri glagolu {L}?", "train"),
+        # Category-NEUTRAL, and tier `train` on purpose.  Every frame above names
+        # `glagol`, and T7's negative is a word that is not one; `neutral_frames`
+        # kept only the tier-A frame below, which train and dev may not use, so
+        # the type rendered no negative outside the test split and said nothing.
+        # A type needs at least one neutral frame its own splits can reach --
+        # selftest C7 now checks that for all 34.
+        ("Kako se glasijo nedoločnik, namenilnik in velelnik besede {L}?", "train"),
+        ("Za {L} zapiši nedoločnik, namenilnik in velelnik.", "train"),
+        ("Izpiši tri oblike besede {L}: nedoločnik, namenilnik in velelnik.", "train"),
         ("Nedoločnik, namenilnik in velelnik glagola {L}?", "A"),
         ("Ali ima {L} vse tri oblike – nedoločnik, namenilnik in velelnik? "
          "Kako se glasijo?", "A"),
@@ -459,6 +561,310 @@ TEMPLATES = {
         ("Ne vem, kako razčleniti zvezo {L}. Katere besede jo sestavljajo?", "A"),
         ("Iz katerih osnovnih oblik je zveza {L}?", "A"),
     ],
+
+    # ---- H.1: an arbitrary subset of the grid ---------------------------
+    # Three families, on T1's rule exactly: a frame must name the axes the item
+    # fixes and no others (0.1 clause 3), and `render_question` reads those off
+    # the slots.  {IZBOR} is the selection itself, already declined by
+    # `sl.selection_phrase` -- the frames never assemble it themselves.
+    # The selection is a noun phrase in the nominative, so a frame must not put
+    # a genitive after it: `{IZBOR} besede {L}` reads "the instrumental in the
+    # singular and plural OF THE WORD X", where the possessive has crossed the
+    # number list.  Every frame here therefore names the word with a preposition
+    # (`za besedo {L}`, `pri besedi {L}`) or puts it first.
+    "T22": [
+        ("Za besedo {L} navedi {IZBOR}.", "train"),
+        ("Izpiši {IZBOR} za besedo {L}.", "train"),
+        ("Pri besedi {L} me zanima {IZBOR}.", "train"),
+        ("Zapiši {IZBOR} za besedo {L}.", "train"),
+        ("Prikaži {IZBOR} za {L}.", "train"),
+        ("Beseda {L}: kako se glasi {IZBOR}?", "train"),
+        ("Rabim {IZBOR} za besedo {L}.", "train"),
+        ("Katere oblike ima beseda {L} — {IZBOR}?", "train"),
+        ("Sklanjaj besedo {L}: {IZBOR}.", "train"),
+        ("Daj mi {IZBOR} za besedo {L}.", "train"),
+        ("{IZBOR} za besedo {L}, prosim.", "A"),
+        ("Pišem besedilo in rabim {IZBOR} za besedo {L}. Lahko pomagaš?", "A"),
+        ("Zapiši samo {IZBOR} za besedo {L}.", "A"),
+        # gender axis
+        ("Za besedo {L} v {SPOL_LOC} spolu navedi {IZBOR}.", "train"),
+        ("Izpiši {IZBOR} za besedo {L} v {SPOL_LOC} spolu.", "train"),
+        ("Pri besedi {L} v {SPOL_LOC} spolu me zanima {IZBOR}.", "train"),
+        ("Zapiši {IZBOR} za besedo {L} v {SPOL_NOM} spolu.", "train"),
+        ("Prikaži {IZBOR} za {L} v {SPOL_LOC} spolu.", "train"),
+        ("Beseda {L} v {SPOL_LOC} spolu: kako se glasi {IZBOR}?", "train"),
+        ("Sklanjaj {L} v {SPOL_LOC} spolu: {IZBOR}.", "train"),
+        ("Daj mi {IZBOR} za besedo {L} v {SPOL_LOC} spolu.", "train"),
+        ("{IZBOR} za besedo {L} v {SPOL_LOC} spolu, prosim.", "A"),
+        ("Rabim {IZBOR} za besedo {L} v {SPOL_NOM} spolu. Lahko pomagaš?", "A"),
+        ("Zapiši samo {IZBOR} za besedo {L} v {SPOL_LOC} spolu.", "A"),
+        # gender + definiteness
+        ("Za besedo {L} v {SPOL_LOC} spolu, v {DOLOCNOST_LOC}, navedi {IZBOR}.", "train"),
+        ("Izpiši {IZBOR} za besedo {L} v {SPOL_LOC} spolu, {DOLOCNOST}.", "train"),
+        ("Pri besedi {L} v {SPOL_LOC} spolu, v {DOLOCNOST_LOC}, me zanima {IZBOR}.", "train"),
+        ("Zapiši {IZBOR} za besedo {L} v {SPOL_NOM} spolu, v {DOLOCNOST_LOC}.", "train"),
+        ("Prikaži {IZBOR} za {L} v {SPOL_LOC} spolu, {DOLOCNOST}.", "train"),
+        ("Sklanjaj {L} v {SPOL_LOC} spolu, {DOLOCNOST}: {IZBOR}.", "train"),
+        ("Beseda {L}, {SPOL_NOM} spol, {DOLOCNOST}: {IZBOR}?", "train"),
+        ("{IZBOR} za besedo {L} v {SPOL_LOC} spolu, v {DOLOCNOST_LOC}, prosim.", "A"),
+        ("Rabim {IZBOR} za besedo {L} v {SPOL_LOC} spolu, {DOLOCNOST}.", "A"),
+        ("Zapiši {IZBOR} za {L}, {SPOL_NOM} spol, {DOLOCNOST}.", "A"),
+    ],
+
+    # ---- H.2: how many? -------------------------------------------------
+    # The counted noun agrees with the number, and the relation declines, so
+    # both come from `sl.relation_slots` (C21) and never from an f-string here.
+    "T24": [
+        ("Koliko {REL_GEN_PL} je zabeleženih za besedo {L}?", "train"),
+        ("Koliko {REL_GEN_PL} ima beseda {L}?", "train"),
+        ("Koliko {REL_GEN_PL} je v bazi za besedo {L}?", "train"),
+        ("Preštej {REL_ACC_PL} besede {L}.", "train"),
+        ("Koliko {REL_GEN_PL} je navedenih pri besedi {L}?", "train"),
+        ("Navedi število {REL_GEN_PL} za besedo {L}.", "train"),
+        ("Koliko {REL_GEN_PL} beleži baza za {L}?", "train"),
+        ("Kolikšno je število {REL_GEN_PL} besede {L}?", "train"),
+        ("Preštej, koliko {REL_GEN_PL} je zapisanih za {L}.", "train"),
+        ("Koliko {REL_GEN_PL} najdem pri besedi {L}?", "train"),
+        ("Zanima me število {REL_GEN_PL} besede {L}.", "A"),
+        ("Ali veš, koliko {REL_GEN_PL} je zabeleženih za {L}?", "A"),
+        ("Število {REL_GEN_PL} za {L}, prosim.", "A"),
+    ],
+
+    # ---- H.3: two anchors -----------------------------------------------
+    "T25": [
+        ("Ali sta besedi {L} in {L2} {REL_NOM_PL}?", "train"),
+        ("Sta {L} in {L2} {REL_NOM_PL}?", "train"),
+        ("Ali je {L2} {REL_NOM} besede {L}?", "train"),
+        ("Je beseda {L2} {REL_NOM} besede {L}?", "train"),
+        ("Ali baza povezuje besedi {L} in {L2} kot {REL_ACC_PL}?", "train"),
+        ("Preveri, ali sta {L} in {L2} {REL_NOM_PL}.", "train"),
+        ("Ali sta {L} in {L2} v razmerju {REL_GEN}?", "train"),
+        ("Je med besedama {L} in {L2} zabeležena {REL_NOM}?", "train"),
+        ("Ali je pri besedi {L} navedena {REL_NOM} {L2}?", "train"),
+        ("Sta besedi {L} in {L2} povezani kot {REL_NOM_PL}?", "train"),
+        ("Zanima me, ali sta {L} in {L2} {REL_NOM_PL}.", "A"),
+        ("Bi rekel, da sta {L} in {L2} {REL_NOM_PL}? Kaj pravi baza?", "A"),
+        ("{L} in {L2} — {REL_NOM_PL} ali ne?", "A"),
+    ],
+    "T26": [
+        ("Kaj imata besedi {L} in {L2} skupnega?", "train"),
+        ("Katere skupne lastnosti imata {L} in {L2}?", "train"),
+        ("V čem sta si besedi {L} in {L2} podobni?", "train"),
+        ("Navedi skupne slovnične lastnosti besed {L} in {L2}.", "train"),
+        ("Kaj je skupnega besedama {L} in {L2}?", "train"),
+        ("Katere lastnosti si delita {L} in {L2}?", "train"),
+        ("Primerjaj {L} in {L2}: kaj imata skupnega?", "train"),
+        ("Izpiši, v čem se besedi {L} in {L2} ujemata.", "train"),
+        ("Kje se besedi {L} in {L2} slovnično ujemata?", "train"),
+        ("Kaj si delita besedi {L} in {L2}?", "train"),
+        ("Zanima me, kaj imata {L} in {L2} skupnega.", "A"),
+        ("{L} in {L2} — kaj jima je skupno?", "A"),
+        ("Ali imata {L} in {L2} kakšno skupno lastnost?", "A"),
+    ],
+    # `{PRIM}` is the asked direction, `več` or `manj`.  A frame either names it
+    # -- and then the answer's label repeats it -- or asks for the comparison
+    # without a direction, which either label answers.  No frame may hard-code
+    # `več`: half these items ask for the smaller side.
+    "T27": [
+        ("Katera beseda ima {PRIM} {REL_GEN_PL}, {L} ali {L2}?", "train"),
+        ("Kdo ima {PRIM} {REL_GEN_PL}: {L} ali {L2}?", "train"),
+        ("Primerjaj število {REL_GEN_PL} besed {L} in {L2}.", "train"),
+        ("Pri kateri besedi je zabeleženih {PRIM} {REL_GEN_PL}, pri {L} ali pri {L2}?", "train"),
+        ("Katera od besed {L} in {L2} ima {PRIM} {REL_GEN_PL}?", "train"),
+        ("Kje je {PRIM} {REL_GEN_PL} — pri {L} ali pri {L2}?", "train"),
+        ("Primerjaj {L} in {L2} po številu {REL_GEN_PL}.", "train"),
+        ("Katera beseda beleži {PRIM} {REL_GEN_PL}, {L} ali {L2}?", "train"),
+        ("Ugotovi, katera od besed {L} in {L2} ima {PRIM} {REL_GEN_PL}.", "train"),
+        ("Pri {L} ali pri {L2} je {PRIM} {REL_GEN_PL}?", "train"),
+        ("Zanima me, katera ima {PRIM} {REL_GEN_PL}: {L} ali {L2}.", "A"),
+        ("{L} ali {L2} — katera ima {PRIM} {REL_GEN_PL}?", "A"),
+        ("Bi znal primerjati {L} in {L2} po številu {REL_GEN_PL}?", "A"),
+    ],
+
+    # ---- H.4: sense-scoped ----------------------------------------------
+    "T28": [
+        ("Katere sopomenke ima beseda {L} v pomenu {POMEN}?", "train"),
+        ("Navedi sopomenke besede {L} za pomen {POMEN}.", "train"),
+        ("Katere sopomenke se navezujejo na pomen {POMEN} besede {L}?", "train"),
+        ("Izpiši sopomenke, ki pripadajo pomenu {POMEN} besede {L}.", "train"),
+        ("Beseda {L} v pomenu {POMEN} — katere sopomenke ima?", "train"),
+        ("Za {ORD}. pomen besede {L} navedi sopomenke.", "train"),
+        ("Katere sopomenke so zabeležene pri pomenu {POMEN} besede {L}?", "train"),
+        ("Naštej sopomenke besede {L}, ki veljajo za pomen {POMEN}.", "train"),
+        ("Samo za pomen {POMEN}: katere sopomenke ima {L}?", "train"),
+        ("Sopomenke besede {L} v pomenu {POMEN}, prosim.", "train"),
+        ("Zanimajo me sopomenke besede {L} v pomenu {POMEN}.", "A"),
+        ("Kaj je sopomenka za {L}, kadar pomeni {POMEN}?", "A"),
+        ("Pri {ORD}. pomenu besede {L} — katere sopomenke so navedene?", "A"),
+    ],
+
+    # The same type, asked of a sense that has an ORDINAL but no definition to
+    # quote.  Most senses in this base are undefined, and requiring a definition
+    # to name the scope by cost T28 two thirds of its population -- while the
+    # ball numbers every sense, so the ordinal names one just as exactly.  A
+    # separate pool because no frame here may reach for {POMEN}: it does not
+    # exist for these items, and `render_question` would drop them silently.
+    "T28/ord": [
+        ("Za {ORD}. pomen besede {L} navedi sopomenke.", "train"),
+        ("Katere sopomenke ima beseda {L} v {ORD}. pomenu?", "train"),
+        ("Izpiši sopomenke, ki pripadajo {ORD}. pomenu besede {L}.", "train"),
+        ("Katere sopomenke so zabeležene pri {ORD}. pomenu besede {L}?", "train"),
+        ("Beseda {L}, {ORD}. pomen — katere sopomenke ima?", "train"),
+        ("Naštej sopomenke besede {L}, ki veljajo za njen {ORD}. pomen.", "train"),
+        ("Samo za {ORD}. pomen: katere sopomenke ima {L}?", "train"),
+        ("Sopomenke besede {L} v {ORD}. pomenu, prosim.", "train"),
+        ("Katere sopomenke se navezujejo na {ORD}. pomen besede {L}?", "train"),
+        ("Navedi sopomenke, zabeležene pri {ORD}. pomenu besede {L}.", "train"),
+        ("Zanimajo me sopomenke besede {L} v {ORD}. pomenu.", "A"),
+        ("Pri {ORD}. pomenu besede {L} — katere sopomenke so navedene?", "A"),
+        ("{L}, {ORD}. pomen: kaj je zabeleženo kot sopomenka?", "A"),
+    ],
+    "T29": [
+        ("Kateremu pomenu besede {L} pripada {Z}?", "train"),
+        ("V katerem pomenu besede {L} nastopa {Z}?", "train"),
+        ("K kateremu pomenu besede {L} sodi {Z}?", "train"),
+        ("Določi pomen besede {L}, ki mu pripada {Z}.", "train"),
+        ("Pri katerem pomenu besede {L} je zabeleženo {Z}?", "train"),
+        ("Kateri pomen besede {L} ponazarja {Z}?", "train"),
+        ("Poišči pomen besede {L}, pod katerim je {Z}.", "train"),
+        ("Pod katerim pomenom besede {L} najdem {Z}?", "train"),
+        ("Kateremu pomenu je pri besedi {L} pripisano {Z}?", "train"),
+        ("Navedi pomen besede {L}, h kateremu spada {Z}.", "train"),
+        ("Zanima me, kateremu pomenu besede {L} pripada {Z}.", "A"),
+        ("{Z} — h kateremu pomenu besede {L} to sodi?", "A"),
+        ("Ali veš, kateri pomen besede {L} pokriva {Z}?", "A"),
+    ],
+
+    # ---- H.5: phrases ---------------------------------------------------
+    # T31 bands, on T17's rule: the question asks for SOME phrases and never for
+    # all, because the ball holds D5's top ten and not the true membership.
+    "T31/none": [
+        ("V katerih zvezah nastopa beseda {L}?", "train"),
+        ("Navedi besedne zveze z besedo {L}.", "train"),
+        ("Katere stalne zveze vsebujejo besedo {L}?", "train"),
+        ("V katerih besednih zvezah se pojavlja {L}?", "train"),
+        ("Izpiši zveze, v katerih nastopa beseda {L}.", "train"),
+        ("Katerih zvez je beseda {L} sestavni del?", "train"),
+        ("Poišči besedne zveze z besedo {L}.", "train"),
+        ("Del katerih zvez je beseda {L}?", "train"),
+        ("Naštej zveze, ki vsebujejo besedo {L}.", "train"),
+        ("V čem vse nastopa beseda {L}?", "A"),
+        ("Zanima me, v katerih zvezah je beseda {L}.", "A"),
+        ("Kje vse se pojavi beseda {L} kot del zveze?", "A"),
+    ],
+    "T31/vague_small": [
+        ("Navedi nekaj zvez z besedo {L}.", "train"),
+        ("Daj mi par besednih zvez, v katerih nastopa {L}.", "train"),
+        ("Naštej nekaj stalnih zvez z besedo {L}.", "train"),
+        ("Pokaži nekaj zvez, ki vsebujejo besedo {L}.", "train"),
+        ("Nekaj besednih zvez z besedo {L}, prosim.", "train"),
+        ("Rabim par primerov zvez z besedo {L}.", "train"),
+        ("Zanima me nekaj zvez, v katerih je beseda {L}.", "A"),
+        ("Ali mi lahko daš nekaj zvez z besedo {L}?", "A"),
+        ("Samo par primerov: kje nastopa beseda {L}?", "A"),
+    ],
+    "T31/vague_large": [
+        ("Naštej čim več zvez z besedo {L}.", "train"),
+        ("Rabim veliko besednih zvez, v katerih nastopa {L}.", "train"),
+        ("Izpiši daljši seznam zvez z besedo {L}.", "train"),
+        ("Pokaži mi obsežen seznam zvez z besedo {L}.", "train"),
+        ("Navedi kar največ stalnih zvez z besedo {L}.", "train"),
+        ("Rabim čim daljši seznam zvez z besedo {L}.", "train"),
+        ("Kar največ primerov, prosim: kje nastopa beseda {L}?", "A"),
+        ("Daj mi obsežen nabor zvez z besedo {L}.", "A"),
+        ("Naštej veliko zvez, ki vsebujejo {L}.", "A"),
+    ],
+    "T31/exact": [
+        ("Izpiši {N_ZVEZ} z besedo {L}.", "train"),
+        ("Navedi {N_ZVEZ}, v katerih nastopa {L}.", "train"),
+        ("Sestavi seznam {N_ZVEZ} z besedo {L}.", "train"),
+        ("Poišči {N_STALZVEZ} z besedo {L}.", "train"),
+        ("Prikaži {N_ZVEZA}, ki vsebujejo besedo {L}.", "train"),
+        ("Izpiši točno {N_ZVEZ} z besedo {L}.", "train"),
+        ("Daj mi {N_ZVEZ} z besedo {L}.", "train"),
+        ("Naštej {N_ZVEZA} z besedo {L}.", "train"),
+        ("Izpiši natanko {N_ZVEZ} za {L}.", "A"),
+        ("Ali mi lahko daš {N_ZVEZ} z besedo {L}?", "A"),
+        ("Rabim {N_STALZVEZ}, v katerih je {L}.", "A"),
+    ],
+    "T32": [
+        ("Kaj pomeni zveza {L}?", "train"),
+        ("Razloži pomen zveze {L}.", "train"),
+        ("Kakšen je pomen besedne zveze {L}?", "train"),
+        ("Navedi razlago zveze {L}.", "train"),
+        ("Kaj označuje zveza {L}?", "train"),
+        ("Pojasni, kaj pomeni besedna zveza {L}.", "train"),
+        ("Kako je razložena zveza {L}?", "train"),
+        ("Kaj se skriva za zvezo {L}?", "train"),
+        ("Opiši pomen zveze {L}.", "train"),
+        ("Katere pomene ima zveza {L}?", "train"),
+        ("Zanima me, kaj pomeni zveza {L}.", "A"),
+        ("Zveza {L} — kaj to pomeni?", "A"),
+        ("Ne razumem zveze {L}. Kaj pomeni?", "A"),
+    ],
+    "T33": [
+        ("Navedi poved z zvezo {L}.", "train"),
+        ("Zapiši primer rabe zveze {L}.", "train"),
+        ("V kakšni povedi se uporablja zveza {L}?", "train"),
+        ("Daj primer stavka z zvezo {L}.", "train"),
+        ("Kako se zveza {L} uporabi v povedi?", "train"),
+        ("Navedi zgled za zvezo {L}.", "train"),
+        ("Pokaži rabo zveze {L} v povedi.", "train"),
+        ("Sestavi primer uporabe zveze {L}.", "train"),
+        ("Izpiši poved, v kateri nastopa zveza {L}.", "train"),
+        ("Kje se zveza {L} pojavi v besedilu?", "train"),
+        ("Zanima me primer rabe zveze {L}.", "A"),
+        ("Ali imaš kakšen zgled za zvezo {L}?", "A"),
+        ("Rabim poved z zvezo {L}. Lahko pomagaš?", "A"),
+    ],
+    # T34's {L} already carries the blank, so the frame never writes one.
+    "T34": [
+        ("Dopolni zvezo: {L}", "train"),
+        ("Katera zveza se skriva za {L}?", "train"),
+        ("Dopolni manjkajočo besedo: {L}", "train"),
+        ("Kako se glasi celotna zveza {L}?", "train"),
+        ("Zapiši celotno zvezo za {L}.", "train"),
+        ("Kaj manjka v zvezi {L}?", "train"),
+        ("Dopolni izpuščeno besedo v zvezi {L}.", "train"),
+        ("Katera besedna zveza je {L}?", "train"),
+        ("Iz {L} sestavi celotno zvezo.", "train"),
+        ("Dopolni: {L}", "train"),
+        ("Ne spomnim se cele zveze: {L}", "A"),
+        ("Zanima me, kaj manjka v {L}.", "A"),
+        ("{L} — katera zveza je to?", "A"),
+    ],
+    "T35": [
+        ("Kolokacija katere besede je {L}?", "train"),
+        ("Pri kateri besedi je zabeležena kolokacija {L}?", "train"),
+        ("Kateri iztočnici pripada kolokacija {L}?", "train"),
+        ("Pod katero besedo najdem kolokacijo {L}?", "train"),
+        ("Katere besede je {L} kolokacija?", "train"),
+        ("Določi iztočnico, pri kateri je navedena kolokacija {L}.", "train"),
+        ("H kateri besedi sodi kolokacija {L}?", "train"),
+        ("Kolokacija {L} — pri kateri iztočnici je zapisana?", "train"),
+        ("Poišči besedo, ki ji pripada kolokacija {L}.", "train"),
+        ("Kateri besedi je pripisana zveza {L}?", "train"),
+        ("Zanima me, čigava kolokacija je {L}.", "A"),
+        ("Ali veš, pri kateri besedi je kolokacija {L}?", "A"),
+        ("Kolokacijo {L} — kje jo najdem?", "A"),
+    ],
+
+    # ---- H.6: the second held-out relation ------------------------------
+    "T36": [
+        ("Kako se beseda {L} reče madžarsko?", "train"),
+        ("Navedi madžarski prevod besede {L}.", "train"),
+        ("Kako je {L} v madžarščini?", "train"),
+        ("Kateri madžarski ustreznik ima beseda {L}?", "train"),
+        ("Prevedi besedo {L} v madžarščino.", "train"),
+        ("Kako bi {L} povedali po madžarsko?", "train"),
+        ("Izpiši madžarske prevode besede {L}.", "train"),
+        ("Kaj je madžarsko za {L}?", "train"),
+        ("Navedi madžarske ustreznike besede {L}.", "train"),
+        ("Kako se {L} zapiše v madžarščini?", "train"),
+        ("Zanima me madžarski prevod besede {L}.", "A"),
+        ("Ali veš, kako je {L} v madžarščini?", "A"),
+        ("{L} — kako se to reče madžarsko?", "A"),
+    ],
 }
 
 # A frame that names a word class -- "samostalnik {L}", "glagol {L}",
@@ -482,8 +888,39 @@ def frame_category(frame):
     return None
 
 
-def frames_for_pos(type_key, pos):
-    """Frames whose asserted word class matches `pos` (or which assert none).
+#: Question-metalanguage slots that name an AXIS of the paradigm rather than
+#: describing the entry.  A frame using one is asking about that axis.
+AXIS_SLOTS = ("SPOL_NOM", "SPOL_LOC", "DOLOCNOST", "DOLOCNOST_LOC")
+
+_AXIS_OF = {"SPOL_NOM": "gender", "SPOL_LOC": "gender",
+            "DOLOCNOST": "definiteness", "DOLOCNOST_LOC": "definiteness"}
+
+
+def frame_axes(frame):
+    """The paradigm axes a frame names, read off the slots it uses.
+
+    Derived from the frame text rather than declared beside it, so a frame and
+    its axis list cannot drift apart.
+    """
+    return frozenset(_AXIS_OF[s] for s in AXIS_SLOTS if "{" + s + "}" in frame)
+
+
+def _axes_match(frame, axes):
+    """A frame may name EXACTLY the axes its item fixes.
+
+    Both directions matter.  A frame naming an axis the item does not fix would
+    raise on the missing slot -- and `render_question` swallows that and returns
+    None, so the item would vanish silently rather than fail loudly.  A frame
+    NOT naming an axis the item does fix is worse: `sklanjaj pridevnik lep` is
+    under-specified against a three-gender paradigm, so its answer would not be
+    determined by its question, which is what 0.1 clause 3 forbids.
+    """
+    return frame_axes(frame) == axes
+
+
+def frames_for_pos(type_key, pos, axes=frozenset()):
+    """Frames whose asserted word class matches `pos` (or which assert none),
+    and which name exactly the axes this item fixes.
 
     A frame that names a class is asserting a premise: "Katero obliko ima
     imenovalnik ednine samostalnika izbrisen?" tells the reader that *izbrisen*
@@ -491,16 +928,18 @@ def frames_for_pos(type_key, pos):
     has read anything.  This filter is what keeps the premise true.
     """
     return [f for f, _t in TEMPLATES[type_key]
-            if frame_category(f) in (None, pos)]
+            if frame_category(f) in (None, pos) and _axes_match(f, axes)]
 
 
-def neutral_frames(type_key):
+def neutral_frames(type_key, axes=frozenset()):
     """Frames usable for a negative: they name no word class."""
-    out = [f for f, _t in TEMPLATES[type_key] if frame_category(f) is None]
+    out = [f for f, _t in TEMPLATES[type_key]
+           if frame_category(f) is None and _axes_match(f, axes)]
     # Every type must keep at least one, or its negatives would have no phrasing
     # at all; if this ever fires, the type needs a neutral frame written for it.
     if not out:
-        raise ValueError(f"{type_key}: no category-neutral frame available")
+        raise ValueError(f"{type_key}: no category-neutral frame available "
+                         f"naming exactly {sorted(axes) or 'no axis'}")
     return out
 
 

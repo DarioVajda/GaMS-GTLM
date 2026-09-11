@@ -42,15 +42,25 @@ Which check is which:
   D3b  the surface index keys MWE phrases, and no phrase key shadows a word --
        the invariant flavour (a) rests on.  Needs --store.
 
+  C26  constituent validity: every word a T30 answer names is a recorded part of
+       the phrase in its question, and really occurs in it.  Needs --store.
+
+  C26b T34's gold is its own fragment with the gap filled, and that phrase is the
+       anchor's recorded lemma.  Needs --store.
+
   C27  D5c is a no-op on word-anchored balls -- the same anchors built with and
        without the cap at every expansion, node sets compared.  Needs --store.
 
-C26 (constituent validity over T30/T34) is specified in QA_TASKS.md section 2 and
-is still NOT here: it has nothing to assert yet, because T30 and T34 do not exist
-and the MWE constituent accessor they need does not either.  A check that runs
-over nothing passes over nothing, and would read in this list as coverage we do
-not have; it lands with the change that gives it something to check.  C27 was
-absent for the same reason until D5c landed, and is now real.
+C26 was specified in QA_TASKS.md section 2 long before it could run, and stayed
+out of this list until T30 landed: a check that runs over nothing passes over
+nothing, and would have read here as coverage we did not have.  C27 was absent
+for the same reason until D5c landed.
+
+C26b exists because C26's own scope was read too widely once.  T34 was put in
+`CONSTITUENT_TYPES` on the strength of being a phrase type, but its answer is the
+COMPLETED PHRASE rather than a list of parts, so C26 compared a whole phrase
+against the constituents of a fragment and failed all 57 of its items.  The two
+types make different claims and now have a check each.
 """
 import os
 import re
@@ -60,7 +70,8 @@ import collections
 
 import numpy as np
 
-from qa import sl, spec, grade, pairs, seeds, templates, colloc_sampling, build_balls
+from qa import (sl, spec, grade, pairs, seeds, templates, colloc_sampling,
+                build_balls, gen)
 
 FAIL = []
 
@@ -130,6 +141,31 @@ def c7_labels():
           == "prihodnjik 3. osebe množine (ženski spol)")
     check("18 nominal labels, all distinct", len(set(sl.GRID_LABELS)) == 18)
     check("9 verb cells, all distinct", len(set(sl.PERSON_CELLS)) == 9)
+    # The gender axis of the nominal grid.  Under 0.1 the label is the only
+    # thing that says which cell a value fills, so for a paradigm that varies by
+    # gender the gender has to BE in the label -- and a cell must not silently
+    # keep the noun spelling and mean something else.
+    check("nominal cell, gendered",
+          sl.cell_label("tožilnik", "ednina", "moški spol")
+          == "tožilnik ednine (moški spol)")
+    check("nominal cell, gendered and definite",
+          sl.cell_label("imenovalnik", "ednina", "moški spol", "nedoločna oblika")
+          == "imenovalnik ednine (moški spol, nedoločna oblika)")
+    check("a gendered cell never collides with the noun cell",
+          not (set(sl.GRID_LABELS) & {l for g in sl.GENDERS
+                                      for l in sl.grid_labels(g)}))
+    check("54 gendered labels, all distinct",
+          len({l for g in sl.GENDERS for l in sl.grid_labels(g)}) == 54)
+    # A frame may name exactly the axes its item fixes: one that names an axis
+    # the item leaves open would raise on the missing slot, and `render_question`
+    # swallows that and returns None -- the item would vanish rather than fail.
+    for tk in ("T1", "T2", "T3"):
+        have = {templates.frame_axes(f) for f in templates.frames(tk)}
+        check(f"{tk} has frames for every axis combination it can produce",
+              {frozenset(), frozenset({"gender"}),
+               frozenset({"gender", "definiteness"})} <= have, str(sorted(map(sorted, have))))
+        check(f"{tk} keeps a category-neutral frame for each",
+              all(templates.neutral_frames(tk, ax) for ax in have))
     # `rstrip(".")` can uncover whitespace the periods were hiding, and an
     # allow-list is normalised once when written and again when compared -- so a
     # normalizer that moves on the second application marks a correct answer
@@ -144,6 +180,179 @@ def c7_labels():
           grade.parse(pairs.render(p))
           == sorted((sl.norm(k), sl.norm(v)) for k, v in p))
     c7_relation_slots()
+    c7_negative_frames()
+    c7_group_h_labels()
+    c7_group_h_frames()
+
+
+def c7_negative_frames():
+    """Every type keeps a category-neutral frame its OWN splits can reach.
+
+    `render_question` draws a negative from `neutral_frames` and then drops the
+    tier-A frames unless the split is test.  A type whose only neutral frame is
+    tier A therefore renders no negative in train or dev at all -- it raises
+    nothing, it just returns None every time, and the type ships positives only.
+    T7 was in exactly that state: all ten of its train frames say `glagol`, and
+    its negative is a word that is not one.
+
+    The tier is the half that reading misses, so it is asserted here rather than
+    left to the Group H check above, which only counts neutral frames.
+    """
+    print("\nC7 -- every type can render a negative in train and dev")
+    bad = []
+    for tk in spec.SPEC:
+        pools = [k for k in templates.TEMPLATES
+                 if k == tk or k.startswith(tk + "/")]
+        for pool_key in pools:
+            for axes in {templates.frame_axes(f)
+                         for f in templates.frames(pool_key)}:
+                try:
+                    neutral = templates.neutral_frames(pool_key, axes)
+                except ValueError:
+                    bad.append((pool_key, sorted(axes), "no neutral frame"))
+                    continue
+                if not [f for f in neutral
+                        if templates.tier_of(pool_key, f) != "A"]:
+                    bad.append((pool_key, sorted(axes), "all neutral frames are tier A"))
+    check(f"all {len(spec.SPEC)} types keep a non-tier-A neutral frame",
+          not bad, str(bad[:3]))
+
+
+def c7_group_h_labels():
+    """Group H's own renderers: the selection phrase, the count and comparison
+    labels, and the promise that they add exactly three label WORDS.
+
+    `selection_phrase` is the one that cannot be caught by reading: it inflects
+    the number differently depending on which axis the selection runs along, so
+    a swap produces `mestnik v ednina` -- fluent-looking, wrong, and in the
+    question that the answer has to be determined by.
+    """
+    print("\nC7 -- Group H labels and the selection phrase")
+    check("one number, several cases -> genitive number",
+          sl.selection_phrase(["rodilnik", "dajalnik", "mestnik"], ["množina"])
+          == "rodilnik, dajalnik in mestnik množine")
+    check("one case, several numbers -> locative numbers after v",
+          sl.selection_phrase(["mestnik"], ["ednina", "množina"])
+          == "mestnik v ednini in množini")
+    check("the selection is canonically ordered, not argument-ordered",
+          sl.selection_phrase(["mestnik", "rodilnik"], ["ednina"])
+          == "rodilnik in mestnik ednine")
+    for bad, why in (((["rodilnik", "mestnik"], ["ednina", "množina"]),
+                      "two axes at once"),
+                     (([], ["ednina"]), "no case")):
+        try:
+            sl.selection_phrase(*bad)
+            ok = False
+        except ValueError:
+            ok = True
+        check(f"refuses {why}", ok)
+    check("conjoin of one", sl.conjoin(["a"]) == "a")
+    check("conjoin of two", sl.conjoin(["a", "b"]) == "a in b")
+    check("conjoin of three", sl.conjoin(["a", "b", "c"]) == "a, b in c")
+    check("count label", sl.count_label("pomen") == "število pomenov")
+    check("comparison label", sl.compare_label("manj", "sopomenka") == "manj sopomenk")
+    check("the translation label is the node's own tag",
+          sl.relation_tag("prevod") == "prevod (madžarsko)")
+    # Every countable relation must render both labels, or a type quietly makes
+    # fewer items for the relation whose table row is short.
+    rels = spec.COUNTABLE + spec.COUNTABLE_HELD_OUT
+    bad = [(r, c) for r in rels for c in sl.COMPARISONS
+           if not (sl.count_label(r) and sl.compare_label(c, r))]
+    check(f"count and comparison labels render for all {len(rels)} relations",
+          not bad, str(bad[:2]))
+    # 0.1's declared-constant budget.  Every label a type emits is either
+    # derived from the ball or one of these, and the list is short because a
+    # reader has to be able to hold it -- so its size is asserted, not assumed.
+    from qa.check_labels import is_declared
+    check("the declared-label budget is still eight",
+          len(spec.DECLARED_LABELS) == 8, str(sorted(spec.DECLARED_LABELS)))
+    undeclared = [l for l in
+                  [sl.count_label(r) for r in rels]
+                  + [sl.compare_label(c, r) for r in rels for c in sl.COMPARISONS]
+                  if not is_declared(l)]
+    check("every count and comparison label hits a declared constant",
+          not undeclared, str(undeclared[:3]))
+
+
+#: The slots each new generator supplies, as a fixture.  Read off the generators
+#: rather than from the frames, so a frame reaching for a slot its type does not
+#: produce fails HERE -- `render_question` swallows the KeyError and drops the
+#: item, so the same bug in the pipeline shows up only as a shortfall.
+GROUP_H_SLOTS = {
+    "T22": dict(L="preizkus", IZBOR="rodilnik in dajalnik ednine"),
+    "T24": dict(L="preizkus"),
+    "T25": dict(L="preizkus", L2="drugi"),
+    "T26": dict(L="preizkus", L2="drugi"),
+    "T27": dict(L="preizkus", L2="drugi", PRIM="več"),
+    "T28": dict(L="preizkus", POMEN="razlaga pomena", ORD=2),
+    "T29": dict(L="preizkus", Z="Poved, ki ponazarja pomen."),
+    # T31's frames live under four band keys, like T17's; the fixture expands
+    # into all of them below.
+    "T31": dict(L="preizkus", N=3),
+    "T32": dict(L="stalna zveza"),
+    "T33": dict(L="stalna zveza"),
+    "T34": dict(L="stalna ___ zveza", ZVEZA="stalna ___ zveza"),
+    "T35": dict(L="stalna zveza", ZVEZA="stalna zveza"),
+    "T36": dict(L="preizkus"),
+}
+
+
+def c7_group_h_frames():
+    """Every Group H frame renders from its type's slots, for every relation and
+    every axis combination the type can fix -- and each keeps a neutral frame.
+    """
+    print("\nC7 -- Group H frames render from the slots their generators supply")
+    rels = spec.COUNTABLE + spec.COUNTABLE_HELD_OUT + spec.PAIR_HELD_OUT
+    bad = []
+    keys = []
+    for tk, base in GROUP_H_SLOTS.items():
+        variants = [dict(base)]
+        if tk in ("T24", "T25", "T27"):
+            variants = [dict(base, **sl.relation_slots(r)) for r in rels]
+        if tk == "T27":
+            variants = [dict(v, PRIM=c) for v in variants
+                        for c in ("več", "manj")]
+        if tk == "T31":
+            variants = [dict(base, **gen.phrase_count_slots(3))]
+        if tk == "T22":
+            # An item fixing no axis must NOT render a gender frame -- that is
+            # `_axes_match`'s whole job -- so each variant is matched against
+            # the frames naming exactly the axes it fixes, as the pipeline does.
+            variants = [dict(base, **gen.axis_slots(g, d))
+                        for g in (None, "moški spol")
+                        for d in (None, "določna oblika") if g or not d]
+        pools = ([tk] if tk in templates.TEMPLATES else []) \
+            + [k for k in templates.TEMPLATES if k.startswith(tk + "/")]
+        for pool_key in pools:
+            keys.append(pool_key)
+            for slots in variants:
+                # T28's two pools name the sense differently, and the ordinal
+                # pool must render WITHOUT a definition -- that is the whole
+                # point of it, so the fixture withholds one.
+                if pool_key.endswith("/ord"):
+                    slots = {k: v for k, v in slots.items() if k != "POMEN"}
+                axes = frozenset(a for a in ("gender", "definiteness")
+                                 if slots.get(a))
+                for frame, _tier in templates.TEMPLATES[pool_key]:
+                    if templates.frame_axes(frame) != axes:
+                        continue
+                    try:
+                        frame.format(**slots)
+                    except KeyError as exc:
+                        bad.append((pool_key, frame, str(exc)))
+    n = sum(len(templates.TEMPLATES[k]) for k in keys)
+    check(f"all {n} frames of the 13 new types render", not bad, str(bad[:2]))
+    for tk in keys:
+        axes = {templates.frame_axes(f) for f in templates.frames(tk)}
+        check(f"{tk} keeps a category-neutral frame for each axis set it uses",
+              all(templates.neutral_frames(tk, ax) for ax in axes))
+    # T22 is the only new type with an axis, and it must have frames for all
+    # three combinations its generator produces -- see T1/T2/T3 above.
+    have = {templates.frame_axes(f) for f in templates.frames("T22")}
+    check("T22 has frames for no axis, gender, and gender+definiteness",
+          {frozenset(), frozenset({"gender"}),
+           frozenset({"gender", "definiteness"})} <= have,
+          str(sorted(map(sorted, have))))
 
 
 def c7_relation_slots():
@@ -475,17 +684,43 @@ def c13_baselines(splits):
                T4 strips an inflection; T16's antonyms are dominated by `ne-`,
                so a third of the Tier C type is reachable by deleting two
                letters and never consulting the graph at all
+      infl     learn ONE (strip, append) edit per label on `train`, apply it to
+               `test`: how much of the type a regular-morphology guesser gets
+               without the graph.  Two numbers, because one of them lies:
+               ITEM is all-or-nothing like the four above, and an 18-cell table
+               reads ~0 % even when 17 cells are predictable; PAIR is the share
+               of individual cells it gets, which is the number the morphology
+               risk is actually about
 
     `quote` and `morph` are upper bounds, not scores: they say the information
     suffices, not that a model finds it.  Read them as what a retrieval arm has
     to beat before its gap over the no-retrieval control means anything.
+
+    **Why `infl` exists.**  `quote` and `morph` both require the value to be a
+    SUBSTRING of the question, so between them they can only see an answer that
+    is the question shortened.  Declension goes the other way -- `Molierjev` ->
+    `Molierjevega` -- and reads 0.0 % on both no matter how predictable it is:
+    T1 and T2 have always reported 0.0 % `morph` while T4, which strips an
+    inflection, reports 47.8 %.  That blind spot did not matter while the grid
+    held nouns only and nobody was arguing from the number.  It matters now:
+    adjectives are close to regularly declined, so the honest question about
+    Group A over adjectives is exactly the one `morph` cannot answer.  Measured
+    with this baseline on lemma-disjoint halves of the store: **adjectives 53.7 %
+    against nouns 36.8 %** -- a real gap, and not a disqualifying one, since the
+    types built on nouns already live with 36.8 %.  Part of the gap is an
+    artefact of the finer key: the noun grid collapses three declension classes
+    into one cell, so no single rule can win there.
     """
     print("\nC13 -- no-knowledge baselines per type (reported, not asserted)")
     by_type = collections.defaultdict(list)
     for it in splits["test"]:
         by_type[it["type"]].append(it)
+    train_by_type = collections.defaultdict(list)
+    for it in splits.get("train", ()):
+        train_by_type[it["type"]].append(it)
     print(f"    {'type':5s} {'n':>4s}  {'answer':>7s} {'labels':>7s} "
-          f"{'quote':>7s} {'morph':>7s}  most common label set")
+          f"{'quote':>7s} {'morph':>7s} {'infl':>7s} {'infl/p':>7s}  "
+          f"most common label set")
     for t in sorted(by_type):
         items = by_type[t]
         n = len(items)
@@ -496,10 +731,64 @@ def c13_baselines(splits):
         found = [_values_in_question(it) for it in free]
         quote = sum(1 for kind in found if kind == "word")
         morph = sum(1 for kind in found if kind == "inside")
+        infl, pair_hit, pair_n = _inflection_baseline(train_by_type.get(t, ()), items)
         shown = ", ".join(top_labels[:3]) + ("..." if len(top_labels) > 3 else "")
         print(f"    {t:5s} {n:4d}  {100.0 * answers.most_common(1)[0][1] / n:6.1f}% "
               f"{100.0 * n_labels / n:6.1f}% {100.0 * quote / n:6.1f}% "
-              f"{100.0 * morph / n:6.1f}%  {shown[:44]!r}")
+              f"{100.0 * morph / n:6.1f}% {100.0 * infl / n:6.1f}% "
+              f"{100.0 * pair_hit / max(pair_n, 1):6.1f}%  {shown[:44]!r}")
+
+
+def _suffix_edit(src, dst):
+    """(characters to strip from `src`, characters to append) -- the edit that
+    turns one surface into another, over their longest common prefix."""
+    n = 0
+    while n < len(src) and n < len(dst) and src[n] == dst[n]:
+        n += 1
+    return len(src) - n, dst[n:]
+
+
+def _inflection_baseline(train_items, test_items):
+    """Items a regular-morphology guesser gets entirely right, with no graph.
+
+    Learns one majority (strip, append) edit per LABEL on the training split and
+    applies it to the test split.  The splits are lemma-disjoint (C11), so this
+    is a generalisation measurement and not a lookup: no test lemma contributed
+    to the rule that predicts it.
+
+    Returns (items fully predicted, pairs predicted, pairs tried).  The item
+    count matches how `answer` is counted; the pair count is the one to read for
+    a table type, where all-or-nothing over 18 cells hides how much of the
+    paradigm a suffix rule really reaches.
+    """
+    table = collections.defaultdict(collections.Counter)
+    for it in train_items:
+        lemma = (it.get("slots") or {}).get("L")
+        gold = _gold_pairs(it)
+        if not lemma or not gold:
+            continue
+        for k, v in gold:
+            table[sl.norm(k)][_suffix_edit(sl.norm(lemma), sl.norm(v))] += 1
+    rule = {k: c.most_common(1)[0][0] for k, c in table.items()}
+    hit = pair_hit = pair_n = 0
+    for it in test_items:
+        lemma = (it.get("slots") or {}).get("L")
+        gold = _gold_pairs(it)
+        if not lemma or not gold:
+            continue
+        src = sl.norm(lemma)
+        ok = 0
+        for k, v in gold:
+            pair_n += 1
+            r = rule.get(sl.norm(k))
+            if r is None:
+                continue
+            strip, add = r
+            if (src[:-strip] if strip else src) + add == sl.norm(v):
+                ok += 1
+        pair_hit += ok
+        hit += ok == len(gold)
+    return hit, pair_hit, pair_n
 
 
 def _gold_pairs(item):
@@ -583,7 +872,13 @@ def d3b_no_shadow(store):
 
 
 #: The types whose ANSWER names the constituents of the phrase in the question.
-CONSTITUENT_TYPES = ("T30", "T34")
+#:
+#: T34 is NOT one of them, though it was listed here at first.  Its answer is the
+#: COMPLETED PHRASE and its question carries a fragment with a word replaced by
+#: `___`, so C26 read the gold (`jagnjetina in kozličevina`) as a constituent of
+#: the fragment (`jagnjetina ___ kozličevina`) and every one of its items failed.
+#: The claim T34 actually makes is checked by `c26b_t34_fragments` below.
+CONSTITUENT_TYPES = ("T30",)
 
 
 def c26_constituents(store, items):
@@ -643,6 +938,58 @@ def c26_constituents(store, items):
           else f"{len(unknown)} are not, e.g. {unknown[:3]}")
     check("and occurs in it", not absent,
           "" if not absent else f"{len(absent)} do not, e.g. {absent[:3]}")
+
+
+def c26b_t34_fragments(store, items):
+    """C26b: T34's gold is its own fragment with exactly one word restored.
+
+    T34 is the one type whose SUBJECT is not in its question: the item shows
+    `jagnjetina ___ kozličevina` and the answer is the whole phrase.  Nothing
+    else in the corpus works that way, so the two failure modes are unique to it
+    and neither is visible in the output --
+
+      * the gold and the fragment drift apart (a different phrase, a different
+        word count), and the item asks for a completion of something it does not
+        show; and
+      * the restored word is not the hidden one -- the gold is a real phrase and
+        the fragment is a real fragment, but not of each other.
+
+    The second claim is against the STORE: the gold must be the recorded lemma of
+    the anchor the item was built from, not a string the generator assembled.
+    `jagnjetina in kozličevina` has to be a phrase the KG holds, or the item is
+    asking the model to reproduce our own concatenation.
+    """
+    rows = [it for it in items if it["type"] == "T34" and not it["negative"]]
+    if not rows:
+        skip("T34 fragments", "no T34 positives in this dataset")
+        return
+    print("\nC26b -- T34's fragment and its gold are one phrase apart")
+    shape, mismatch, unrecorded = [], [], []
+    for it in rows:
+        frag = ((it.get("slots") or {}).get("L") or "").split()
+        gold = [w for _oznaka, w in it["gold_items"]]
+        if len(gold) != 1 or frag.count(gen.GAP_MARK) != 1:
+            shape.append((it["id"], " ".join(frag), gold))
+            continue
+        words = gold[0].split()
+        # Same length, and differing in exactly the blanked position.  Checking
+        # the differing positions rather than splicing the gold in catches a
+        # fragment that blanked one word and altered another.
+        diff = [i for i, w in enumerate(words)
+                if i >= len(frag) or frag[i] != w]
+        if len(words) != len(frag) or diff != [frag.index(gen.GAP_MARK)]:
+            mismatch.append((it["id"], " ".join(frag), gold[0]))
+            continue
+        a = _anchor_of(store, it)
+        if a is None or store.lemma(a) != gold[0]:
+            unrecorded.append((it["id"], gold[0],
+                               None if a is None else store.lemma(a)))
+    check(f"one gold and one gap in each of {len(rows):,} items", not shape,
+          str(shape[:3]))
+    check("the gold is the fragment with the gap filled", not mismatch,
+          str(mismatch[:3]))
+    check("and that phrase is the anchor's own recorded lemma", not unrecorded,
+          str(unrecorded[:3]))
 
 
 def c27_d5c_word_balls(store, items, n=300):
@@ -809,6 +1156,7 @@ def run(dataset=None, store=None, pre_ball=False, balls=None):
         c13_baselines(splits)
         if store:
             c26_constituents(store, allitems)
+            c26b_t34_fragments(store, allitems)
             c27_d5c_word_balls(store, allitems)
             c18_sampling(store, allitems)
 

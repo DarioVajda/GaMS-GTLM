@@ -122,6 +122,18 @@ GENDER_LOC = {"moški spol": "moškem spolu", "ženski spol": "ženskem spolu",
 GENDER_ADJ = {"moški spol": "moški", "ženski spol": "ženski",
               "srednji spol": "srednji"}
 
+# The axis that separates an adjective's masculine accusative doublet
+# (`Molierjev` / `Molierjevega`).  Unlike the noun accusative -- whose two
+# surfaces are separated by animacy, which the store does not render (0.6) --
+# this one IS rendered, so widening the key resolves the cell instead of
+# discarding the entry.  Measured over 8,000 adjectives: keyed by
+# (case, number) 56.55 % of cells hold more than one surface; adding gender
+# leaves 1.85 %; adding definiteness leaves 0.00 % of 435,206.
+DEFINITENESS = ("določna oblika", "nedoločna oblika")
+DEFINITENESS_LOC = {"določna oblika": "določni obliki",
+                    "nedoločna oblika": "nedoločni obliki"}
+DEFINITENESS_IDX = {d: i for i, d in enumerate(DEFINITENESS)}
+
 # ordinal of a case, as the reference CSV writes it ("4. Tožilnik sklon")
 CASE_ORD = {c: i + 1 for i, c in enumerate(CASES)}
 
@@ -141,9 +153,65 @@ CASE_ORD = {c: i + 1 for i, c in enumerate(CASES)}
 PERSON_GEN = {p: p.replace("oseba", "osebe") for p in PERSONS}
 
 
-def cell_label(case, number):
-    """`tožilnik ednine` -- one cell of the nominal grid (T1-T3, T20-T22)."""
-    return f"{case} {NUMBER_GEN[number]}"
+def cell_label(case, number, gender=None, definiteness=None):
+    """`tožilnik ednine` -- one cell of the nominal grid (T1-T3, T20-T22).
+
+    When the paradigm has a gender axis -- an adjective, or a gendered numeral
+    or pronoun -- the cell is not identified by case and number alone, and the
+    label carries the rest of the bundle: `tožilnik ednine (moški spol)`.  The
+    parenthetical follows `person_label` and 0.5, which is how the node text
+    spells every feature bundle, so the label stays findable in the ball (C25).
+
+    Definiteness joins the same parenthetical and ONLY where the store marks it.
+    16 of the 18 cells have no such split, and naming it on those would be a
+    label the ball cannot support.
+    """
+    label = f"{case} {NUMBER_GEN[number]}"
+    bundle = ", ".join(b for b in (gender, definiteness) if b)
+    return f"{label} ({bundle})" if bundle else label
+
+
+def grid_labels(gender=None):
+    """The 18 cells in the canonical order `qa/gen.py:nominal_line` emits."""
+    return tuple(cell_label(c, n, gender) for n in NUMBERS for c in CASES)
+
+
+def conjoin(words):
+    """`a, b in c` -- the Slovene list conjunction, for T22's requested cells.
+
+    One comma-free list joined with *in*, never a trailing comma before it.  It
+    goes into the QUESTION and not into a label, so it is phrasing rather than
+    contract -- but it is phrasing the answer must be determined by (0.1 clause
+    3), which is why it is a table here and not an f-string at the call site.
+    """
+    words = list(words)
+    if len(words) == 1:
+        return words[0]
+    return f"{', '.join(words[:-1])} in {words[-1]}"
+
+
+def selection_phrase(cases, numbers):
+    """How T22 names the cells it asks for, in the case the frames need.
+
+    Two shapes, because a selection runs along ONE axis (QA_TASKS.md T22):
+
+        several cases of one number   `rodilnik, dajalnik in mestnik množine`
+        one case across several numbers   `mestnik v ednini in množini`
+
+    The number is genitive in the first (it modifies the case names) and
+    locative in the second (it follows *v*).  Getting that wrong writes
+    `mestnik v ednina` into the training distribution, which is the same class
+    of defect C21 exists for.
+    """
+    cases = [c for c in CASES if c in set(cases)]
+    numbers = [n for n in NUMBERS if n in set(numbers)]
+    if not cases or not numbers:
+        raise ValueError("a selection needs at least one case and one number")
+    if len(numbers) == 1:
+        return f"{conjoin(cases)} {NUMBER_GEN[numbers[0]]}"
+    if len(cases) != 1:
+        raise ValueError("a selection varies along one axis, not both")
+    return f"{cases[0]} v {conjoin(NUMBER_LOC[n] for n in numbers)}"
 
 
 def person_label(tense, person, number, gender=None):
@@ -159,7 +227,7 @@ def person_label(tense, person, number, gender=None):
 
 
 #: the 18 nominal cells, in the canonical order `qa/gen.py:nominal_line` emits.
-GRID_LABELS = tuple(cell_label(c, n) for n in NUMBERS for c in CASES)
+GRID_LABELS = grid_labels()
 
 #: the 9 person/number cells, in the order `qa/gen.py:person_cells` emits.
 PERSON_CELLS = tuple((p, n) for n in NUMBERS for p in PERSONS)
@@ -239,6 +307,9 @@ COUNTED = {
                                "zabeleženih sopojavitev"),
     "pogosta kolokacija":    ("pogosti kolokaciji", "pogoste kolokacije",
                               "pogostih kolokacij"),
+    # T31's `exact` band, which counts PHRASES rather than collocations.
+    "stalna besedna zveza":  ("stalni besedni zvezi", "stalne besedne zveze",
+                              "stalnih besednih zvez"),
 }
 
 
@@ -282,7 +353,36 @@ RELATIONS = {
     "oblika":       ("f", "oblika", "obliko", "oblike", "oblike", "oblike", "oblik"),
     "zgled":        ("m", "zgled", "zgled", "zgleda", "zgledi", "zglede", "zgledov"),
     "pomen":        ("m", "pomen", "pomen", "pomena", "pomeni", "pomene", "pomenov"),
+    # The second held-out relation (T36).  Its LABEL is the node's own tag,
+    # `prevod (madžarsko)`, and this row is the relation NAME the question and
+    # T24's count decline -- the two are different strings on purpose.
+    "prevod":       ("m", "prevod", "prevod", "prevoda", "prevodi", "prevode", "prevodov"),
 }
+
+#: The node tag a relation's own values are labelled with, where it differs from
+#: the relation name.  Only `prevod`, whose tag names the language as well.
+RELATION_TAG = {"prevod": "prevod (madžarsko)"}
+
+
+def relation_tag(rel):
+    return RELATION_TAG.get(rel, rel)
+
+
+def count_label(rel):
+    """T24's label: `število` + the relation's genitive plural (C21)."""
+    return f"število {RELATIONS[rel][6]}"
+
+
+#: T27's three comparison heads.  Declared constants under 0.1, and the only new
+#: label WORDS the whole of Group H adds.
+COMPARISONS = ("več", "manj", "enako")
+
+
+def compare_label(word, rel):
+    """T27's label: `več` / `manj` / `enako` + the relation's genitive plural."""
+    if word not in COMPARISONS:
+        raise KeyError(word)
+    return f"{word} {RELATIONS[rel][6]}"
 
 #: The agreeing words, by gender.  Kept apart from the noun forms because they
 #: agree rather than decline: adding a frame that needs "najden" is one row here,
