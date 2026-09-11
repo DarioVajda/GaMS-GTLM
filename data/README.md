@@ -57,30 +57,33 @@ sbatch data/run_pipeline.sbatch
 That builds the graph store if it is missing, generates the items, runs the
 entity linker on every GPU the job was given, relabels, extracts the balls,
 derives the two baselines, runs every check, and publishes the result into
-`datasets/`. **~32 minutes including a full store rebuild**, ~21 when the store
-already exists. The only prerequisite it cannot supply is the raw KG — 83 GB
-from the link in the [repo README](../README.md), unpacked to
-`data/kg_raw/OntoLex DSB/`.
+`datasets/`. **About 2¼ hours** for the full corpus when the store already
+exists, and ~11 minutes more when it has to be rebuilt. The only prerequisite it
+cannot supply is the raw KG — 83 GB from the link in the
+[repo README](../README.md), unpacked to `data/kg_raw/OntoLex DSB/`.
 
-Measured, not estimated — job 133080, 12,490 items over 19 types, two B200s:
+Measured, not estimated — job 141844, the published corpus: 47,707 items over 33
+types, two H100s, peak memory 52 GB (72 GB in job 141387, whose caps overshot to
+51,168 items):
 
 | stage | | seconds |
 |---|---|--:|
-| 1 store | rebuilt from 2,594 `.nt` files | 666.9 |
-| 2 generate | | 443.1 |
-| 3 extract | 2 shards, one per GPU | 396.7 |
-| 4 relabel | | 1.8 |
-| 5 balls | | 359.7 |
-| 6 variants | | 39.0 |
-| **total** | | **1907.2 (31.8 min)** |
+| 1 store | reused | 0.2 |
+| 2 generate | the availability pass is most of it — see `--scale` below | 2277.1 |
+| 3 extract | 2 shards, one per GPU | 2346.1 |
+| 4 relabel | | 12.2 |
+| 5 balls | | 2719.7 |
+| 6 variants | | 250.4 |
+| **total** | | **7605.7 (126.8 min)** |
 
-Stage 3 is the only stage that scales with the GPU count, and stage 1 is the
-only one that `--rebuild-store` adds; drop it and the same corpus rebuilds in
-about 21 minutes.
+A store rebuild adds stage 1's ~667 s (job 133080, 2,594 `.nt` files). Stage 3
+is the only stage that scales with the GPU count; stages 3 and 5 scale with the
+item count, stage 2's availability pass with the seed pools and not at all with
+`--scale`.
 
 | flag | |
 |---|---|
-| `--scale 0.02` | shrink every split proportionally — **this is the fast end-to-end test**, ~250 items and a few minutes |
+| `--scale 0.02` | shrink every split proportionally — **this is the fast end-to-end test**, ~1,000 items. Budget ~40 minutes rather than a few: stage 2's availability pass runs every generator over its seed pool, and the types whose pool never fills (T35 alone ~26 min) scan it whole at any scale |
 | `--types T1,T3` | narrow the type **mix**. Note it does *not* shrink the build: each split's budget is divided among the types asked for, so a two-type corpus is the same size as a nineteen-type one. Combine with `--scale` |
 | `--gpus N` | use at most N of the visible GPUs (default: all of them) |
 | `--rebuild-store` | rebuild the store even if the one on disk matches |

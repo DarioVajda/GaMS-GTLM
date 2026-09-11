@@ -45,9 +45,9 @@ PREFIX = "ODGOVOR:"
 #                otherwise.  0.1 shrank this layer from four fields to one, which
 #                is most of the point.
 #
-#   ITEM level   `all_items`, `n_all`, `quantity_band`, `n_asked` -- facts about
-#                THIS item that the type cannot know.  These live in the row,
-#                because that is the only place they can live.
+#   ITEM level   `all_items`, `n_all`, `n_pool`, `quantity_band`, `n_asked` --
+#                facts about THIS item that the type cannot know.  These live in
+#                the row, because that is the only place they can live.
 #
 # `spec` may supply a DEFAULT for an item-level field when the type fixes it for
 # every item (T19 asks for exactly one example), and the row always wins.
@@ -108,17 +108,26 @@ def parse(answer):
     return None
 
 
-def count_ok(k, band, n_all, n_asked=None):
-    """QA_TASKS.md Group F.  `min(., n_all)` everywhere: under-supply is never an
-    error -- 3 phrases where 5 were asked for is the refusal-to-invent case."""
+def count_ok(k, band, n_all, n_asked=None, n_pool=None):
+    """QA_TASKS.md Group F.  Under-supply is never an error -- 3 phrases where 5
+    were asked for is the refusal-to-invent case.
+
+    Two supplies, and they bound opposite ends.  The CEILING is `n_all`, the
+    store's set, which is what may truthfully be named.  The FLOOR is `n_pool`,
+    what the ball let the target be drawn from (stage 5 writes it): the model
+    can only be required to produce what it was shown.  Using `n_all` for both
+    marked an honest 7 wrong on "exactly 8" when the ball held 7 of 30.  A row
+    without `n_pool` grades exactly as before.
+    """
+    lo = n_all if n_pool is None else min(int(n_pool), n_all)
     if band == "none":
-        return 2 <= k <= min(15, n_all) or k == n_all
+        return min(2, lo) <= k <= min(15, n_all) or k == n_all
     if band == "vague_small":
-        return 2 <= k <= min(6, n_all) or k == n_all
+        return min(2, lo) <= k <= min(6, n_all) or k == n_all
     if band == "vague_large":
-        return k >= min(5, n_all)                # deliberately uncapped
+        return k >= min(5, lo)                   # deliberately uncapped
     if band == "exact":
-        return k == min(int(n_asked), n_all)
+        return min(int(n_asked), lo) <= k <= min(int(n_asked), n_all)
     raise ValueError(f"unknown quantity band {band!r}")
 
 
@@ -217,7 +226,7 @@ def grade(item, prediction):
         if outside:
             return {"success": False, "f1": f1, "reason": "not_in_all"}
         if not count_ok(len(pred), g["quantity_band"], g["n_all"],
-                        g.get("n_asked")):
+                        g.get("n_asked"), g.get("n_pool")):
             return {"success": False, "f1": f1, "reason": "bad_count"}
         return {"success": True, "f1": f1, "reason": "ok"}
 

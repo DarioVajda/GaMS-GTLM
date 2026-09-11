@@ -33,6 +33,7 @@ across bands with headroom -- Section 5 of QA_DATASET_DESIGN.md calls for exactl
 this rather than silently producing a skewed set.
 """
 import os
+import time
 import json
 import random
 import hashlib
@@ -43,8 +44,28 @@ from qa import sl, seeds, gen, spec, pairs, templates
 from qa.store import open_store
 from lib.errors import StageError
 
-TYPES = [t for t in spec.SPEC]
-TARGET = {"train": 9000, "dev": 1000, "test": 2000}
+#: Every type that is BUILT.  `spec.SPEC` describes more than this -- a parked
+#: type keeps its row there, and its generator and frames, so that the reason it
+#: is out stays next to the code rather than in a commit message.  See
+#: `spec.PARKED`.
+TYPES = [t for t in spec.SPEC if t not in spec.PARKED]
+
+#: Per-split budgets, in two different currencies on purpose.
+#:
+#: `train` and `dev` are TOTALS, divided among whatever types are enabled -- the
+#: corpus is sized as a whole and the per-type count follows from it.
+#:
+#: `test` is PER TYPE, which is a different thing and not a rounding of the same
+#: thing.  A test split divided from a total gives each type whatever the
+#: division leaves it, so a per-type score is computed over a denominator that
+#: moves whenever a type is added; fixing it at 200 makes every type's score
+#: read against the same denominator, and makes a difference between two types
+#: comparable without a footnote.  The cost is that the test total now depends on
+#: how many types are enabled (34 x 200 = 6,800 here), which is the right way
+#: round: the reporting unit is the type.
+TARGET = {"train": 40000, "dev": 2000}
+TEST_PER_TYPE = 200
+SPLITS = ("train", "dev", "test")
 NEGATIVE_RATE = 0.10
 UNLISTED_SHARE = 0.30             # of the negatives; the rest are ordinary lemmas
 
@@ -88,7 +109,28 @@ NEGATIVE_SEED = {
     "T16": _neg_absent("n_ant"),
     "T17": _neg_absent("n_col"),
     "T19": _neg_absent("n_ex"),
-    # T4, T8, T20, T21 are handled specially -- see negative_item()
+    # ── Group H ────────────────────────────────────────────────────────────
+    # T22's negative is a number or case the entry does not fill, so its pool is
+    # every entry that could have one: a verb (no nominal paradigm at all) or a
+    # nominal with a gap.  Which of the two an entry turns out to be is decided
+    # in `negative_item`, against the UNION -- this predicate only has to be
+    # cheap, because `_ordinary_pool` walks all 72,334 entries with it.
+    "T22": lambda ctx, e: e.pos == "glagol" or e.pos in gen.NOMINAL_POS,
+    # Cheap prefilter only: which RELATION is absent is decided in
+    # `negative_item`, over the union.  Almost every entry lacks one of the four,
+    # so this narrows nothing much and is not meant to.
+    "T24": lambda ctx, e: not (e.n_syn and e.n_ex and e.n_def),
+    "T28": _neg_absent("n_syn"),
+    "T29": _neg_absent("n_def"),
+    "T31": _neg_absent("n_mwe"),
+    "T35": _neg_absent("n_col"),
+    "T36": _neg_absent("n_trans"),
+    # T4, T8, T20, T21 are handled specially -- see negative_item().
+    # T25 and T27 have no ordinary-lemma negative for T23's reason: a pair that
+    # is not in the relation is one of T25's two ANSWERS, and two words whose
+    # counts are both zero is not an item T27 can build.  Their negatives are
+    # `unlisted` only.  T30's is in MISMATCH_TYPES; T32/T33/T34 are phrase types
+    # whose negative is a word asked a phrase's question, likewise.
 }
 
 
@@ -98,7 +140,22 @@ NEGATIVE_SEED = {
 # given sentence (T20), and a co-extracted anchor that analyses the form on its
 # own terms does not contradict either.  T4's negatives are 100 % `unlisted`, so
 # there is nothing here to test.
-UNION_TESTED = set(TYPES) - {"T4", "T20", "T21"}
+UNION_TESTED = set(TYPES) - {
+    "T4", "T20", "T21",
+    # Group H adds seven more, all for T20/T21's reason rather than a new one:
+    # their negative is scoped to something NARROWER than the entry, so running
+    # the whole generator over a co-extracted anchor answers a question the item
+    # never asked.  Each does its own union check, over the right scope:
+    #
+    #   T22  a selection of cells, not the paradigm  (t22_absent_selection)
+    #   T24  one relation, not every countable one   (relation_present)
+    #   T27  one relation over a PAIR                (relation_present)
+    #   T25  the pair, and `ne` is an answer anyway  (unlisted negatives only)
+    #   T26  the pair                                (unlisted negatives only)
+    #   T29  the borrowed sentence, not the entry
+    #   T35  the phrase, not the anchor              (collocation_owners)
+    "T22", "T24", "T25", "T26", "T27", "T29", "T35",
+}
 
 
 def _union_is_silent(ctx, type_key, surface, own):
@@ -175,6 +232,82 @@ def negative_item(ctx, type_key, e, rng, flavour):
         # word is not in the base at all.
         rel = spec.T23_RELATIONS[rng.randrange(len(spec.T23_RELATIONS))]
         slots.update(sl.relation_slots(rel))
+    elif type_key == "T22":
+        sel = gen.t22_absent_selection(ctx, lemma, e.a, rng)
+        if sel is None:
+            return None                 # this entry fills every axis
+        slots["IZBOR"] = sl.selection_phrase(*sel)
+        flavour = "mismatch" if e.pos == "glagol" else flavour
+    elif type_key in ("T24", "T27"):
+        # The relation has to be one the entry genuinely LACKS, over the whole
+        # union.  Drawing it uniformly would put `oblika` in the question of an
+        # entry that has forms, and ship a sentinel contradicted by the ball --
+        # these two types count several relations, so "this entry is a negative"
+        # is never true of the entry, only of a (entry, relation) pair.
+        #
+        # Never a held-out relation, for T23's reason: a negative's answer is the
+        # sentinel and teaches nothing about the relation it names, so asking
+        # about `protipomenka` or `prevod` would spend the Tier C budget for
+        # nothing.
+        others = [e] if type_key == "T24" else None
+        if type_key == "T27":
+            partner = gen._pair_partner(ctx, e, rng)
+            if partner is None:
+                return None
+            others = [e, partner]
+            slots["L2"] = partner.lemma
+            # The direction is asked whatever the answer is, and a negative's
+            # frames are drawn from the same pool: without it every {PRIM} frame
+            # would fail to render and the negative would vanish silently.
+            slots["PRIM"] = "več" if rng.random() < 0.5 else "manj"
+        empty = [r for r in spec.COUNTABLE
+                 if not any(gen.relation_present(ctx, o.lemma, o.a, r)
+                            for o in others)]
+        if not empty:
+            return None
+        slots.update(sl.relation_slots(empty[rng.randrange(len(empty))]))
+    elif type_key in ("T25", "T26"):
+        other = gen._pair_partner(ctx, e, rng)
+        if other is None:
+            return None
+        slots["L2"] = other.lemma
+        if type_key == "T25":
+            rel = spec.PAIR_RELATIONS[rng.randrange(len(spec.PAIR_RELATIONS))]
+            slots.update(sl.relation_slots(rel))
+    elif type_key == "T28":
+        # The frame names a sense, and a negative has none to name -- so it
+        # names the word's own lemma as the sense, which is what a user asking
+        # about a word with no senses would write.  Without a POMEN slot
+        # `render_question` raises KeyError and every T28 negative is dropped,
+        # silently, exactly as T23's comment records for its own branch.
+        slots["POMEN"] = lemma
+        slots["ORD"] = 1
+    elif type_key == "T29":
+        # A sentence or phrase that belongs to no sense of this word.  Borrowed
+        # from another entry, and required NOT to occur on this one, or the
+        # item is a false negative.
+        other = ctx.pool.entries[rng.randrange(len(ctx.pool.entries))]
+        cand = [t for _v, t in ctx.store.examples(other.a)
+                if t and len(t.split()) <= gen.MAX_EXAMPLE_WORDS]
+        mine = {t for _v, t in ctx.store.examples(e.a)}
+        cand = [t for t in cand if t not in mine]
+        if not cand:
+            return None
+        slots["Z"] = cand[rng.randrange(len(cand))]
+    elif type_key == "T31":
+        slots.update(band="none", n_all=0)
+    elif type_key == "T34":
+        slots["L"] = f"{lemma} {gen.GAP_MARK}"
+        slots["ZVEZA"] = slots["L"]
+        flavour = "absent"
+    elif type_key == "T35":
+        # The phrase must be nobody's collocation, checked along the same route
+        # the pipeline resolves it by.  Without this the sentinel is simply
+        # false whenever the MWE happens to coincide with a collocation phrase,
+        # which H.5 measures at 29.6 %.
+        if gen.collocation_owners(ctx, lemma):
+            return None
+        slots["ZVEZA"] = lemma
     elif type_key in ("T4",):
         # T4 has no ordinary-lemma negative: every real form belongs to some
         # lemma, so "no lemma is recorded" is only true of a string the lookup
@@ -219,10 +352,14 @@ def negative_item(ctx, type_key, e, rng, flavour):
 # --------------------------------------------------------------------------
 def render_question(type_key, slots, rng, allow_tier_a, negative, pos=None):
     key = spec.template_key(type_key, slots)
+    # Which axes this item fixes is read off the slots the generator produced,
+    # so the question can never name an axis the answer does not vary over, nor
+    # leave one it does vary over unnamed (0.1 clause 3).
+    axes = frozenset(a for a in ("gender", "definiteness") if slots.get(a))
     if negative:
-        pool_frames = templates.neutral_frames(key)
+        pool_frames = templates.neutral_frames(key, axes)
     else:
-        pool_frames = templates.frames_for_pos(key, pos)
+        pool_frames = templates.frames_for_pos(key, pos, axes)
     pool_frames = [f for f in pool_frames
                    if allow_tier_a or templates.tier_of(key, f) != "A"]
     if not pool_frames:
@@ -317,7 +454,15 @@ def seed_entries(ctx, type_key):
     return ctx.pool.entries
 
 
-def availability(ctx, rng, types, sample_cap=None):
+#: How many times a band's own quota an early stop must have collected.  1.0
+#: would already give an identical allocation -- `allocate` takes
+#: min(want_b, capacity_b) and only redistributes when a band is SHORT -- so
+#: this is headroom against that reasoning being subtly wrong, not a tuning knob.
+AVAIL_MARGIN = 2
+
+
+def availability(ctx, rng, types, sample_cap=None, need=None, seed=20260821,
+                 verbose=False):
     """{type: {band: [entries]}} -- who can actually answer each type.
 
     Computed by RUNNING the generator, not by predicting it: a type is available
@@ -325,26 +470,65 @@ def availability(ctx, rng, types, sample_cap=None):
     heuristic and the only version that cannot be wrong.
 
     Type-outer rather than entry-outer, because the population is now per type
-    (`seed_entries`).  The number of generator calls is unchanged.
+    (`seed_entries`).
+
+    **`need` stops a type's scan once no further entry could be used.**  A split
+    takes `cap x quota_b / 100` entries from band b and nothing more, so proving
+    the 60,000th eligible entry of a 1,250-item type eligible buys exactly
+    nothing -- and it is not free: measured over the 34 types, the full pass is
+    106 minutes, four fifths of it spent on six types that are available for
+    nearly every entry they are offered.  With `need` it is about 15.
+
+    Two properties make the stop safe rather than merely fast.  The scan order is
+    SHUFFLED, so what it collects is a random sample of the population and not
+    its lowest node ids -- which are the oldest entries, and, at the head of the
+    word pool, all proper nouns.  And the stop fires only when every (split,
+    band) cell holds `AVAIL_MARGIN x` what allocation can spend there, so a thin
+    band still drags the scan over the whole pool, exactly as before.
     """
     avail = {t: collections.defaultdict(list) for t in types}
     errors = collections.Counter()
     first_error = {}
     seen = collections.Counter()
+    stopped = {}
+    quota = dict(zip(seeds.BAND_NAMES, seeds.BAND_QUOTA))
     for t in types:
         entries = seed_entries(ctx, t)
+        want = _avail_need(t, need, quota)
+        if want:
+            entries = list(entries)
+            _rng(seed, t, "avail").shuffle(entries)
+        have = collections.Counter()
+        t0 = time.time()
         for i, e in enumerate(entries):
             if sample_cap and i >= sample_cap:
                 break
+            if want and _avail_enough(have, want):
+                stopped[t] = i
+                break
             seen[t] += 1
             try:
-                out = gen.GENERATORS[t](ctx, e, random.Random(0))
+                # The SAME rng generation will use for this entry.  It was
+                # `random.Random(0)`, so "eligible" meant eligible under a draw
+                # generation never makes: T35 shuffles its phrases and tries 12,
+                # and an entry that passed here failed there -- 827 of its 1,290
+                # train items were made in job 141387.
+                out = gen.GENERATORS[t](ctx, e, _rng(seed, t, e.lemma, "gen"))
             except Exception as exc:                # noqa: BLE001
                 errors[t] += 1
                 first_error.setdefault(t, f"{e.lemma}: {exc!r}")
                 out = None
             if out is not None:
                 avail[t][e.band].append(e)
+                have[(e.split, e.band)] += 1
+        # Per type as it finishes, not as a block at the end: this pass is the
+        # longest thing in the build, and a stage that prints nothing for an
+        # hour cannot be told apart from a stage that has hung.
+        if verbose:
+            n = sum(len(v) for v in avail[t].values())
+            print(f"    {t:5s} eligible {n:7,d}  of {seen[t]:7,d} scanned  "
+                  f"{time.time()-t0:6.1f}s"
+                  f"{'  (stopped early)' if t in stopped else ''}", flush=True)
     # A generator raising is a bug, not a "this entry does not qualify".  Swallow
     # it so one bad entry cannot kill an hour-long job, but never silently: an
     # exception rate above a few per mille means the type is broken, not thin.
@@ -357,7 +541,35 @@ def availability(ctx, rng, types, sample_cap=None):
         worst = max(errors[t] / max(seen[t], 1) for t in errors)
         if worst > 0.001:
             raise RuntimeError(f"generator exception rate {worst:.3%} -- fix it")
+    if stopped:
+        print("[avail] scan stopped early (every band already holds more than "
+              "allocation can spend): "
+              + ", ".join(f"{t} after {n:,}" for t, n in sorted(stopped.items())),
+              flush=True)
     return avail
+
+
+def _avail_need(type_key, need, quota):
+    """{(split, band): entries worth collecting} for one type, or None.
+
+    None means "scan everything", which is what a caller with no caps to respect
+    gets -- `availability` is also called on its own by the checks.
+    """
+    if not need:
+        return None
+    want = {}
+    for split, cap in need.items():
+        if type_key in spec.TIER_C and split != "test":
+            continue
+        for b, q in quota.items():
+            n = int(round(cap * q / 100.0)) * AVAIL_MARGIN
+            if n:
+                want[(split, b)] = n
+    return want or None
+
+
+def _avail_enough(have, want):
+    return all(have[k] >= n for k, n in want.items())
 
 
 def allocate(want_total, per_band_quota, capacity):
@@ -385,6 +597,36 @@ def allocate(want_total, per_band_quota, capacity):
     return take
 
 
+def _emit_positive(ctx, t, e, split, seed, counter, items, report):
+    """Make one positive from entry `e`; True if an item was appended.
+
+    False is not an error.  `make_item` can still refuse (no frame renders for
+    these slots) and `_tier_c_safe` can drop a train item, so the caller walks on
+    to the next entry -- that walk is what keeps a type at its cap.
+    """
+    idx = counter[t]; counter[t] += 1
+    try:
+        out = gen.GENERATORS[t](ctx, e, _rng(seed, t, e.lemma, "gen"))
+    except Exception as exc:                        # noqa: BLE001
+        # availability() ran this generator on this entry with this same rng, so
+        # a raise here means the generator is not a pure function of (store,
+        # entry, rng).  Recorded and carried past rather than losing an hour of
+        # work; the count is in the report.
+        report.setdefault("gen_errors", collections.Counter())[
+            f"{t}:{type(exc).__name__}"] += 1
+        return False
+    if out is None:
+        return False
+    slots, gold = out
+    it = make_item(ctx, t, e, slots, gold, split=split,
+                   rng=_rng(seed, t, e.lemma, "tmpl"),
+                   allow_tier_a=(split == "test"), idx=idx)
+    if it and _tier_c_safe(it):
+        items[split].append(it)
+        return True
+    return False
+
+
 def generate(ctx, out_dir, seed=20260821, types=None, verbose=True, scale=1.0):
     """Generate the dataset.  `scale` shrinks every split's target proportionally.
 
@@ -400,63 +642,91 @@ def generate(ctx, out_dir, seed=20260821, types=None, verbose=True, scale=1.0):
     types = sorted(types, key=lambda t: (t in NEGATIVE_GROUP, types.index(t)))
     _NEG_REPLAY.clear()
     rng = random.Random(seed)
+
+    # The per-type CAP, per split.  A total is divided only among the types that
+    # actually take that split, so the two Tier C types -- which are test-only --
+    # do not silently shrink every training type's share by holding a slice of
+    # the budget they never spend.
+    #
+    # Computed BEFORE the availability pass, because it is what tells that pass
+    # when to stop: a type that can spend 1,250 entries has no use for the
+    # 60,000th proof that it could have used one more.
+    trainable = [t for t in types if t not in spec.TIER_C] or list(types)
+    per_type_cap = {s: TARGET[s] * scale / len(trainable) for s in TARGET}
+    per_type_cap["test"] = TEST_PER_TYPE * scale
+
     if verbose:
         n_calls = sum(len(seed_entries(ctx, t)) for t in types)
         print(f"[avail] running each of {len(types)} generator(s) over its own "
-              f"seed pool -- {n_calls:,} calls ...", flush=True)
-    avail = availability(ctx, rng, types)
-    if verbose:
-        for t in types:
-            n = sum(len(v) for v in avail[t].values())
-            print(f"    {t:5s} eligible {n:7,d}", flush=True)
+              f"seed pool -- at most {n_calls:,} calls ...", flush=True)
+    avail = availability(ctx, rng, types, need=per_type_cap, seed=seed,
+                         verbose=verbose)
 
     quota = dict(zip(seeds.BAND_NAMES, seeds.BAND_QUOTA))
-    items = {s: [] for s in TARGET}
+    items = {s: [] for s in SPLITS}
     counter = collections.Counter()
     report = {"availability": {}, "realised": {}, "negatives": {}}
+    report["per_type_cap"] = {s: int(round(v)) for s, v in per_type_cap.items()}
 
     for t in types:
         by_band = avail[t]
         report["availability"][t] = {b: len(v) for b, v in sorted(by_band.items())}
         tier_c = t in spec.TIER_C
-        for split, total in TARGET.items():
+        for split in SPLITS:
             if tier_c and split != "test":
                 continue
-            per_type = total * scale / len(types)
+            # A CAP, not a quota to be filled: a type that cannot supply it
+            # produces fewer items and no other type produces more.  The corpus
+            # total is therefore an outcome rather than a target, which is what
+            # keeps a per-type score comparable across types.
+            per_type = int(round(per_type_cap[split]))
             # entries available for this type AND on this side of the split
             cap_entries = {b: [e for e in by_band.get(b, []) if e.split == split]
                            for b in seeds.BAND_NAMES}
             cap = {b: len(v) for b, v in cap_entries.items()}
-            take = allocate(int(round(per_type)), quota, cap)
-            n_neg = int(round(sum(take.values()) * NEGATIVE_RATE))
+            # Negatives count INSIDE the cap.  They were 10 % on top of it, so
+            # "200 per type" shipped 220 and the 40,000 train target shipped
+            # 42,013 (job 141387).  10 % of what the type can SUPPLY, not of the
+            # cap, or a thin type (T11, ~460 items) would be a quarter negatives.
+            supply = sum(allocate(per_type, quota, cap).values())
+            n_neg = int(round(min(per_type, supply) * NEGATIVE_RATE))
+            take = allocate(per_type - n_neg, quota, cap)
+            # Walk each band's shuffled pool until k items are MADE, rather than
+            # over its first k entries: an entry can still yield no item (no
+            # frame renders, `_tier_c_safe` drops it), and `pool_b[:k]` left
+            # those holes unfilled -- T1 shipped 179 of 200 test items.
+            made_pos, spare = 0, []
             for b, k in take.items():
                 pool_b = list(cap_entries[b])
                 _rng(seed, t, split, b, "order").shuffle(pool_b)
-                for e in pool_b[:k]:
-                    idx = counter[t]; counter[t] += 1
-                    try:
-                        out = gen.GENERATORS[t](ctx, e, _rng(seed, t, e.lemma,
-                                                             "gen"))
-                    except Exception as exc:            # noqa: BLE001
-                        # availability() already ran every generator over every
-                        # entry, so a raise here means a code path only the real
-                        # rng reaches.  Record it and carry on rather than losing
-                        # an hour of work; the count is in the report.
-                        report.setdefault("gen_errors", collections.Counter())[
-                            f"{t}:{type(exc).__name__}"] += 1
-                        continue
-                    if out is None:
-                        continue
-                    slots, gold = out
-                    it = make_item(ctx, t, e, slots, gold, split=split,
-                                   rng=_rng(seed, t, e.lemma, "tmpl"),
-                                   allow_tier_a=(split == "test"), idx=idx)
-                    if it and _tier_c_safe(it):
-                        items[split].append(it)
+                got = used = 0
+                for e in pool_b:
+                    if got >= k:
+                        break
+                    used += 1
+                    got += _emit_positive(ctx, t, e, split, seed, counter,
+                                          items, report)
+                made_pos += got
+                spare += pool_b[used:]
             # negatives, drawn from the same band distribution as the positives
             made_neg = emit_negatives(ctx, t, split, take, n_neg, rng, counter,
                                       items, seed)
             report["negatives"].setdefault(t, {})[split] = made_neg
+            # Whatever is still missing -- a band that ran dry, negatives that
+            # came up short -- is topped up with positives from the entries no
+            # band spent, so a type with the capacity lands on its cap exactly.
+            # From any band: the quota shapes the bulk, and a handful of top-ups
+            # cannot move it.
+            short = per_type - made_pos - sum(
+                v for k, v in made_neg.items() if not k.startswith("_"))
+            _rng(seed, t, split, "topup").shuffle(spare)
+            for e in spare:
+                if short <= 0:
+                    break
+                short -= _emit_positive(ctx, t, e, split, seed, counter, items,
+                                        report)
+            if short > 0:
+                report.setdefault("short", {}).setdefault(t, {})[split] = short
 
     for split, rows in items.items():
         rows.sort(key=lambda r: (r["type"], r["id"]))
@@ -516,6 +786,26 @@ def _ordinary_pool(ctx, t, split):
         return [e for e in ctx.pool.entries if e.split == split]
     if t == "T4":
         return []                       # see negative_item(): no such negative exists
+    if t in ("T32", "T33"):
+        # A phrase the store holds and this relation does not reach: 98.6 % of
+        # MWEs have no defined sense and 6.6 % no example.  Drawn from the
+        # PHRASE pool, not the word pool -- a word asked a phrase's question is
+        # T30's mismatch, and one boundary per flavour (see emit_negatives).
+        field = "n_def" if t == "T32" else "n_ex"
+        return [e for e in ctx.phrase_pool
+                if e.split == split and not getattr(e, field)]
+    if t == "T34":
+        # A word that is in no phrase at all, offered as a fragment.  Nothing
+        # completes it, and saying so is a true statement about the base rather
+        # than an invented gap.
+        return [e for e in ctx.pool.entries
+                if e.split == split and not e.n_mwe]
+    if t == "T35":
+        # A phrase nobody records as a collocation.  An MWE seed rather than a
+        # word, because the question hands the model a PHRASE and asks whose
+        # collocation it is -- handing it a word would test the frame, not the
+        # relation.
+        return [e for e in _mwe_seeds(ctx) if e.split == split]
     pred = NEGATIVE_SEED.get(t)
     if pred is None:
         return []

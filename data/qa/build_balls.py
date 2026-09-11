@@ -222,20 +222,34 @@ def induced_edges(store, order):
 
 
 #: membership type -> the store accessor for everything it may legitimately name.
-MEMBER_SOURCE = {"T17": "collocations", "T19": "examples"}
+MEMBER_SOURCE = {"T17": "collocations", "T19": "examples",
+                 # Group H.  T33 is T19 with a phrase anchor; T31 is the upward
+                 # `sestavina` direction, whose members are ANCHORS.
+                 "T31": "memberships", "T33": "examples"}
 
 
-def member_pool(r, texts):
+def member_pool(r, texts, truth=None):
     """The member nodes of `r`'s BALL -- what the target is drawn from.
 
     Distinct from the allow-list: this is what the model can *see*, so it is what
     we supervise on (`reverbalise`), and it is a subset of what we *accept*.
+
+    `truth` is required for spec.MEMBER_STRICT types and ignored otherwise.  T17
+    and T19 own their prefix -- every `kolokacija:` node in the ball really is a
+    collocation of some anchor in it -- but T31's prefix is `iztočnica:`, which
+    every anchor in the ball renders under, its own SUBJECT included.  Without
+    the intersection the allow-list would accept the question's own word as an
+    answer to "which phrases is this word in?".
     """
     kind = spec.MEMBER_KIND.get(r["type"])
     if not kind:
         return []
     pre = kind + ": "
-    return gen.dedup_by_norm(t[len(pre):] for t in texts if t.startswith(pre))
+    out = gen.dedup_by_norm(t[len(pre):] for t in texts if t.startswith(pre))
+    if r["type"] in spec.MEMBER_STRICT:
+        keep = set(truth or ())
+        out = [p for p in out if sl.norm(p) in keep]
+    return out
 
 
 def member_allow(store, r, targets):
@@ -286,7 +300,8 @@ def member_contract(store, r, texts, targets, stats):
     g = grade.contract(r)
     if g["mode"] != "membership" or r["negative"]:
         return None
-    pool = member_pool(r, texts)
+    truth = member_allow(store, r, targets)
+    pool = member_pool(r, texts, truth)
     # The ball is drawn from the store under a K cap, so it is a subset -- but
     # union rather than assume, so a policy change upstream can never make a
     # visible member unnameable.
@@ -295,8 +310,7 @@ def member_contract(store, r, texts, targets, stats):
     # alongside the phrase or membership would accept a true phrase under a
     # relation the item never asked about.
     kind = spec.MEMBER_KIND[r["type"]]
-    allow = [[kind, v] for v in sorted({*member_allow(store, r, targets),
-                                        *(sl.norm(p) for p in pool)})]
+    allow = [[kind, v] for v in sorted({*truth, *(sl.norm(p) for p in pool)})]
     was = {tuple(x) if isinstance(x, (list, tuple)) else (kind, x)
            for x in (row.get("all_items") or [])}
     if was != {tuple(x) for x in allow}:
@@ -306,6 +320,21 @@ def member_contract(store, r, texts, targets, stats):
     # (nothing this item may name), and leaving the key absent would instead
     # make the item silently ungradeable.
     row["all_items"], row["n_all"] = allow, len(allow)
+    # The TARGET may not carry a Tier C tag word outside test.  Stage 2 drops
+    # such items (`build_dataset._tier_c_safe`), but `reverbalise` redraws the
+    # target from the ball afterwards and so re-opened the door: job 141387
+    # shipped 6 train items naming `madžarska velemojstrica`, an example with
+    # `sprevod`, and the like.  Filtered AFTER `allow` is built, so a model that
+    # names one of these from its ball is still marked right.
+    if r.get("split") != "test":
+        kept = [p for p in pool if not spec.tier_c_tagged(p)]
+        stats["tier_c_pool_dropped"] += len(pool) - len(kept)
+        pool = kept
+    # How many members the target could be drawn from.  The count rule's FLOOR:
+    # `n_all` is the store's set and can be far wider than what the ball shows,
+    # so "exactly 8" against a ball holding 7 was graded against 8 (T31, job
+    # 141387) -- an honest 7 marked `bad_count`.  See `grade.count_ok`.
+    row["n_pool"] = len(pool)
     return pool or None
 
 
