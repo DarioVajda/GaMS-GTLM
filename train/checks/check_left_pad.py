@@ -39,6 +39,7 @@ from gtlm.utils import GraphCollatorV2
 from ..config import RunConfig
 from ..data import load_split
 from ..batching import packed_lengths, LeftPadCollator, PlainCollator
+from ..evaluate import MAX_NEW_TOKENS
 from ..run import answer_tail_inputs
 
 # How the loss tolerance is set, and why it is not a guessed constant.
@@ -89,10 +90,12 @@ NOISE_FACTOR = 3.0
 # fp32's 24 bits make the same argument four orders of magnitude tighter, which
 # is what turns stages 2e/2f into a real test.
 REL_TOL = {"bf16": 0.01, "fp32": 1e-4}
-# The whole point of the change.  Left-padded, the slice is `longest answer + 1`;
-# the longest gold answer in this corpus is T5's 27 conjugated forms, well inside
-# this.  Right-padded it ran to thousands.
-MAX_LOGITS_TO_KEEP = 400
+# The whole point of the change.  Left-padded, the slice is `longest answer + 1`,
+# and the longest answer is bounded by what the evaluator may generate -- an
+# answer past that is a failure of its own -- so the same cap bounds the slice.
+# Right-padded it ran to thousands.  (A fixed 400 here went stale when answers
+# reached 467 tokens, with memory still ~20 GiB.)
+MAX_LOGITS_TO_KEEP = MAX_NEW_TOKENS
 
 
 def build_parser():

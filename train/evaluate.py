@@ -80,10 +80,14 @@ REFERENCE_TOTAL_GIB = 79.0
 EVAL_BUDGET_CLAMP = (8_192, 131_072)
 GEN_BUDGET_CLAMP = (4_096, 65_536)
 
-# Longest gold answer in the corpus is well under this (T5's 27 conjugated forms).
-# A generation that runs past it is a failure anyway -- but it is counted and
-# reported, so "the cap was too low" cannot hide inside the accuracy.
-MAX_NEW_TOKENS = 320
+# Must sit above the longest gold answer, or pass 2 can never succeed on it.  At
+# 320 it did not: T5's conjugation tables run p50 ~440 tokens (88 % of T5 over
+# 320) and T12's longest sense list reaches 645, so those items could only ever
+# pass through pass 1.  1024 leaves the longest ~1.6x.  Short items are
+# unaffected -- each batch still stops at `2 * longest gold + 16` (below).  A
+# generation that runs past the cap is counted and reported, so "the cap was
+# too low" cannot hide inside the accuracy.
+MAX_NEW_TOKENS = 1024
 
 # `torch.OutOfMemoryError` is the modern spelling and `torch.cuda.OutOfMemoryError`
 # its alias; both subclass RuntimeError.  Some kernels (and cuBLAS) still raise a
@@ -196,7 +200,7 @@ def token_budget_batches(lengths, budget=EVAL_TOKEN_BUDGET, max_batch=MAX_BATCH,
 def gold_length_key(n):
     """Coarse band for a gold-answer token count: the next power of two.
 
-    `max_new_tokens = min(320, 2 * max(gold in batch) + 16)`, so grouping golds
+    `max_new_tokens = min(MAX_NEW_TOKENS, 2 * max(gold in batch) + 16)`, so grouping golds
     into power-of-two bands bounds the decode waste inside a batch at ~2x while
     keeping the number of groups small enough not to fragment the batching.
     """
