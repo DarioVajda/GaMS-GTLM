@@ -348,14 +348,29 @@ def load_dev_subsample(cfg, tokenizer):
         return None, None
     path = os.path.join(cfg.data_root, "dev.jsonl")
     rows = _read(path, cfg.type_list(), cfg.max_items)
-    keep, descriptor = stratified_subset(rows, cfg.dev_subsample,
+    # Only the CORE rows are subsampled; any Tier A / C dev rows (the
+    # datasets/dev_generalisation corpus) are kept whole.  They are there to be
+    # watched, and selection reads the core slice alone (`run.METRIC`), so on a
+    # core-only dev split this is the subset -- and the digest -- it always was.
+    tier = {}
+    with open(os.path.join(cfg.items_root, "dev.jsonl"), encoding="utf-8") as f:
+        for line in f:
+            r = json.loads(line)
+            tier[r["id"]] = r.get("tier") or "core"
+    core = [r for r in rows if tier.get(r["id"], "core") == "core"]
+    extra = sorted(r["id"] for r in rows if tier.get(r["id"], "core") != "core")
+    keep, descriptor = stratified_subset(core, cfg.dev_subsample,
                                          cfg.dev_subsample_seed)
+    if extra:
+        descriptor["n_watched"] = dict(collections.Counter(
+            tier[i] for i in extra))
     split = load_split(cfg, tokenizer, "dev", with_generation=True,
-                       keep_ids=keep, name="dev_fast")
-    print(f"[data] dev_fast: {descriptor['n']}/{descriptor['n_full']} items, "
-          f"stratified over {len({r['type'] for r in rows})} types, "
-          f"seed {descriptor['seed']}, sha256:{descriptor['sha256_16']}",
-          flush=True)
+                       keep_ids=keep + extra, name="dev_fast")
+    print(f"[data] dev_fast: {descriptor['n']}/{descriptor['n_full']} core items, "
+          f"stratified over {len({r['type'] for r in core})} types, "
+          f"seed {descriptor['seed']}, sha256:{descriptor['sha256_16']}"
+          + (f"; plus every non-core dev item {descriptor['n_watched']}"
+             if extra else ""), flush=True)
     return split, descriptor
 
 

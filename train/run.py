@@ -89,7 +89,11 @@ def assert_plain_arm(split, cfg):
 # stack computes.  The Trainer selects the reload checkpoint on this, so training
 # and selection share one objective; on the multiset and membership types the two
 # disagree, and EM would select for reproducing gold ORDERING.
-METRIC = "eval_accuracy"
+#
+# The CORE slice, not the whole split: a dev split that also carries Tier A / C
+# items (datasets/dev_generalisation) must not let them choose the checkpoint.
+# On a core-only dev split the two keys are the same number.
+METRIC = "eval_accuracy_tier_core"
 
 
 class GradeTrainer(GraphTrainerV2):
@@ -271,9 +275,14 @@ def _convergence(trainer):
 
     Read BEFORE the final dev/test evaluations, which log into the same history.
     """
-    curve = [(int(h["step"]), float(h["eval_accuracy"]))
+    curve = [(int(h["step"]), float(h[METRIC]))
              for h in trainer.state.log_history
-             if "eval_accuracy" in h and "step" in h]
+             if METRIC in h and "step" in h]
+    # Every in-training eval, per tier -- the whole curve, not just its tail, so
+    # when a run starts to generalise is answerable from runs.jsonl alone.
+    tiers = [{"step": int(h["step"]), **_per_tier(h, "eval")}
+             for h in trainer.state.log_history
+             if METRIC in h and "step" in h]
     # What the in-training evals cost, so the share of the run spent evaluating
     # is in the record rather than in a log someone has to parse.
     spent = [float(h.get("eval_pass1_s") or 0) + float(h.get("eval_pass2_s") or 0)
@@ -287,6 +296,7 @@ def _convergence(trainer):
     return {
         "n_evals": len(curve),
         "last_three": curve[-3:],
+        "curve_per_tier": tiers,
         "in_training_eval_s": round(sum(spent), 1),
         "mean_eval_s": round(sum(spent) / len(spent), 1) if spent else None,
         "max_steps": int(trainer.state.max_steps),
@@ -468,6 +478,7 @@ def run_train_mode(cfg, runs_jsonl=None, run_name=None, sweep_id=None):
                          if k.startswith("test_reason_")},
         "best_val_accuracy": val_metrics.get(METRIC),
         "val_accuracy_per_type": _per_type(val_metrics, "eval"),
+        "val_per_tier": _per_tier(val_metrics, "eval"),
         "test_loss": test_metrics.get("test_loss"),
         "train_runtime_s": train_output.metrics.get("train_runtime"),
         "eval_seconds": {
